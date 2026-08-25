@@ -314,6 +314,9 @@ button.link {
   white-space: nowrap;
 }
 
+.linha-sugestao-ia { display: flex; }
+.linha-sugestao-ia button { width: 100%; }
+
 .editor-quantidade {
   display: flex;
   gap: 8px;

@@ -1,20 +1,20 @@
 /**
  * src/components/TelaRegistroPerda.tsx
  * ---------------------------------------------------------------
- * Tela ágil de lançamento de perda, fim de expediente.
- * Demonstra o uso de normalizarQuantidadePerda() com preview em
- * tempo real e tratamento de erro visível ao operador (nunca falha
- * silenciosamente nem permite salvar um dado inconsistente).
- *
- * Este componente é um EXEMPLO FUNCIONAL de referência — a app real
- * deve substituir o array `produtosMock` por dados vindos do backend
- * (ver README.md, seção "Camada de dados").
+ * Lançamento de perda de fim de expediente: o operador PESA o item
+ * descartado na balança (quilos) e informa o peso de 1 unidade daquele
+ * item — o app deriva ao vivo quantas unidades a perda representa (ver
+ * src/lib/conversao.ts). O peso de 1 unidade vem pré-preenchido do
+ * cadastro do produto quando existe (editável, porque pode variar de
+ * fornada para fornada); ao salvar, esse valor retroalimenta o cadastro
+ * (ver src/App.tsx).
  */
 
 import { useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
-import type { MotivoPerda, UnidadeEntradaPerda } from "../types/perda";
-import { normalizarQuantidadePerda, ErroConversaoPerda } from "../lib/conversao";
+import type { MotivoPerda } from "../types/perda";
+import { calcularPerdaEmUnidades, ErroConversaoPerda } from "../lib/conversao";
+import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 
 const MOTIVOS: { valor: MotivoPerda; rotulo: string }[] = [
   { valor: "queimado", rotulo: "Queimado / erro de forno" },
@@ -32,10 +32,9 @@ interface TelaRegistroPerdaProps {
   onSalvar: (payload: {
     codigoPdv: number;
     planoDeProducaoId: string;
-    entradaBruta: { valor: number; unidade: UnidadeEntradaPerda };
-    quantidadeNormalizada: number;
-    unidadeNormalizada: string;
-    fatorConversaoAplicado: boolean;
+    quantidadeQuilos: number;
+    pesoUnitarioGramasInformado: number;
+    quantidadeUnidadesEstimada: number;
     motivo: MotivoPerda;
     observacao?: string;
     registradoPor: string;
@@ -48,45 +47,39 @@ export function TelaRegistroPerda({
   registradoPor,
   onSalvar,
 }: TelaRegistroPerdaProps) {
-  // "kg" sempre disponível (pesar na balança nunca precisa de cadastro prévio);
-  // "un" só aparece quando o peso médio está cadastrado, senão não há como converter.
-  const unidadesDisponiveis: UnidadeEntradaPerda[] =
-    produto.pesoMedioUnitarioGramas && produto.pesoMedioUnitarioGramas > 0 ? ["kg", "un"] : ["kg"];
-
-  const [valor, setValor] = useState<string>("");
-  const [unidadeEntrada, setUnidadeEntrada] = useState<UnidadeEntradaPerda>(
-    unidadesDisponiveis[0]
+  const [quilos, setQuilos] = useState("");
+  const [pesoUnitario, setPesoUnitario] = useState(
+    produto.pesoMedioUnitarioGramas ? String(produto.pesoMedioUnitarioGramas) : ""
   );
   const [motivo, setMotivo] = useState<MotivoPerda>("sobra_nao_vendida");
   const [observacao, setObservacao] = useState("");
 
-  const valorNumerico = Number(valor.replace(",", "."));
-  const valorValido = valor !== "" && Number.isFinite(valorNumerico) && valorNumerico >= 0;
+  const quilosValidos = ehNumeroValidoPositivo(quilos);
+  const pesoValido = ehNumeroValidoPositivo(pesoUnitario);
 
   const preview = useMemo(() => {
-    if (!valorValido) return null;
+    if (!quilosValidos || !pesoValido) return null;
     try {
-      const resultado = normalizarQuantidadePerda(produto, valorNumerico, unidadeEntrada);
+      const resultado = calcularPerdaEmUnidades(produto, paraNumero(quilos), paraNumero(pesoUnitario));
       return { ok: true as const, resultado };
     } catch (erro) {
       if (erro instanceof ErroConversaoPerda) {
         return { ok: false as const, mensagem: erro.message };
       }
-      return { ok: false as const, mensagem: "Erro inesperado ao calcular a conversão." };
+      return { ok: false as const, mensagem: "Erro inesperado ao calcular a perda em unidades." };
     }
-  }, [produto, valorNumerico, unidadeEntrada, valorValido]);
+  }, [produto, quilos, pesoUnitario, quilosValidos, pesoValido]);
 
-  const podeSalvar = valorValido && preview?.ok === true;
+  const podeSalvar = preview?.ok === true;
 
   function handleSalvar() {
     if (!podeSalvar || preview?.ok !== true) return;
     onSalvar({
       codigoPdv: produto.codigoPdv,
       planoDeProducaoId,
-      entradaBruta: { valor: valorNumerico, unidade: unidadeEntrada },
-      quantidadeNormalizada: preview.resultado.quantidadeNormalizada,
-      unidadeNormalizada: preview.resultado.unidadeNormalizada,
-      fatorConversaoAplicado: preview.resultado.fatorConversaoAplicado,
+      quantidadeQuilos: preview.resultado.quantidadeQuilos,
+      pesoUnitarioGramasInformado: preview.resultado.pesoUnitarioGramasInformado,
+      quantidadeUnidadesEstimada: preview.resultado.quantidadeUnidadesEstimada,
       motivo,
       observacao: observacao || undefined,
       registradoPor,
@@ -97,41 +90,48 @@ export function TelaRegistroPerda({
     <div className="tela-registro-perda">
       <h2>{produto.nome}</h2>
 
-      <div className="campo-valor">
-        <input
-          type="number"
-          inputMode="decimal"
-          min={0}
-          step="0.01"
-          value={valor}
-          onChange={(e) => setValor(e.target.value)}
-          placeholder="0"
-          aria-label="Quantidade perdida"
-        />
+      <label>
+        Peso perdido (balança)
+        <div className="campo-valor">
+          <input
+            type="text"
+            inputMode="decimal"
+            pattern="[0-9]*[.,]?[0-9]*"
+            value={quilos}
+            onChange={(e) => setQuilos(sanitizarEntradaNumerica(e.target.value))}
+            placeholder="0"
+            aria-label="Peso perdido em quilos"
+            autoFocus
+          />
+          <span className="unidade-fixa">kg</span>
+        </div>
+      </label>
 
-        {unidadesDisponiveis.length > 1 ? (
-          <div className="toggle-unidade" role="group" aria-label="Unidade de lançamento">
-            {unidadesDisponiveis.map((u) => (
-              <button
-                key={u}
-                type="button"
-                aria-pressed={unidadeEntrada === u}
-                onClick={() => setUnidadeEntrada(u)}
-              >
-                {u}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <span className="unidade-fixa">{unidadesDisponiveis[0]}</span>
-        )}
-      </div>
+      <label>
+        Peso de 1 unidade desta fornada
+        <div className="campo-valor">
+          <input
+            type="text"
+            inputMode="decimal"
+            pattern="[0-9]*[.,]?[0-9]*"
+            value={pesoUnitario}
+            onChange={(e) => setPesoUnitario(sanitizarEntradaNumerica(e.target.value))}
+            placeholder="0"
+            aria-label="Peso de 1 unidade em gramas"
+          />
+          <span className="unidade-fixa">g</span>
+        </div>
+        <span className="nota-rodape">
+          {produto.pesoMedioUnitarioGramas
+            ? "Valor sugerido do cadastro — ajuste se esta fornada pesou diferente. O cadastro é atualizado com o que você informar aqui."
+            : "Ainda não há peso cadastrado para este produto — o valor informado aqui vira o cadastro inicial."}
+        </span>
+      </label>
 
-      {/* Preview em tempo real da conversão — nunca deixa o operador "no escuro" */}
-      {preview?.ok === true && preview.resultado.fatorConversaoAplicado && (
+      {/* Preview em tempo real — nunca deixa o operador "no escuro" */}
+      {preview?.ok === true && (
         <p className="preview-conversao">
-          ≈ {preview.resultado.quantidadeNormalizada} {preview.resultado.unidadeNormalizada}{" "}
-          (convertido automaticamente)
+          ≈ {preview.resultado.quantidadeUnidadesEstimada} unidade(s) perdida(s)
         </p>
       )}
       {preview?.ok === false && <p className="erro-conversao" role="alert">{preview.mensagem}</p>}
@@ -150,7 +150,7 @@ export function TelaRegistroPerda({
         placeholder="Observação (opcional)"
       />
 
-      <button type="button" disabled={!podeSalvar} onClick={handleSalvar}>
+      <button type="button" className="primario" disabled={!podeSalvar} onClick={handleSalvar}>
         Registrar perda
       </button>
     </div>

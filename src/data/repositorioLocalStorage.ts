@@ -7,7 +7,7 @@
  * — ver src/data/repositorioFirestore.ts para o caminho de produção.
  */
 
-import { normalizarQuantidadePerda } from "../lib/conversao";
+import { calcularPerdaEmUnidades } from "../lib/conversao";
 import { gerarId } from "../lib/id";
 import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
@@ -86,9 +86,7 @@ export class RepositorioLocalStorage implements Repositorio {
 
   async registrarPerda(
     input: LancamentoPerdaInput & {
-      quantidadeNormalizada: number;
-      unidadeNormalizada: string;
-      fatorConversaoAplicado: boolean;
+      quantidadeUnidadesEstimada: number;
       diaDaSemana: RegistroPerda["diaDaSemana"];
       data: string;
     }
@@ -99,10 +97,9 @@ export class RepositorioLocalStorage implements Repositorio {
       planoDeProducaoId: input.planoDeProducaoId,
       data: input.data,
       diaDaSemana: input.diaDaSemana,
-      entradaBruta: { valor: input.valor, unidade: input.unidade },
-      quantidadeNormalizada: input.quantidadeNormalizada,
-      unidadeNormalizada: input.unidadeNormalizada as RegistroPerda["unidadeNormalizada"],
-      fatorConversaoAplicado: input.fatorConversaoAplicado,
+      quantidadeQuilos: input.quantidadeQuilos,
+      pesoUnitarioGramasInformado: input.pesoUnitarioGramasInformado,
+      quantidadeUnidadesEstimada: input.quantidadeUnidadesEstimada,
       motivo: input.motivo,
       observacao: input.observacao,
       registradoPor: input.registradoPor,
@@ -114,5 +111,5 @@ export class RepositorioLocalStorage implements Repositorio {
   }
 }
 
-// Reexportado para as telas poderem pré-visualizar a conversão sem duplicar import.
-export { normalizarQuantidadePerda };
+// Reexportado para as telas poderem pré-visualizar o cálculo sem duplicar import.
+export { calcularPerdaEmUnidades };

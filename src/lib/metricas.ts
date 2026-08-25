@@ -4,10 +4,13 @@
  * Cálculos de análise: taxa de perda, volume de produção por dia da
  * semana e identificação de picos de perda (geral e por categoria).
  *
- * Todas as funções operam sobre dados JÁ NORMALIZADOS EM QUILOS
- * (quantidadeNormalizada em RegistroPerda, quantidadeQuilos em
- * ItemPlanoProducao) — produzido e perdido sempre na mesma unidade,
- * então perdido/produzido nunca mistura quilos com contagem de unidades.
+ * Produção (ItemPlanoProducao.quantidadeUnidades) e perda
+ * (RegistroPerda.quantidadeUnidadesEstimada) são comparadas sempre em
+ * UNIDADES — mesmo a perda sendo pesada em quilos na balança, ela é
+ * convertida para unidades no lançamento (ver src/lib/conversao.ts), então
+ * perdido/produzido nunca mistura quilo com contagem de unidades.
+ * totalPerdidoQuilos fica disponível à parte, só para controle de
+ * desperdício em peso — não entra no cálculo de perdaPercentual.
  */
 
 import type { DiaDaSemana, PlanoDeProducaoDiario } from "../types/producao";
@@ -17,9 +20,10 @@ import type { Produto } from "../types/produto";
 export interface TaxaPerdaProduto {
   codigoPdv: number;
   nomeProduto: string;
-  totalProduzido: number; // quilos
-  totalPerdido: number; // quilos
-  perdaAbsoluta: number; // quilos
+  totalProduzido: number; // unidades
+  totalPerdido: number; // unidades (estimadas)
+  totalPerdidoQuilos: number; // quilos pesados na balança — métrica auxiliar de desperdício
+  perdaAbsoluta: number; // unidades
   perdaPercentual: number; // 0-100, arredondado a 2 casas
 }
 
@@ -39,17 +43,22 @@ export function calcularTaxaPerdaPorProduto(
       for (const item of sessao.itens) {
         produzidoPorProduto.set(
           item.codigoPdv,
-          (produzidoPorProduto.get(item.codigoPdv) ?? 0) + item.quantidadeQuilos
+          (produzidoPorProduto.get(item.codigoPdv) ?? 0) + item.quantidadeUnidades
         );
       }
     }
   }
 
   const perdidoPorProduto = new Map<number, number>();
+  const perdidoQuilosPorProduto = new Map<number, number>();
   for (const perda of perdas) {
     perdidoPorProduto.set(
       perda.codigoPdv,
-      (perdidoPorProduto.get(perda.codigoPdv) ?? 0) + perda.quantidadeNormalizada
+      (perdidoPorProduto.get(perda.codigoPdv) ?? 0) + perda.quantidadeUnidadesEstimada
+    );
+    perdidoQuilosPorProduto.set(
+      perda.codigoPdv,
+      (perdidoQuilosPorProduto.get(perda.codigoPdv) ?? 0) + perda.quantidadeQuilos
     );
   }
 
@@ -68,6 +77,7 @@ export function calcularTaxaPerdaPorProduto(
       nomeProduto: produto.nome,
       totalProduzido,
       totalPerdido,
+      totalPerdidoQuilos: arredondar(perdidoQuilosPorProduto.get(codigoPdv) ?? 0, 2),
       perdaAbsoluta: arredondar(totalPerdido, 2),
       perdaPercentual: arredondar(perdaPercentual, 2),
     });
@@ -78,11 +88,11 @@ export function calcularTaxaPerdaPorProduto(
 
 export interface VolumeProducaoPorDia {
   diaDaSemana: DiaDaSemana;
-  totalPlanejado: number; // quilos
+  totalPlanejado: number; // unidades
   numeroDePlanos: number;
 }
 
-/** Volume de produção consolidado por dia da semana, em quilos. */
+/** Volume de produção consolidado por dia da semana, em unidades. */
 export function calcularVolumeProducaoPorDiaDaSemana(
   planos: PlanoDeProducaoDiario[]
 ): VolumeProducaoPorDia[] {
@@ -92,7 +102,7 @@ export function calcularVolumeProducaoPorDiaDaSemana(
     const atual = acumulado.get(plano.diaDaSemana) ?? { total: 0, qtdPlanos: 0 };
     const totalDoPlano = plano.sessoes
       .flatMap((s) => s.itens)
-      .reduce((soma, item) => soma + item.quantidadeQuilos, 0);
+      .reduce((soma, item) => soma + item.quantidadeUnidades, 0);
     acumulado.set(plano.diaDaSemana, {
       total: atual.total + totalDoPlano,
       qtdPlanos: atual.qtdPlanos + 1,
@@ -136,7 +146,7 @@ export function identificarPicosDePerda(
       for (const item of sessao.itens) {
         const produto = produtoPorCodigo.get(item.codigoPdv);
         const chave = chaveDe(plano.diaDaSemana, produto?.categoria);
-        produzido.set(chave, (produzido.get(chave) ?? 0) + item.quantidadeQuilos);
+        produzido.set(chave, (produzido.get(chave) ?? 0) + item.quantidadeUnidades);
       }
     }
   }
@@ -144,7 +154,7 @@ export function identificarPicosDePerda(
   for (const perda of perdas) {
     const produto = produtoPorCodigo.get(perda.codigoPdv);
     const chave = chaveDe(perda.diaDaSemana, produto?.categoria);
-    perdido.set(chave, (perdido.get(chave) ?? 0) + perda.quantidadeNormalizada);
+    perdido.set(chave, (perdido.get(chave) ?? 0) + perda.quantidadeUnidadesEstimada);
   }
 
   const resultado: PicoPerdaPorDia[] = [];

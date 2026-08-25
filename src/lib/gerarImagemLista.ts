@@ -1,9 +1,16 @@
 /**
  * src/lib/gerarImagemLista.ts
  * ---------------------------------------------------------------
- * Gera uma imagem PNG pronta para impressão térmica (papel de 79mm) com
- * a lista de produção de UMA sessão — fonte grande (a lista é fixada no
- * quadro de avisos da produção), data em destaque.
+ * Gera UMA imagem PNG só ("fita"), com todas as sessões confirmadas do
+ * cronograma empilhadas verticalmente, pronta para impressão térmica
+ * (papel de 79mm). Cada sessão repete seu próprio cabeçalho (padaria,
+ * data em destaque, nome da sessão) porque o papel é cortado em pedaços
+ * depois de impresso — cada pedaço vira um aviso independente, fixado no
+ * quadro do respectivo setor.
+ *
+ * Entre uma sessão e a próxima fica uma faixa de corte: linha pontilhada
+ * + ícone de tesoura, espaço suficiente para cortar com uma tesoura comum
+ * sem cortar texto de nenhuma das duas sessões.
  *
  * A impressora térmica disponível não tem conexão com internet, então a
  * comunicação não é automática: a imagem é compartilhada via WhatsApp
@@ -19,41 +26,97 @@ import type { ItemPlanoProducao } from "../types/producao";
 const LARGURA_PX = 576;
 const MARGEM = 24;
 const ALTURA_LINHA = 56;
+const ALTURA_CABECALHO_BLOCO = 210;
+const ALTURA_RODAPE_BLOCO = 30;
+const ALTURA_FAIXA_CORTE = 90;
 
-export interface DadosImpressaoSessao {
+export interface BlocoSessaoImpressao {
   rotuloSessao: string;
-  dataFormatada: string; // já pronta para exibição, ex.: "Quarta-feira, 26/08/2026"
   itens: ItemPlanoProducao[];
-  produtos: Produto[];
 }
 
-/** Desenha a lista de uma sessão num canvas novo e retorna o elemento. */
-export function gerarCanvasLista(dados: DadosImpressaoSessao): HTMLCanvasElement {
-  const linhas = dados.itens
-    .map((item) => ({
-      nome: dados.produtos.find((p) => p.codigoPdv === item.codigoPdv)?.nome ?? `#${item.codigoPdv}`,
-      quilos: item.quantidadeQuilos,
-    }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+export interface DadosImpressaoFita {
+  dataFormatada: string; // já pronta para exibição, ex.: "Quarta-feira, 26/08/2026"
+  sessoes: BlocoSessaoImpressao[];
+  produtos: Produto[];
+  /** Quem montou/confirmou o cronograma — exibido no rodapé final para rastreabilidade. */
+  montadoPor?: string;
+}
 
-  const alturaCabecalho = 210;
-  const alturaRodape = 46;
-  const altura = alturaCabecalho + Math.max(linhas.length, 1) * ALTURA_LINHA + alturaRodape;
+interface LinhaItem {
+  nome: string;
+  unidades: number;
+}
+
+/** Gera a fita completa (todas as sessões + faixas de corte) num único canvas. */
+export function gerarCanvasFitaCompleta(dados: DadosImpressaoFita): HTMLCanvasElement {
+  const blocos = dados.sessoes.map((sessao) => ({
+    rotuloSessao: sessao.rotuloSessao,
+    linhas: linhasDoBloco(sessao.itens, dados.produtos),
+  }));
+
+  const alturaBlocos = blocos.reduce(
+    (soma, b) => soma + ALTURA_CABECALHO_BLOCO + Math.max(b.linhas.length, 1) * ALTURA_LINHA + ALTURA_RODAPE_BLOCO,
+    0
+  );
+  const alturaCortes = Math.max(blocos.length - 1, 0) * ALTURA_FAIXA_CORTE;
+  const alturaRodapeFinal = dados.montadoPor ? 56 : 36;
+  const altura = alturaBlocos + alturaCortes + alturaRodapeFinal;
 
   const canvas = document.createElement("canvas");
   canvas.width = LARGURA_PX;
-  canvas.height = altura;
+  canvas.height = Math.max(altura, 200);
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Este navegador não suporta geração de imagem (canvas 2D indisponível).");
 
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, LARGURA_PX, altura);
-  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.textBaseline = "top";
+
+  let y = 0;
+  blocos.forEach((bloco, indice) => {
+    y = desenharBloco(ctx, y, bloco.rotuloSessao, bloco.linhas, dados.dataFormatada);
+    if (indice < blocos.length - 1) {
+      y = desenharFaixaDeCorte(ctx, y);
+    }
+  });
+
   ctx.textAlign = "center";
+  ctx.font = "13px system-ui, -apple-system, sans-serif";
+  ctx.fillStyle = "#555555";
+  const totalItens = blocos.reduce((s, b) => s + b.linhas.length, 0);
+  ctx.fillText(`${blocos.length} sessão(ões) · ${totalItens} itens · app Produção & Perdas`, LARGURA_PX / 2, y + 10);
 
-  let y = MARGEM;
+  if (dados.montadoPor) {
+    ctx.font = "bold 14px system-ui, -apple-system, sans-serif";
+    ctx.fillStyle = "#000000";
+    ctx.fillText(`Montado por: ${dados.montadoPor}`, LARGURA_PX / 2, y + 30);
+  }
 
+  return canvas;
+}
+
+function linhasDoBloco(itens: ItemPlanoProducao[], produtos: Produto[]): LinhaItem[] {
+  return itens
+    .map((item) => ({
+      nome: produtos.find((p) => p.codigoPdv === item.codigoPdv)?.nome ?? `#${item.codigoPdv}`,
+      unidades: item.quantidadeUnidades,
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+/** Desenha um bloco de sessão (cabeçalho + data + itens) a partir de yInicial; retorna o y logo após o bloco. */
+function desenharBloco(
+  ctx: CanvasRenderingContext2D,
+  yInicial: number,
+  rotuloSessao: string,
+  linhas: LinhaItem[],
+  dataFormatada: string
+): number {
+  let y = yInicial + MARGEM;
+
+  ctx.fillStyle = "#000000";
+  ctx.textAlign = "center";
   ctx.font = "bold 26px system-ui, -apple-system, sans-serif";
   ctx.fillText("PADARIA PÃO DE MEL", LARGURA_PX / 2, y);
   y += 36;
@@ -62,18 +125,18 @@ export function gerarCanvasLista(dados: DadosImpressaoSessao): HTMLCanvasElement
   ctx.fillText("Lista de Produção", LARGURA_PX / 2, y);
   y += 32;
 
-  // Data em destaque (item 13 do pedido) — caixa preta, texto branco, bem grande.
+  // Data em destaque — caixa preta, texto branco, bem grande.
   const alturaCaixaData = 50;
   ctx.fillStyle = "#000000";
   ctx.fillRect(MARGEM, y, LARGURA_PX - MARGEM * 2, alturaCaixaData);
   ctx.fillStyle = "#ffffff";
   ctx.font = "bold 24px system-ui, -apple-system, sans-serif";
-  ctx.fillText(dados.dataFormatada, LARGURA_PX / 2, y + 13);
+  ctx.fillText(dataFormatada, LARGURA_PX / 2, y + 13);
   y += alturaCaixaData + 18;
 
   ctx.fillStyle = "#000000";
   ctx.font = "bold 22px system-ui, -apple-system, sans-serif";
-  ctx.fillText(dados.rotuloSessao.toUpperCase(), LARGURA_PX / 2, y);
+  ctx.fillText(rotuloSessao.toUpperCase(), LARGURA_PX / 2, y);
   y += 32;
 
   linhaHorizontal(ctx, y, "#000000", 2);
@@ -91,7 +154,7 @@ export function gerarCanvasLista(dados: DadosImpressaoSessao): HTMLCanvasElement
     ctx.textAlign = "left";
     ctx.fillText(linha.nome, MARGEM, y, LARGURA_PX - MARGEM * 2 - 120);
     ctx.textAlign = "right";
-    ctx.fillText(`${formatarQuilos(linha.quilos)} kg`, LARGURA_PX - MARGEM, y);
+    ctx.fillText(`${formatarUnidades(linha.unidades)} un`, LARGURA_PX - MARGEM, y);
     y += ALTURA_LINHA - 16;
     linhaHorizontal(ctx, y, "#cccccc", 1);
     y += 16;
@@ -100,9 +163,43 @@ export function gerarCanvasLista(dados: DadosImpressaoSessao): HTMLCanvasElement
   ctx.textAlign = "center";
   ctx.font = "14px system-ui, -apple-system, sans-serif";
   ctx.fillStyle = "#555555";
-  ctx.fillText(`${linhas.length} itens · app Produção & Perdas`, LARGURA_PX / 2, y + 6);
+  ctx.fillText(`${linhas.length} ${linhas.length === 1 ? "item" : "itens"} nesta sessão`, LARGURA_PX / 2, y + 6);
+  y += ALTURA_RODAPE_BLOCO;
 
-  return canvas;
+  return y;
+}
+
+/** Linha pontilhada + ícone de tesoura, marcando onde cortar entre duas sessões. */
+function desenharFaixaDeCorte(ctx: CanvasRenderingContext2D, yInicial: number): number {
+  const yLinha = yInicial + ALTURA_FAIXA_CORTE / 2;
+
+  ctx.save();
+  ctx.strokeStyle = "#999999";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 8]);
+  ctx.beginPath();
+  ctx.moveTo(MARGEM, yLinha);
+  ctx.lineTo(LARGURA_PX - MARGEM, yLinha);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#000000";
+  ctx.font = "22px system-ui, -apple-system, sans-serif";
+  // Fundo branco atrás do ícone para "cortar" a linha pontilhada visualmente.
+  const larguraFundo = 40;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(LARGURA_PX / 2 - larguraFundo / 2, yLinha - 16, larguraFundo, 32);
+  ctx.fillStyle = "#000000";
+  ctx.fillText("✂", LARGURA_PX / 2, yLinha + 1);
+
+  ctx.font = "12px system-ui, -apple-system, sans-serif";
+  ctx.fillStyle = "#777777";
+  ctx.fillText("corte aqui", LARGURA_PX / 2, yLinha + 26);
+
+  ctx.textBaseline = "top";
+  return yInicial + ALTURA_FAIXA_CORTE;
 }
 
 function linhaHorizontal(ctx: CanvasRenderingContext2D, y: number, cor: string, largura: number) {
@@ -114,8 +211,8 @@ function linhaHorizontal(ctx: CanvasRenderingContext2D, y: number, cor: string, 
   ctx.stroke();
 }
 
-function formatarQuilos(valor: number): string {
-  return valor.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+function formatarUnidades(valor: number): string {
+  return valor.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 export function canvasParaArquivo(canvas: HTMLCanvasElement, nomeArquivo: string): Promise<File> {

@@ -21,14 +21,16 @@ export type StatusPlano = "rascunho" | "confirmado";
 
 /**
  * Um item dentro do plano de produção de uma sessão.
- * Quantidade sempre em QUILOS — decisão operacional deliberada (ago/2026):
- * mesmo para os itens vendidos por unidade, a equipe planeja a produção
- * pesando a massa/porção, não contando unidades finais. Ver
- * src/lib/conversao.ts para a mesma convenção aplicada ao lado de Perdas.
+ * Quantidade sempre em UNIDADES — decisão operacional (ago/2026): os 89
+ * produtos das 5 categorias de produção já são vendidos por unidade no
+ * PDV, então planejar em unidade é o formato nativo da operação (revisado
+ * da decisão anterior de planejar em quilos). O lado de Perdas continua
+ * pesando na balança — ver src/lib/conversao.ts para como as duas pontas
+ * se conectam (peso unitário informado no lançamento de perda).
  */
 export interface ItemPlanoProducao {
   codigoPdv: number;
-  quantidadeQuilos: number;
+  quantidadeUnidades: number;
 }
 
 /**

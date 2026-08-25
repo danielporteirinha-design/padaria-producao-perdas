@@ -23,9 +23,7 @@ export interface Repositorio {
   listarPerdas(): Promise<RegistroPerda[]>;
   registrarPerda(
     input: LancamentoPerdaInput & {
-      quantidadeNormalizada: number;
-      unidadeNormalizada: string;
-      fatorConversaoAplicado: boolean;
+      quantidadeUnidadesEstimada: number;
       diaDaSemana: RegistroPerda["diaDaSemana"];
       data: string;
     }

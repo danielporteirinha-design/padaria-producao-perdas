@@ -56,7 +56,7 @@ export function TelaAnalises({ produtos, planos, perdas }: TelaAnalisesProps) {
             <div className="trilho-barra">
               <div className="barra" style={{ width: `${(v.totalPlanejado / maiorVolume) * 100}%` }} />
             </div>
-            <span className="valor-barra">{v.totalPlanejado} kg</span>
+            <span className="valor-barra">{v.totalPlanejado} un</span>
           </div>
         ))}
       </div>
@@ -67,20 +67,22 @@ export function TelaAnalises({ produtos, planos, perdas }: TelaAnalisesProps) {
           <thead>
             <tr>
               <th>Produto</th>
-              <th>Produzido (kg)</th>
+              <th>Produzido (un)</th>
+              <th>Perdido (un)</th>
               <th>Perdido (kg)</th>
               <th>Perda %</th>
             </tr>
           </thead>
           <tbody>
             {taxas.length === 0 && (
-              <tr><td colSpan={4} className="vazio">Sem dados de perda ainda.</td></tr>
+              <tr><td colSpan={5} className="vazio">Sem dados de perda ainda.</td></tr>
             )}
             {taxas.slice(0, 30).map((t) => (
               <tr key={t.codigoPdv}>
                 <td>{t.nomeProduto}</td>
                 <td>{t.totalProduzido}</td>
                 <td>{t.totalPerdido}</td>
+                <td>{t.totalPerdidoQuilos} kg</td>
                 <td className={t.perdaPercentual >= 15 ? "perda-alta" : t.perdaPercentual > 0 ? "perda-media" : ""}>
                   {t.perdaPercentual}%
                 </td>

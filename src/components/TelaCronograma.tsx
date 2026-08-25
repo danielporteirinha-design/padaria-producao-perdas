@@ -3,36 +3,46 @@
  * ---------------------------------------------------------------
  * Fluxo: 5 categorias fixas + "Encomendas e Especiais", exibidas
  * recolhidas (acordeão) -> tocar num produto abre uma textbox de
- * quantidade (sempre em quilos, protegida contra erro de digitação) ->
+ * quantidade (sempre em UNIDADES, protegida contra erro de digitação) ->
  * Confirmar adiciona à lista -> Resumo (conferência final) -> Confirmar
- * produção salva o plano -> Exportar/Imprimir (uma imagem por sessão,
- * pronta para WhatsApp/impressora térmica).
+ * produção salva o plano -> Exportar/Imprimir (uma única fita com todas
+ * as sessões, separadas por linha de corte, pronta para WhatsApp/impressora
+ * térmica).
  *
  * Sempre monta a produção do DIA SEGUINTE (decisão operacional: o
  * cronograma é fechado no fim do expediente do dia anterior).
+ *
+ * Cada categoria fixa tem um botão "Sugerir com IA" (Gemini, via
+ * src/lib/sugestaoProducao.ts) que pré-preenche quantidades vazias com
+ * base no histórico de produção/perda — sempre assistido, nunca
+ * automático: o operador revisa e ajusta antes de confirmar.
  */
 
 import { useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { ItemPlanoProducao, PlanoDeProducaoDiario, SessaoProducao } from "../types/producao";
+import type { RegistroPerda } from "../types/perda";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 import { gerarId } from "../lib/id";
 import { CATEGORIAS_PRODUCAO, CHAVE_ESPECIAL, ROTULO_ESPECIAL, rotuloDaCategoria } from "../lib/categorias";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
-import { ExportarSessao } from "./ExportarSessao";
+import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProducao } from "../lib/sugestaoProducao";
+import { ExportarFita } from "./ExportarFita";
 
 interface TelaCronogramaProps {
   produtos: Produto[];
   planos: PlanoDeProducaoDiario[];
+  perdas: RegistroPerda[];
   operador: string;
   onSalvarPlano: (plano: PlanoDeProducaoDiario) => Promise<void>;
 }
 
 type Fase = "montar" | "resumo" | "exportar";
+type StatusSugestao = "" | "carregando" | "erro";
 
 const GRUPOS = [...CATEGORIAS_PRODUCAO.map((c) => c.chave), CHAVE_ESPECIAL];
 
-export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: TelaCronogramaProps) {
+export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPlano }: TelaCronogramaProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
   const [mostrarSeletorData, setMostrarSeletorData] = useState(false);
 
@@ -48,6 +58,8 @@ export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: Te
   const [fase, setFase] = useState<Fase>("montar");
   const [salvando, setSalvando] = useState(false);
   const [planoConfirmado, setPlanoConfirmado] = useState<PlanoDeProducaoDiario | null>(null);
+  const [statusSugestao, setStatusSugestao] = useState<Record<string, StatusSugestao>>({});
+  const [mensagemSugestao, setMensagemSugestao] = useState<Record<string, string>>({});
 
   const diaDaSemana = diaDaSemanaDeData(dataAlvo);
   const dataFormatada = `${rotuloDoDia(diaDaSemana)}, ${formatarDataBr(dataAlvo)}`;
@@ -61,9 +73,9 @@ export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: Te
   }
 
   const totalItens = Object.values(itensPorGrupo).reduce((soma, itens) => soma + itens.length, 0);
-  const totalQuilos = Object.values(itensPorGrupo)
+  const totalUnidades = Object.values(itensPorGrupo)
     .flat()
-    .reduce((soma, i) => soma + i.quantidadeQuilos, 0);
+    .reduce((soma, i) => soma + i.quantidadeUnidades, 0);
 
   function produtosDaCategoria(chave: string): Produto[] {
     return produtos
@@ -87,18 +99,18 @@ export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: Te
     }
     setProdutoAtivo(codigoPdv);
     const existente = itensPorGrupo[chaveGrupo]?.find((i) => i.codigoPdv === codigoPdv);
-    setValorEditando(existente ? String(existente.quantidadeQuilos) : "");
+    setValorEditando(existente ? String(existente.quantidadeUnidades) : "");
   }
 
   function confirmarQuantidade(chaveGrupo: string, codigoPdv: number) {
     if (!ehNumeroValidoPositivo(valorEditando)) return;
-    const quantidadeQuilos = paraNumero(valorEditando);
+    const quantidadeUnidades = paraNumero(valorEditando);
     setItensPorGrupo((atual) => {
       const itensAtuais = atual[chaveGrupo] ?? [];
       const existe = itensAtuais.some((i) => i.codigoPdv === codigoPdv);
       const novosItens = existe
-        ? itensAtuais.map((i) => (i.codigoPdv === codigoPdv ? { ...i, quantidadeQuilos } : i))
-        : [...itensAtuais, { codigoPdv, quantidadeQuilos }];
+        ? itensAtuais.map((i) => (i.codigoPdv === codigoPdv ? { ...i, quantidadeUnidades } : i))
+        : [...itensAtuais, { codigoPdv, quantidadeUnidades }];
       return { ...atual, [chaveGrupo]: novosItens };
     });
     setProdutoAtivo(null);
@@ -114,6 +126,39 @@ export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: Te
 
   function nomeDoProduto(codigoPdv: number): string {
     return produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? `#${codigoPdv}`;
+  }
+
+  async function gerarSugestaoIA(chave: string) {
+    setStatusSugestao((atual) => ({ ...atual, [chave]: "carregando" }));
+    setMensagemSugestao((atual) => ({ ...atual, [chave]: "" }));
+    try {
+      const historico = montarHistoricoPorCategoria(chave, produtos, planos, perdas);
+      const sugestoes = await buscarSugestaoProducao(diaDaSemana, chave, historico);
+
+      setItensPorGrupo((atual) => {
+        const itensAtuais = atual[chave] ?? [];
+        const codigosExistentes = new Set(itensAtuais.map((i) => i.codigoPdv));
+        const novosItens = sugestoes
+          .filter((s) => !codigosExistentes.has(s.codigoPdv) && s.quantidadeSugerida > 0)
+          .map((s) => ({ codigoPdv: s.codigoPdv, quantidadeUnidades: arred(s.quantidadeSugerida) }));
+        return { ...atual, [chave]: [...itensAtuais, ...novosItens] };
+      });
+      setExpandido((atual) => ({ ...atual, [chave]: true }));
+      setStatusSugestao((atual) => ({ ...atual, [chave]: "" }));
+      setMensagemSugestao((atual) => ({
+        ...atual,
+        [chave]:
+          sugestoes.length > 0
+            ? `${sugestoes.length} sugestão(ões) da IA adicionada(s) — revise as quantidades antes de confirmar.`
+            : "A IA não encontrou histórico suficiente para sugerir quantidades nesta categoria ainda.",
+      }));
+    } catch (erro) {
+      setStatusSugestao((atual) => ({ ...atual, [chave]: "erro" }));
+      setMensagemSugestao((atual) => ({
+        ...atual,
+        [chave]: erro instanceof ErroSugestaoProducao ? erro.message : "Não foi possível gerar a sugestão agora.",
+      }));
+    }
   }
 
   async function confirmarESalvar() {
@@ -149,18 +194,17 @@ export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: Te
       <div className="tela">
         <h2>Lista pronta para impressão</h2>
         <p className="mensagem-sucesso">
-          Produção de {dataFormatada} confirmada. Gere a imagem de cada sessão abaixo — cada uma é um papel
-          separado para o quadro de avisos.
+          Produção de {dataFormatada} confirmada. A imagem abaixo é UMA fita só, com todas as sessões
+          separadas por linha de corte — imprima, corte em cada tesourinha e fixe cada pedaço no quadro do
+          respectivo setor.
         </p>
-        {planoConfirmado.sessoes.map((sessao) => (
-          <ExportarSessao
-            key={sessao.id}
-            sessao={sessao}
-            dataFormatada={dataFormatada}
-            produtos={produtos}
-            nomeArquivoBase={`producao-${sessao.categoria.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${dataAlvo}`}
-          />
-        ))}
+        <ExportarFita
+          sessoes={planoConfirmado.sessoes}
+          dataFormatada={dataFormatada}
+          produtos={produtos}
+          montadoPor={planoConfirmado.criadoPor}
+          nomeArquivoBase={`producao-${dataAlvo}`}
+        />
         <div className="acoes">
           <button type="button" className="secundario" onClick={() => setFase("montar")}>
             Voltar ao Cronograma
@@ -181,7 +225,7 @@ export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: Te
 
         {GRUPOS.filter((chave) => (itensPorGrupo[chave]?.length ?? 0) > 0).map((chave) => {
           const itens = itensPorGrupo[chave] ?? [];
-          const subtotal = itens.reduce((s, i) => s + i.quantidadeQuilos, 0);
+          const subtotal = itens.reduce((s, i) => s + i.quantidadeUnidades, 0);
           return (
             <div key={chave}>
               <h3>{rotuloDaCategoria(chave)}</h3>
@@ -190,26 +234,26 @@ export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: Te
                   <thead>
                     <tr>
                       <th>Produto</th>
-                      <th>Quilos</th>
+                      <th>Unidades</th>
                     </tr>
                   </thead>
                   <tbody>
                     {itens.map((item) => (
                       <tr key={item.codigoPdv}>
                         <td>{nomeDoProduto(item.codigoPdv)}</td>
-                        <td>{item.quantidadeQuilos} kg</td>
+                        <td>{item.quantidadeUnidades} un</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <p className="nota-rodape">Subtotal: {arred(subtotal)} kg</p>
+              <p className="nota-rodape">Subtotal: {arred(subtotal)} un</p>
             </div>
           );
         })}
 
         <p className="total-linha">
-          <strong>{totalItens}</strong> itens · <strong>{arred(totalQuilos)}</strong> kg planejados no total
+          <strong>{totalItens}</strong> itens · <strong>{arred(totalUnidades)}</strong> unidades planejadas no total
         </p>
 
         <div className="acoes">
@@ -236,6 +280,21 @@ export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: Te
         <p className="callout-inline">
           Já existe um plano {planoExistente.status === "confirmado" ? "confirmado" : "salvo"} para esta data —
           os itens abaixo foram carregados dele. Salvar de novo atualiza a lista.
+          {planoExistente.status === "confirmado" && (
+            <>
+              {" "}
+              <button
+                type="button"
+                className="link"
+                onClick={() => {
+                  setPlanoConfirmado(planoExistente);
+                  setFase("exportar");
+                }}
+              >
+                reimprimir esta lista sem mexer nela
+              </button>
+            </>
+          )}
         </p>
       )}
 
@@ -251,6 +310,8 @@ export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: Te
         const itensDoGrupo = itensPorGrupo[chave] ?? [];
         const aberto = !!expandido[chave];
         const listaProdutos = chave === CHAVE_ESPECIAL ? produtosEspecial : produtosDaCategoria(chave);
+        const statusIA = statusSugestao[chave] ?? "";
+        const mensagemIA = mensagemSugestao[chave] ?? "";
 
         return (
           <div key={chave} className="acordeao-sessao">
@@ -268,6 +329,22 @@ export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: Te
 
             {aberto && (
               <div className="corpo-sessao">
+                {chave !== CHAVE_ESPECIAL && (
+                  <div className="linha-sugestao-ia">
+                    <button
+                      type="button"
+                      className="secundario"
+                      disabled={statusIA === "carregando"}
+                      onClick={() => gerarSugestaoIA(chave)}
+                    >
+                      {statusIA === "carregando" ? "Gerando sugestão..." : "✨ Sugerir quantidades com IA"}
+                    </button>
+                  </div>
+                )}
+                {mensagemIA && (
+                  <p className={statusIA === "erro" ? "erro-conversao" : "nota-rodape"}>{mensagemIA}</p>
+                )}
+
                 {chave === CHAVE_ESPECIAL && (
                   <input
                     className="campo-busca"
@@ -295,7 +372,7 @@ export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: Te
                         onClick={() => abrirEdicao(produto.codigoPdv, chave)}
                       >
                         <span>{produto.nome}</span>
-                        {itemSalvo && <span className="valor-confirmado">{itemSalvo.quantidadeQuilos} kg ✓</span>}
+                        {itemSalvo && <span className="valor-confirmado">{itemSalvo.quantidadeUnidades} un ✓</span>}
                       </button>
 
                       {editando && (
@@ -305,11 +382,11 @@ export function TelaCronograma({ produtos, planos, operador, onSalvarPlano }: Te
                             inputMode="decimal"
                             pattern="[0-9]*[.,]?[0-9]*"
                             autoFocus
-                            placeholder="Quantidade em kg"
+                            placeholder="Quantidade em unidades"
                             value={valorEditando}
                             onChange={(e) => setValorEditando(sanitizarEntradaNumerica(e.target.value))}
                           />
-                          <span className="unidade-fixa">kg</span>
+                          <span className="unidade-fixa">un</span>
                           <button
                             type="button"
                             className="primario"

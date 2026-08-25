@@ -20,10 +20,9 @@ interface TelaPerdasProps {
   onRegistrarPerda: (payload: {
     codigoPdv: number;
     planoDeProducaoId: string;
-    entradaBruta: { valor: number; unidade: "un" | "kg" };
-    quantidadeNormalizada: number;
-    unidadeNormalizada: string;
-    fatorConversaoAplicado: boolean;
+    quantidadeQuilos: number;
+    pesoUnitarioGramasInformado: number;
+    quantidadeUnidadesEstimada: number;
     motivo: RegistroPerda["motivo"];
     observacao?: string;
     registradoPor: string;
@@ -98,22 +97,24 @@ export function TelaPerdas({ produtos, perdas, planoDeHoje, operador, onRegistra
           <thead>
             <tr>
               <th>Produto</th>
-              <th>Lançado</th>
-              <th>Em quilos</th>
+              <th>Peso perdido</th>
+              <th>Peso unitário usado</th>
+              <th>Unidades (est.)</th>
               <th>Motivo</th>
             </tr>
           </thead>
           <tbody>
             {perdasDeHoje.length === 0 && (
               <tr>
-                <td colSpan={4} className="vazio">Nenhuma perda registrada ainda hoje.</td>
+                <td colSpan={5} className="vazio">Nenhuma perda registrada ainda hoje.</td>
               </tr>
             )}
             {perdasDeHoje.map((p) => (
               <tr key={p.id}>
                 <td>{produtos.find((pr) => pr.codigoPdv === p.codigoPdv)?.nome ?? p.codigoPdv}</td>
-                <td>{p.entradaBruta.valor} {p.entradaBruta.unidade}</td>
-                <td>{p.quantidadeNormalizada} kg{p.fatorConversaoAplicado ? " (convertido)" : ""}</td>
+                <td>{p.quantidadeQuilos} kg</td>
+                <td>{p.pesoUnitarioGramasInformado} g</td>
+                <td>{p.quantidadeUnidadesEstimada}</td>
                 <td>{p.motivo}</td>
               </tr>
             ))}

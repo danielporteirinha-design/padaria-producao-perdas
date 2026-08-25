@@ -57,10 +57,9 @@ export default function App() {
   async function handleRegistrarPerda(payload: {
     codigoPdv: number;
     planoDeProducaoId: string;
-    entradaBruta: { valor: number; unidade: "un" | "kg" };
-    quantidadeNormalizada: number;
-    unidadeNormalizada: string;
-    fatorConversaoAplicado: boolean;
+    quantidadeQuilos: number;
+    pesoUnitarioGramasInformado: number;
+    quantidadeUnidadesEstimada: number;
     motivo: RegistroPerda["motivo"];
     observacao?: string;
     registradoPor: string;
@@ -69,21 +68,28 @@ export default function App() {
     const input: LancamentoPerdaInput = {
       codigoPdv: payload.codigoPdv,
       planoDeProducaoId: payload.planoDeProducaoId,
-      valor: payload.entradaBruta.valor,
-      unidade: payload.entradaBruta.unidade,
+      quantidadeQuilos: payload.quantidadeQuilos,
+      pesoUnitarioGramasInformado: payload.pesoUnitarioGramasInformado,
       motivo: payload.motivo,
       observacao: payload.observacao,
       registradoPor: payload.registradoPor,
     };
     const registro = await repositorio.registrarPerda({
       ...input,
-      quantidadeNormalizada: payload.quantidadeNormalizada,
-      unidadeNormalizada: payload.unidadeNormalizada,
-      fatorConversaoAplicado: payload.fatorConversaoAplicado,
+      quantidadeUnidadesEstimada: payload.quantidadeUnidadesEstimada,
       diaDaSemana: diaDaSemanaDeData(hoje),
       data: hoje,
     });
     setPerdas((atual) => [...atual, registro]);
+
+    // Decisão operacional (ago/2026): o peso unitário informado no lançamento
+    // de perda retroalimenta o cadastro do produto automaticamente — a
+    // sugestão pré-preenchida na próxima perda (e no cronograma) fica cada
+    // vez mais precisa, sem passo manual extra em Produtos.
+    const produto = produtos.find((p) => p.codigoPdv === payload.codigoPdv);
+    if (produto && produto.pesoMedioUnitarioGramas !== payload.pesoUnitarioGramasInformado) {
+      await handleAtualizarProduto({ ...produto, pesoMedioUnitarioGramas: payload.pesoUnitarioGramasInformado });
+    }
   }
 
   const hoje = dataDeHojeIso();
@@ -132,6 +138,7 @@ export default function App() {
           <TelaCronograma
             produtos={produtos}
             planos={planos}
+            perdas={perdas}
             operador={operador}
             onSalvarPlano={handleSalvarPlano}
           />

@@ -161,8 +161,9 @@ export function TelaCadastroProdutos({
                 }
               />
               <span className="nota-rodape">
-                Cadastrando o peso médio, a tela de Perdas passa a aceitar contar unidades quebradas/sobras
-                (convertido automaticamente para quilos). Sem isso, a perda só pode ser pesada na balança.
+                Usado como sugestão pré-preenchida na tela de Perdas, para calcular quantas unidades uma
+                perda pesada na balança representa. É atualizado automaticamente a cada perda lançada — não
+                precisa manter manualmente, só cadastre um valor inicial.
               </span>
             </label>
           )}

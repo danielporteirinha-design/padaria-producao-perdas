@@ -1,17 +1,19 @@
 /**
  * Modelo de dados — Registro de Perdas
  *
- * Princípio de design (crítico): NUNCA descartar o valor bruto informado
- * pelo operador. Guardamos entrada bruta + valor normalizado lado a lado,
- * para que:
- *   1) a métrica de perda (%) seja sempre calculada em QUILOS — a mesma
- *      unidade canônica usada na produção (ver src/lib/conversao.ts);
- *   2) se o peso médio unitário do produto for recalibrado no futuro, seja
- *      possível reprocessar o histórico sem perder a informação original
- *      lançada pelo operador (auditoria/rastreabilidade).
+ * Decisão operacional (revisada ago/2026): a perda é sempre PESADA na
+ * balança (quilos) — nunca contada em unidades diretamente, porque nem
+ * sempre dá para contar pedaços quebrados. Para ainda assim comparar
+ * perda com produção (que agora é planejada em UNIDADES — ver
+ * src/types/producao.ts), o operador informa também o peso de 1 unidade
+ * do item descartado no momento do lançamento; o app deriva a partir daí
+ * quantas unidades aquele peso representa.
+ *
+ * O peso unitário informado nunca é descartado — ele também alimenta de
+ * volta o cadastro do produto (Produto.pesoMedioUnitarioGramas), para que
+ * o valor sugerido nos próximos lançamentos fique cada vez mais preciso
+ * (ver src/App.tsx, handleRegistrarPerda).
  */
-
-export type UnidadeEntradaPerda = "un" | "kg";
 
 export type MotivoPerda =
   | "queimado"
@@ -28,20 +30,18 @@ export interface RegistroPerda {
   data: string; // ISO 8601 (YYYY-MM-DD)
   diaDaSemana: import("./producao").DiaDaSemana;
 
-  /** O que o operador efetivamente digitou/pesou — nunca alterar após salvo. */
-  entradaBruta: {
-    valor: number;
-    unidade: UnidadeEntradaPerda;
-  };
+  /** Peso bruto pesado na balança — o dado que o operador efetivamente leu. Nunca alterar após salvo. */
+  quantidadeQuilos: number;
+
+  /** Peso de 1 unidade do item descartado, informado pelo operador neste lançamento (gramas). */
+  pesoUnitarioGramasInformado: number;
 
   /**
-   * Resultado da normalização (ver src/lib/conversao.ts), sempre em
-   * QUILOS. É o valor usado em todos os cálculos de taxa de perda e
-   * nos relatórios agregados.
+   * Unidades perdidas estimadas = quantidadeQuilos*1000 / pesoUnitarioGramasInformado.
+   * É o valor usado em conjunto com ItemPlanoProducao.quantidadeUnidades no cálculo
+   * de taxa de perda (%) — produzido e perdido ficam na mesma unidade.
    */
-  quantidadeNormalizada: number;
-  unidadeNormalizada: "kg";
-  fatorConversaoAplicado: boolean;
+  quantidadeUnidadesEstimada: number;
 
   motivo: MotivoPerda;
   observacao?: string;
@@ -50,12 +50,12 @@ export interface RegistroPerda {
   registradoEm: string; // ISO 8601 datetime
 }
 
-/** Payload de entrada da tela de Registro de Perdas (antes da normalização). */
+/** Payload de entrada da tela de Registro de Perdas (antes do cálculo de unidades). */
 export interface LancamentoPerdaInput {
   codigoPdv: number;
   planoDeProducaoId: string;
-  valor: number;
-  unidade: UnidadeEntradaPerda;
+  quantidadeQuilos: number;
+  pesoUnitarioGramasInformado: number;
   motivo: MotivoPerda;
   observacao?: string;
   registradoPor: string;

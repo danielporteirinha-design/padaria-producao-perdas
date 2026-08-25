@@ -87,9 +87,7 @@ export class RepositorioFirestore implements Repositorio {
 
   async registrarPerda(
     _input: LancamentoPerdaInput & {
-      quantidadeNormalizada: number;
-      unidadeNormalizada: string;
-      fatorConversaoAplicado: boolean;
+      quantidadeUnidadesEstimada: number;
       diaDaSemana: RegistroPerda["diaDaSemana"];
       data: string;
     }
