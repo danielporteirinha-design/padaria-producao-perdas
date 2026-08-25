@@ -12,8 +12,19 @@
  */
 
 import type { Produto, UnidadeProducao } from "../types/produto";
+import { CATEGORIAS_PRODUCAO } from "./categorias";
 
 const CATEGORIA_PADRAO = "SEM_CATEGORIA";
+
+/**
+ * Decisão operacional (ago/2026): o app trabalha SÓ com as 5 categorias de
+ * produção (ver categorias.ts) — o PDV tem ~19 categorias, a maioria
+ * revenda (refrigerante, laticínio, mercearia...), fora do escopo deste
+ * app. Uma reimportação de planilha não deve reintroduzir esses itens no
+ * catálogo — por isso o filtro entra aqui, na própria importação, e não só
+ * na limpeza manual feita uma vez em Cadastro de Produtos.
+ */
+const CATEGORIAS_VALIDAS = new Set(CATEGORIAS_PRODUCAO.map((c) => c.chave));
 
 /** Formato bruto de uma linha lida da planilha (colunas relevantes apenas). */
 export interface LinhaPlanilhaProduto {
@@ -43,6 +54,8 @@ export interface RelatorioImportacao {
   totalLinhas: number;
   importados: number;
   semCategoria: number;
+  /** Fora das 5 categorias de produção (ver categorias.ts) — não entram no catálogo do app. */
+  foraDeEscopo: number;
   codigosPdvDuplicados: number[];
   unidadesNaoReconhecidas: string[];
   erros: string[];
@@ -57,6 +70,7 @@ export function importarProdutos(linhas: LinhaPlanilhaProduto[]): {
     totalLinhas: 0,
     importados: 0,
     semCategoria: 0,
+    foraDeEscopo: 0,
     codigosPdvDuplicados: [],
     unidadesNaoReconhecidas: [],
     erros: [],
@@ -84,6 +98,11 @@ export function importarProdutos(linhas: LinhaPlanilhaProduto[]): {
     const categoriaRaw = String(linha.categoria ?? "").trim();
     const categoria = categoriaRaw && categoriaRaw !== "..." ? categoriaRaw : CATEGORIA_PADRAO;
     if (categoria === CATEGORIA_PADRAO) relatorio.semCategoria += 1;
+
+    if (!CATEGORIAS_VALIDAS.has(categoria)) {
+      relatorio.foraDeEscopo += 1;
+      continue; // fora das 5 categorias de produção — não entra no catálogo do app
+    }
 
     const unidadeProducao = normalizarUnidade(linha.medida, relatorio.unidadesNaoReconhecidas, nome);
     const statusVenda = linha.statusVenda === "Pausado" ? "Pausado" : "Ativo";

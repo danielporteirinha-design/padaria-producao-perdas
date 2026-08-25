@@ -15,6 +15,8 @@ import type { Produto } from "../types/produto";
 import type { MotivoPerda } from "../types/perda";
 import { calcularPerdaEmUnidades, ErroConversaoPerda } from "../lib/conversao";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
+import type { OrigemCandidata } from "../lib/janelaValidade";
+import { formatarDataBr } from "../lib/data";
 
 const MOTIVOS: { valor: MotivoPerda; rotulo: string }[] = [
   { valor: "queimado", rotulo: "Queimado / erro de forno" },
@@ -27,7 +29,8 @@ const MOTIVOS: { valor: MotivoPerda; rotulo: string }[] = [
 
 interface TelaRegistroPerdaProps {
   produto: Produto;
-  planoDeProducaoId: string;
+  /** Fornadas ainda dentro do prazo de validade, da mais antiga para a mais nova (ver janelaValidade.ts). */
+  origens: OrigemCandidata[];
   registradoPor: string;
   onSalvar: (payload: {
     codigoPdv: number;
@@ -43,10 +46,12 @@ interface TelaRegistroPerdaProps {
 
 export function TelaRegistroPerda({
   produto,
-  planoDeProducaoId,
+  origens,
   registradoPor,
   onSalvar,
 }: TelaRegistroPerdaProps) {
+  // A mais antiga vem pré-selecionada (FIFO — descarta-se o lote mais velho primeiro).
+  const [planoDeProducaoId, setPlanoDeProducaoId] = useState(origens[0]?.planoDeProducaoId ?? "");
   const [quilos, setQuilos] = useState("");
   const [pesoUnitario, setPesoUnitario] = useState(
     produto.pesoMedioUnitarioGramas ? String(produto.pesoMedioUnitarioGramas) : ""
@@ -70,7 +75,7 @@ export function TelaRegistroPerda({
     }
   }, [produto, quilos, pesoUnitario, quilosValidos, pesoValido]);
 
-  const podeSalvar = preview?.ok === true;
+  const podeSalvar = preview?.ok === true && planoDeProducaoId !== "";
 
   function handleSalvar() {
     if (!podeSalvar || preview?.ok !== true) return;
@@ -89,6 +94,23 @@ export function TelaRegistroPerda({
   return (
     <div className="tela-registro-perda">
       <h2>{produto.nome}</h2>
+
+      {origens.length > 1 && (
+        <label>
+          Produzido em
+          <select value={planoDeProducaoId} onChange={(e) => setPlanoDeProducaoId(e.target.value)}>
+            {origens.map((o) => (
+              <option key={o.planoDeProducaoId} value={o.planoDeProducaoId}>
+                {formatarDataBr(o.data)} — há {o.diasDesdeProducao === 0 ? "menos de 1 dia" : `${o.diasDesdeProducao} dia(s)`}
+              </option>
+            ))}
+          </select>
+          <span className="nota-rodape">
+            Este produto tem mais de uma fornada ainda dentro da validade — a mais antiga já vem
+            selecionada (descarte o lote mais velho primeiro).
+          </span>
+        </label>
+      )}
 
       <label>
         Peso perdido (balança)

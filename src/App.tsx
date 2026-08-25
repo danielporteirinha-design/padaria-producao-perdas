@@ -54,6 +54,12 @@ export default function App() {
     setProdutos((atual) => atual.map((p) => (p.codigoPdv === produto.codigoPdv ? produto : p)));
   }
 
+  async function handleExcluirProdutos(codigosPdv: number[]) {
+    await repositorio.excluirProdutos(codigosPdv);
+    const remover = new Set(codigosPdv);
+    setProdutos((atual) => atual.filter((p) => !remover.has(p.codigoPdv)));
+  }
+
   async function handleRegistrarPerda(payload: {
     codigoPdv: number;
     planoDeProducaoId: string;
@@ -91,9 +97,6 @@ export default function App() {
       await handleAtualizarProduto({ ...produto, pesoMedioUnitarioGramas: payload.pesoUnitarioGramasInformado });
     }
   }
-
-  const hoje = dataDeHojeIso();
-  const planoDeHoje = planos.find((p) => p.data === hoje);
 
   if (carregando) {
     return <div className="carregando">Carregando...</div>;
@@ -148,13 +151,14 @@ export default function App() {
             produtos={produtos}
             onCriarProduto={handleCriarProduto}
             onAtualizarProduto={handleAtualizarProduto}
+            onExcluirProdutos={handleExcluirProdutos}
           />
         )}
         {aba === "perdas" && (
           <TelaPerdas
             produtos={produtos}
+            planos={planos}
             perdas={perdas}
-            planoDeHoje={planoDeHoje}
             operador={operador}
             onRegistrarPerda={handleRegistrarPerda}
           />

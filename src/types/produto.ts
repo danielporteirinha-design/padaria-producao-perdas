@@ -63,6 +63,27 @@ export interface Produto {
    * (ver ProdutoPesoHistorico, roadmap Fase 2).
    */
   pesoMedioUnitarioGramas?: number | null;
+
+  // ---------------------------------------------------------------------
+  // PRAZO DE VALIDADE — resolve o gargalo de que uma perda lançada hoje
+  // nem sempre é de produção de hoje (a etiqueta não traz data de
+  // fabricação isolada o suficiente para saber sozinho). Ver
+  // src/lib/janelaValidade.ts.
+  // ---------------------------------------------------------------------
+
+  /**
+   * Quantos dias esse item permanece bom para venda a partir do dia em
+   * que foi produzido (dia de produção conta como dia 1). Opcional —
+   * quando ausente, a tela de Perdas só considera o plano de produção do
+   * próprio dia (comportamento anterior, mais restritivo, nunca inventa
+   * um prazo que ninguém confirmou). Sugerido automaticamente por
+   * categoria ao cadastrar (ver VALIDADE_SUGERIDA_DIAS em
+   * src/lib/categorias.ts), sempre editável por produto — necessário
+   * porque produtos da mesma categoria de produção podem ter validade
+   * bem diferente (ex.: pão dura 1 dia, rosca da mesma categoria "Pães e
+   * Roscas" dura 2).
+   */
+  prazoValidadeDias?: number | null;
 }
 
 /** Payload mínimo para o cadastro rápido de um novo produto. */
@@ -74,4 +95,5 @@ export interface NovoProdutoInput {
   precoVenda: number;
   ativoNaProducao: boolean;
   pesoMedioUnitarioGramas?: number | null;
+  prazoValidadeDias?: number | null;
 }

@@ -37,12 +37,20 @@ COL_COD_PDV = 12
 
 CATEGORIA_PADRAO = "SEM_CATEGORIA"
 
+# Decisao operacional (ago/2026): o app trabalha SO com as 5 categorias de
+# producao -- o PDV tem ~19 categorias, a maioria revenda (refrigerante,
+# laticinio, mercearia...), fora do escopo deste app. Uma reimportacao de
+# planilha nao deve reintroduzir esses itens no catalogo.
+# MANTER EM SINCRONIA com CATEGORIAS_PRODUCAO em src/lib/categorias.ts.
+CATEGORIAS_VALIDAS = {"PÃES E ROSCAS", "BISCOITOS", "BOLOS", "SALGADOS", "CONFEITARIA"}
+
 
 @dataclass
 class RelatorioImportacao:
     total_linhas: int = 0
     importados: int = 0
     sem_categoria: int = 0
+    fora_de_escopo: int = 0
     codigos_pdv_duplicados: list = field(default_factory=list)
     unidades_nao_reconhecidas: list = field(default_factory=list)
 
@@ -75,6 +83,10 @@ def importar(caminho_entrada: str, caminho_saida: str) -> RelatorioImportacao:
         categoria = categoria_raw if categoria_raw and categoria_raw != "..." else CATEGORIA_PADRAO
         if categoria == CATEGORIA_PADRAO:
             relatorio.sem_categoria += 1
+
+        if categoria not in CATEGORIAS_VALIDAS:
+            relatorio.fora_de_escopo += 1
+            continue  # fora das 5 categorias de producao -- nao entra no catalogo do app
 
         unidade = normalizar_unidade(
             ws.cell(row=r, column=COL_MEDIDA).value, nome, relatorio.unidades_nao_reconhecidas
@@ -119,6 +131,7 @@ if __name__ == "__main__":
     print(f"Linhas processadas:      {rel.total_linhas}")
     print(f"Produtos importados:     {rel.importados}")
     print(f"Sem categoria original:  {rel.sem_categoria}  (marcados como '{CATEGORIA_PADRAO}')")
+    print(f"Fora de escopo (excluidos): {rel.fora_de_escopo}  (fora das 5 categorias de producao)")
     print(f"Codigos PDV duplicados:  {len(rel.codigos_pdv_duplicados)} {rel.codigos_pdv_duplicados[:10]}")
     print(f"Unidades nao reconhecidas: {len(rel.unidades_nao_reconhecidas)}")
     for aviso in rel.unidades_nao_reconhecidas[:10]:

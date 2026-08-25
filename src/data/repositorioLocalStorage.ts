@@ -52,6 +52,7 @@ export class RepositorioLocalStorage implements Repositorio {
       statusVenda: "Ativo",
       ativoNaProducao: input.ativoNaProducao,
       pesoMedioUnitarioGramas: input.pesoMedioUnitarioGramas,
+      prazoValidadeDias: input.prazoValidadeDias,
     };
     escrever(CHAVE_PRODUTOS, [...produtos, novo]);
     return novo;
@@ -62,6 +63,12 @@ export class RepositorioLocalStorage implements Repositorio {
     const atualizados = produtos.map((p) => (p.codigoPdv === produto.codigoPdv ? produto : p));
     escrever(CHAVE_PRODUTOS, atualizados);
     return produto;
+  }
+
+  async excluirProdutos(codigosPdv: number[]): Promise<void> {
+    const produtos = await this.listarProdutos();
+    const remover = new Set(codigosPdv);
+    escrever(CHAVE_PRODUTOS, produtos.filter((p) => !remover.has(p.codigoPdv)));
   }
 
   async listarPlanos(): Promise<PlanoDeProducaoDiario[]> {

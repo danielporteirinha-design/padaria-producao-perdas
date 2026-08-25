@@ -14,6 +14,8 @@ import {
   calcularVolumeProducaoPorDiaDaSemana,
   identificarPicosDePerda,
 } from "../src/lib/metricas";
+import { calcularCandidatosPerda } from "../src/lib/janelaValidade";
+import { diasEntreDatas } from "../src/lib/data";
 import type { Produto } from "../src/types/produto";
 import type { PlanoDeProducaoDiario } from "../src/types/producao";
 import type { RegistroPerda } from "../src/types/perda";
@@ -143,6 +145,119 @@ const perdas: RegistroPerda[] = [
 
   const picos = identificarPicosDePerda(produtos, planos, perdas, false);
   afirmar(picos[0].diaDaSemana === "quinta" && picos[0].perdaPercentualMedia === 10, "pico de perda identifica quinta com 10%");
+}
+
+// ---------------------------------------------------------------
+// Caso 7: diasEntreDatas — sanity básico (usado como base de toda a
+// janela de validade, então qualquer erro aqui se propaga em cascata).
+// ---------------------------------------------------------------
+{
+  afirmar(diasEntreDatas("2026-08-20", "2026-08-20") === 0, "diasEntreDatas mesma data = 0");
+  afirmar(diasEntreDatas("2026-08-20", "2026-08-23") === 3, "diasEntreDatas 3 dias de diferença = 3");
+  afirmar(diasEntreDatas("2026-08-23", "2026-08-20") === -3, "diasEntreDatas data futura em relação à referência = negativo");
+}
+
+// ---------------------------------------------------------------
+// Caso 8: calcularCandidatosPerda — produto SEM prazoValidadeDias
+// cadastrado só aceita o plano do próprio dia (comportamento anterior,
+// mais restritivo — nunca inventa um prazo que ninguém confirmou).
+// ---------------------------------------------------------------
+{
+  const paoSemValidade: Produto = { ...paoFrances, prazoValidadeDias: undefined };
+  const planoDeHoje: PlanoDeProducaoDiario = {
+    id: "plano-hoje",
+    data: "2026-08-24",
+    diaDaSemana: "segunda",
+    status: "confirmado",
+    criadoPor: "teste",
+    criadoEm: "2026-08-23T18:00:00Z",
+    sessoes: [{ id: "sessao-1", categoria: "PÃES E ROSCAS", itens: [{ codigoPdv: 112, quantidadeUnidades: 100 }] }],
+  };
+  const planoDeOntem: PlanoDeProducaoDiario = { ...planoDeHoje, id: "plano-ontem", data: "2026-08-23" };
+
+  const semValidadeHoje = calcularCandidatosPerda("2026-08-24", [paoSemValidade], [planoDeHoje]);
+  afirmar(
+    semValidadeHoje.length === 1 && semValidadeHoje[0].origens.length === 1,
+    "sem prazoValidadeDias: plano do próprio dia é aceito"
+  );
+
+  const semValidadeOntem = calcularCandidatosPerda("2026-08-24", [paoSemValidade], [planoDeOntem]);
+  afirmar(
+    semValidadeOntem.length === 0,
+    "sem prazoValidadeDias: plano de ontem é rejeitado (não pode inventar um prazo)"
+  );
+}
+
+// ---------------------------------------------------------------
+// Caso 9: calcularCandidatosPerda — produto COM prazoValidadeDias=3
+// aceita fornadas de 0, 1 e 2 dias atrás, mas não de 3+ dias atrás.
+// ---------------------------------------------------------------
+{
+  const confeitaria: Produto = {
+    codigoPdv: 500,
+    nome: "TORTA DE MORANGO",
+    categoria: "CONFEITARIA",
+    unidadeProducao: "un",
+    precoCusto: 5,
+    precoVenda: 12,
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+    prazoValidadeDias: 3,
+  };
+  const dataReferencia = "2026-08-24";
+  const planos3dias: PlanoDeProducaoDiario[] = ["2026-08-24", "2026-08-23", "2026-08-22", "2026-08-21"].map(
+    (data, i) => ({
+      id: `plano-conf-${i}`,
+      data,
+      diaDaSemana: "segunda",
+      status: "confirmado",
+      criadoPor: "teste",
+      criadoEm: `${data}T18:00:00Z`,
+      sessoes: [{ id: "sessao-1", categoria: "CONFEITARIA", itens: [{ codigoPdv: 500, quantidadeUnidades: 10 }] }],
+    })
+  );
+
+  const candidatos = calcularCandidatosPerda(dataReferencia, [confeitaria], planos3dias);
+  afirmar(candidatos.length === 1, "prazoValidadeDias=3: produto aparece como 1 candidato agregando as origens");
+  afirmar(
+    candidatos[0]?.origens.length === 3,
+    `prazoValidadeDias=3: aceita 0, 1 e 2 dias atrás, rejeita 3 (obtido: ${candidatos[0]?.origens.length} origens)`
+  );
+  afirmar(
+    candidatos[0]?.origens[0]?.data === "2026-08-22",
+    `origens ordenadas da mais antiga (FIFO) primeiro (obtido: ${candidatos[0]?.origens[0]?.data})`
+  );
+  afirmar(
+    candidatos[0]?.origens[candidatos[0].origens.length - 1]?.data === "2026-08-24",
+    "última origem da lista é a mais nova (hoje)"
+  );
+  afirmar(
+    !candidatos[0]?.origens.some((o) => o.data === "2026-08-21"),
+    "fornada de 3 dias atrás (fora do prazo) não aparece como candidata"
+  );
+}
+
+// ---------------------------------------------------------------
+// Caso 10: calcularCandidatosPerda — ignora planos não confirmados e
+// planos com data no futuro em relação à referência.
+// ---------------------------------------------------------------
+{
+  const planoRascunho: PlanoDeProducaoDiario = {
+    id: "plano-rascunho",
+    data: "2026-08-24",
+    diaDaSemana: "segunda",
+    status: "rascunho",
+    criadoPor: "teste",
+    criadoEm: "2026-08-24T10:00:00Z",
+    sessoes: [{ id: "sessao-1", categoria: "PÃES E ROSCAS", itens: [{ codigoPdv: 112, quantidadeUnidades: 100 }] }],
+  };
+  const planoFuturo: PlanoDeProducaoDiario = { ...planoRascunho, id: "plano-futuro", status: "confirmado", data: "2026-08-25" };
+
+  const semRascunho = calcularCandidatosPerda("2026-08-24", [paoFrances], [planoRascunho]);
+  afirmar(semRascunho.length === 0, "plano não confirmado (rascunho) não gera candidatos de perda");
+
+  const semFuturo = calcularCandidatosPerda("2026-08-24", [paoFrances], [planoFuturo]);
+  afirmar(semFuturo.length === 0, "plano com data futura em relação à referência é ignorado");
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

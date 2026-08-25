@@ -34,6 +34,8 @@ inicial do documento de arquitetura:
 | Peso unitário do produto | Sugerido automaticamente a partir do último lançamento de perda daquele produto — cadastro se autoatualiza, sem passo manual |
 | Impressão | UMA fita PNG com todas as sessões confirmadas, separadas por linha de corte (pontilhado + tesoura) — corta-se fisicamente após imprimir, um pedaço por quadro de aviso de cada setor |
 | Sugestão de produção | Botão "✨ Sugerir com IA" por categoria (Gemini) — sempre assistido: pré-preenche quantidades vazias com base no histórico, operador revisa/ajusta antes de confirmar |
+| Escopo do catálogo | Só as 5 categorias de produção — o catálogo importado do PDV tem ~19 categorias, a maioria revenda (mercearia, refrigerante, laticínio...), fora do escopo deste app (ago/2026: limpeza feita em Cadastro de Produtos → aba "Fora de escopo") |
+| Prazo de validade | Por produto (`Produto.prazoValidadeDias`, editável, sugerido por categoria) — uma perda lançada hoje nem sempre vem da produção de ontem (a etiqueta não traz data de fabricação isolada), então a tela de Perdas considera qualquer fornada confirmada ainda dentro do prazo do produto, não só a de hoje |
 
 Produção (unidades) e perda (derivada em unidades a partir do peso pesado
 ÷ peso unitário informado) ficam sempre na mesma unidade de medida, então
@@ -41,6 +43,59 @@ a taxa de perda (%) nunca mistura quilo com contagem de peças. O quilo
 pesado na balança continua registrado à parte (`totalPerdidoQuilos`),
 como métrica auxiliar de desperdício em peso. Ver `src/lib/conversao.ts`
 e `src/lib/metricas.ts`.
+
+### Prazo de validade e janela de perda (ago/2026)
+
+Gargalo real identificado pela padaria: as etiquetas dos produtos não
+trazem uma data de fabricação isolada e confiável, então uma perda
+lançada hoje nem sempre é da fornada de ontem — um pão perde a validade
+em 1 dia, mas uma confeitaria pode ter sido produzida até 5 dias atrás e
+só agora ser descartada.
+
+- `Produto.prazoValidadeDias` (opcional, por produto): quantos dias após
+  a produção o item ainda é considerado válido. Sugerido automaticamente
+  por categoria ao cadastrar (`VALIDADE_SUGERIDA_DIAS` em
+  `src/lib/categorias.ts`: Pães e Roscas 1, Biscoitos 15, Bolos 3,
+  Salgados 2, Confeitaria 5) mas sempre editável por produto — ex.: uma
+  rosca dentro de "Pães e Roscas" dura mais que o pão da mesma categoria
+  e deve ser ajustada manualmente para 2.
+- `src/lib/janelaValidade.ts` (`calcularCandidatosPerda`): módulo puro que,
+  para uma data de referência, varre os planos de produção confirmados e
+  identifica quais fornadas de cada produto ainda estão dentro do próprio
+  prazo de validade — essas são as candidatas a lançamento de perda
+  naquele dia. Produto sem `prazoValidadeDias` cadastrado cai no
+  comportamento anterior (só o plano do próprio dia), nunca inventa um
+  prazo que ninguém confirmou.
+- Quando um produto tem mais de uma fornada ainda válida, a tela de
+  Perdas (`TelaPerdas.tsx`) mostra a contagem ("· N fornadas válidas") e
+  `TelaRegistroPerda.tsx` exibe um seletor "Produzido em" com a fornada
+  mais antiga pré-selecionada (FIFO — descarta-se o lote mais velho
+  primeiro).
+- `RegistroPerda.data`/`diaDaSemana` continuam sendo o dia em que a perda
+  foi lançada (usado para as análises de "qual dia da semana mais
+  desperdiça"); só `planoDeProducaoId` passou a apontar corretamente para
+  a fornada de origem real, que pode ter dias de diferença.
+
+### Limpeza de escopo do catálogo (ago/2026)
+
+Decisão do dono do negócio: o catálogo deste app deve conter só produtos
+das 5 categorias de produção — o resto (revenda importada junto na
+planilha do PDV) não pertence aqui. Em Cadastro de Produtos, a aba
+"Fora de escopo" agrupa esses itens pela categoria original do PDV, com
+cada grupo selecionável (todos vêm marcados por padrão) e exige um
+segundo clique de confirmação antes de excluir — ação irreversível.
+Duas categorias do PDV merecem uma segunda olhada antes de confirmar por
+serem ambíguas (claramente produtos de padaria, só vieram com categoria
+própria na planilha original): **Bolos de Aniversário** e **Panetones** —
+desmarque esses grupos se quiser mantê-los, ou recadastre-os manualmente
+na categoria "Bolos"/"Confeitaria" depois.
+
+O mesmo filtro (só as 5 categorias) agora também é aplicado na
+importação/reimportação de planilha (`scripts/importar_produtos.py` e
+`src/lib/importarProdutos.ts`), para uma reimportação futura não
+reintroduzir produtos fora de escopo — e em `data/produtos.seed.json`,
+que foi filtrado de 881 para 89 produtos (só os das 5 categorias) para
+que uma instalação nova já comece limpa.
 
 ### Rodar localmente
 
@@ -50,10 +105,10 @@ npm run dev
 ```
 
 Abre em `http://localhost:5173`. Primeira execução já carrega o catálogo
-completo (881 produtos) direto de `data/produtos.seed.json`. A sugestão
-por IA não funciona em `npm run dev` (o endpoint `/api/*` só existe no
-deploy do Vercel) — o botão mostra erro de conexão nesse modo, o que é
-esperado.
+(89 produtos, só das 5 categorias de produção) direto de
+`data/produtos.seed.json`. A sugestão por IA não funciona em `npm run dev`
+(o endpoint `/api/*` só existe no deploy do Vercel) — o botão mostra erro
+de conexão nesse modo, o que é esperado.
 
 ### Build de produção (o que o Vercel roda a cada push)
 
@@ -102,32 +157,33 @@ producao-perdas/
       producao.ts                 # Sessão de Produção (por categoria), Plano Diário — quantidade em unidades
       perda.ts                     # Registro de Perda — peso em kg + peso unitário informado + unidades estimadas
     lib/
-      categorias.ts                 # As 5 categorias fixas de produção + "Encomendas e Especiais"
+      categorias.ts                 # As 5 categorias fixas de produção + "Encomendas e Especiais" + validade sugerida por categoria
       conversao.ts                   # Deriva unidades perdidas a partir do peso pesado na balança
       numeros.ts                      # Sanitização de entrada numérica (textbox à prova de erro)
       metricas.ts                      # Taxa de perda, volume por dia, picos de perda (tudo em unidades)
-      data.ts                           # Datas: hoje, amanhã, dia da semana, formatação BR
+      data.ts                           # Datas: hoje, amanhã, dia da semana, formatação BR, diferença em dias
+      janelaValidade.ts                  # Quais fornadas confirmadas ainda estão dentro do prazo de validade do produto
       gerarImagemLista.ts                # Gera a fita PNG única de impressão (canvas, 576px, com linhas de corte)
       sugestaoProducao.ts                 # Cliente da sugestão por IA — monta histórico, chama /api
-      importarProdutos.ts                  # Mapeamento planilha -> Produto (uso no navegador)
+      importarProdutos.ts                  # Mapeamento planilha -> Produto (uso no navegador), já filtra fora de escopo
     components/
       TelaCronograma.tsx       # Montagem do cronograma: acordeão -> resumo -> exportar (+ sugestão IA)
-      TelaCadastroProdutos.tsx  # Catálogo, categorização, peso médio (autoatualizado pelas perdas)
-      TelaPerdas.tsx             # Lançamento de perda de fim de expediente
-      TelaRegistroPerda.tsx       # Peso perdido (kg) + peso unitário informado, com preview ao vivo
+      TelaCadastroProdutos.tsx  # Catálogo, categorização, validade, peso médio (autoatualizado pelas perdas), limpeza de escopo
+      TelaPerdas.tsx             # Lançamento de perda de fim de expediente (considera a janela de validade)
+      TelaRegistroPerda.tsx       # Peso perdido (kg) + peso unitário informado + fornada de origem, com preview ao vivo
       ExportarFita.tsx             # Preview + Compartilhar/Baixar da fita única de impressão
   scripts/
-    importar_produtos.py         # Import em lote (rodado contra Produtos_881.xlsx)
-    verificar_logica.ts           # Verificações de conversão/agregação
+    importar_produtos.py         # Import em lote (rodado contra Produtos_881.xlsx), já filtra fora de escopo
+    verificar_logica.ts           # Verificações de conversão/agregação/janela de validade
   data/
-    produtos.seed.json            # 881 produtos já convertidos para o schema do app
+    produtos.seed.json            # 89 produtos das 5 categorias de produção, já convertidos para o schema do app
   tsconfig.json
 ```
 
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (12 asserções)
+npm run verificar   # roda scripts/verificar_logica.ts (24 asserções)
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```

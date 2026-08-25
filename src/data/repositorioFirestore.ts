@@ -64,6 +64,11 @@ export class RepositorioFirestore implements Repositorio {
     return naoImplementado("atualizarProduto");
   }
 
+  async excluirProdutos(_codigosPdv: number[]): Promise<void> {
+    // await Promise.all(codigosPdv.map((c) => deleteDoc(doc(db, "produtos", String(c)))));
+    return naoImplementado("excluirProdutos");
+  }
+
   async listarPlanos(): Promise<PlanoDeProducaoDiario[]> {
     return naoImplementado("listarPlanos");
   }

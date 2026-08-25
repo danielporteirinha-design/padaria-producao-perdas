@@ -15,6 +15,8 @@ export interface Repositorio {
   listarProdutos(): Promise<Produto[]>;
   salvarNovoProduto(input: NovoProdutoInput): Promise<Produto>;
   atualizarProduto(produto: Produto): Promise<Produto>;
+  /** Remove definitivamente os produtos informados do catálogo (ex.: itens fora das categorias de produção). */
+  excluirProdutos(codigosPdv: number[]): Promise<void>;
 
   listarPlanos(): Promise<PlanoDeProducaoDiario[]>;
   buscarPlanoPorData(dataIso: string): Promise<PlanoDeProducaoDiario | undefined>;

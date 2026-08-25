@@ -38,3 +38,19 @@ export function rotuloDaCategoria(chave: string): string {
   if (chave === CHAVE_ESPECIAL) return ROTULO_ESPECIAL;
   return CATEGORIAS_PRODUCAO.find((c) => c.chave === chave)?.rotulo ?? chave;
 }
+
+/**
+ * Prazo de validade sugerido (dias), por categoria — só um ponto de
+ * partida ao cadastrar um produto novo, sempre editável por produto (ver
+ * Produto.prazoValidadeDias). "Pães e Roscas" é uma categoria só para
+ * produção, mas pão e rosca têm validade bem diferente — o valor abaixo
+ * é o de pão (o item mais comum da categoria); ajuste manualmente para
+ * 2 ao cadastrar uma rosca especificamente.
+ */
+export const VALIDADE_SUGERIDA_DIAS: Record<string, number> = {
+  "PÃES E ROSCAS": 1,
+  BISCOITOS: 15,
+  BOLOS: 3,
+  SALGADOS: 2,
+  CONFEITARIA: 5,
+};

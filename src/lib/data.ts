@@ -59,6 +59,22 @@ export function formatarDataBr(dataIso: string): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+/**
+ * Diferença em dias inteiros entre duas datas ISO (YYYY-MM-DD) — dataFim
+ * menos dataInicio. Negativo se dataInicio for depois de dataFim. Usado
+ * para calcular há quantos dias um produto foi produzido (ver
+ * src/lib/janelaValidade.ts) — sempre em horário local, para não "pular"
+ * um dia perto da meia-noite.
+ */
+export function diasEntreDatas(dataInicio: string, dataFim: string): number {
+  const [a1, m1, d1] = dataInicio.split("-").map(Number);
+  const [a2, m2, d2] = dataFim.split("-").map(Number);
+  const inicio = new Date(a1, (m1 ?? 1) - 1, d1 ?? 1);
+  const fim = new Date(a2, (m2 ?? 1) - 1, d2 ?? 1);
+  const MS_POR_DIA = 24 * 60 * 60 * 1000;
+  return Math.round((fim.getTime() - inicio.getTime()) / MS_POR_DIA);
+}
+
 export const ORDEM_DIAS: DiaDaSemana[] = [
   "segunda",
   "terca",

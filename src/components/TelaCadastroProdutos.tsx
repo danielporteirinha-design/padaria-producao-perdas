@@ -1,19 +1,23 @@
 /**
  * src/components/TelaCadastroProdutos.tsx
  * ---------------------------------------------------------------
- * Cadastro rápido de produto novo + lista/busca do catálogo +
- * revisão assistida de categoria para os itens "SEM_CATEGORIA".
+ * Cadastro rápido de produto novo + lista/busca do catálogo + revisão
+ * assistida de categoria para os itens "SEM_CATEGORIA" + limpeza de
+ * produtos fora das 5 categorias de produção (decisão do dono do
+ * negócio — ago/2026: o catálogo deste app deve conter só o que é
+ * produzido nessas 5 categorias).
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { NovoProdutoInput, Produto, UnidadeProducao } from "../types/produto";
 import { construirVocabularioPorCategoria, sugerirCategorias } from "../lib/sugestaoCategoria";
-import { CATEGORIAS_PRODUCAO } from "../lib/categorias";
+import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 
 interface TelaCadastroProdutosProps {
   produtos: Produto[];
   onCriarProduto: (input: NovoProdutoInput) => Promise<void>;
   onAtualizarProduto: (produto: Produto) => Promise<void>;
+  onExcluirProdutos: (codigosPdv: number[]) => Promise<void>;
 }
 
 const VALOR_INICIAL: NovoProdutoInput = {
@@ -24,17 +28,30 @@ const VALOR_INICIAL: NovoProdutoInput = {
   precoVenda: 0,
   ativoNaProducao: true,
   pesoMedioUnitarioGramas: undefined,
+  prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[CATEGORIAS_PRODUCAO[0].chave] ?? null,
 };
 
 export function TelaCadastroProdutos({
   produtos,
   onCriarProduto,
   onAtualizarProduto,
+  onExcluirProdutos,
 }: TelaCadastroProdutosProps) {
   const [form, setForm] = useState<NovoProdutoInput>(VALOR_INICIAL);
+  const [validadeTocada, setValidadeTocada] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
-  const [abaAtiva, setAbaAtiva] = useState<"novo" | "lista" | "revisao">("novo");
+  const [abaAtiva, setAbaAtiva] = useState<"novo" | "lista" | "revisao" | "limpeza">("novo");
+
+  // Ao trocar a categoria, sugere o prazo de validade típico dela — só se o
+  // operador ainda não tiver ajustado esse campo manualmente (ex.: uma
+  // rosca dentro de "Pães e Roscas" precisa de um valor diferente do pão).
+  useEffect(() => {
+    if (!validadeTocada) {
+      setForm((atual) => ({ ...atual, prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[atual.categoria] ?? null }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.categoria]);
 
   async function handleSalvar(e: React.FormEvent) {
     e.preventDefault();
@@ -43,6 +60,7 @@ export function TelaCadastroProdutos({
     await onCriarProduto(form);
     setSalvando(false);
     setForm(VALOR_INICIAL);
+    setValidadeTocada(false);
   }
 
   const produtosFiltrados = useMemo(() => {
@@ -55,6 +73,15 @@ export function TelaCadastroProdutos({
 
   const semCategoria = useMemo(
     () => produtos.filter((p) => p.categoria === "SEM_CATEGORIA"),
+    [produtos]
+  );
+
+  // Fora de escopo = qualquer produto que não esteja em nenhuma das 5
+  // categorias de produção — inclui "SEM_CATEGORIA" e categorias de
+  // revenda (mercearia, refrigerante...) importadas junto na planilha
+  // original do PDV.
+  const foraDeEscopo = useMemo(
+    () => produtos.filter((p) => !CATEGORIAS_PRODUCAO.some((c) => c.chave === p.categoria)),
     [produtos]
   );
 
@@ -87,6 +114,13 @@ export function TelaCadastroProdutos({
           onClick={() => setAbaAtiva("revisao")}
         >
           Sem categoria ({semCategoria.length})
+        </button>
+        <button
+          type="button"
+          className={abaAtiva === "limpeza" ? "aba ativa" : "aba"}
+          onClick={() => setAbaAtiva("limpeza")}
+        >
+          Fora de escopo ({foraDeEscopo.length})
         </button>
       </div>
 
@@ -149,6 +183,25 @@ export function TelaCadastroProdutos({
             Ativo no Cronograma de Produção
           </label>
 
+          <label>
+            Prazo de validade (dias)
+            <input
+              type="number"
+              min={1}
+              value={form.prazoValidadeDias ?? ""}
+              onChange={(e) => {
+                setValidadeTocada(true);
+                setForm({ ...form, prazoValidadeDias: Number(e.target.value) || undefined });
+              }}
+            />
+            <span className="nota-rodape">
+              Sugerido pela categoria, mas ajuste por produto — ex.: "Pães e Roscas" sugere validade de
+              pão (1 dia); uma rosca da mesma categoria costuma durar mais, digite 2. Usado na tela de
+              Perdas para saber de qual dia de produção uma perda pode ter vindo, já que a etiqueta não
+              traz data de fabricação isolada.
+            </span>
+          </label>
+
           {form.unidadeProducao === "un" && (
             <label>
               Peso médio por unidade (gramas) — opcional
@@ -191,6 +244,7 @@ export function TelaCadastroProdutos({
                   <th>Categoria</th>
                   <th>Unidade</th>
                   <th>Peso médio</th>
+                  <th>Validade</th>
                 </tr>
               </thead>
               <tbody>
@@ -201,6 +255,7 @@ export function TelaCadastroProdutos({
                     <td>{p.categoria === "SEM_CATEGORIA" ? <span className="tag-pendente">sem categoria</span> : p.categoria}</td>
                     <td>{p.unidadeProducao}</td>
                     <td>{p.pesoMedioUnitarioGramas ? `${p.pesoMedioUnitarioGramas}g` : "—"}</td>
+                    <td>{p.prazoValidadeDias ? `${p.prazoValidadeDias} dia(s)` : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -218,6 +273,10 @@ export function TelaCadastroProdutos({
           vocabulario={vocabulario}
           onAtualizarProduto={onAtualizarProduto}
         />
+      )}
+
+      {abaAtiva === "limpeza" && (
+        <LimpezaCatalogo produtos={foraDeEscopo} onExcluirProdutos={onExcluirProdutos} />
       )}
     </div>
   );
@@ -279,6 +338,128 @@ function RevisaoCategoria({
       </div>
       {produtos.length > 50 && (
         <p className="nota-rodape">Mostrando 50 de {produtos.length} pendentes — vá salvando e a lista avança.</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Exclusão em massa dos produtos fora das 5 categorias de produção
+ * (decisão do dono do negócio — ago/2026). Agrupado por categoria
+ * original do PDV, com cada grupo selecionável individualmente — um
+ * item ambíguo (ex.: "BOLOS DE ANIVERSÁRIO", que é claramente um bolo
+ * mas veio com categoria própria da planilha) pode ficar de fora da
+ * exclusão só desmarcando o grupo dele, sem precisar revisar item a
+ * item. Exige um segundo clique de confirmação — ação irreversível.
+ */
+function LimpezaCatalogo({
+  produtos,
+  onExcluirProdutos,
+}: {
+  produtos: Produto[];
+  onExcluirProdutos: (codigosPdv: number[]) => Promise<void>;
+}) {
+  const grupos = useMemo(() => {
+    const mapa = new Map<string, Produto[]>();
+    for (const p of produtos) {
+      const lista = mapa.get(p.categoria) ?? [];
+      lista.push(p);
+      mapa.set(p.categoria, lista);
+    }
+    return Array.from(mapa.entries()).sort((a, b) => b[1].length - a[1].length);
+  }, [produtos]);
+
+  const [selecionados, setSelecionados] = useState<Set<string>>(() => new Set(grupos.map(([categoria]) => categoria)));
+  const [confirmando, setConfirmando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+
+  if (produtos.length === 0) {
+    return <p className="mensagem-sucesso">O catálogo já contém só produtos das 5 categorias de produção.</p>;
+  }
+
+  function alternar(categoria: string) {
+    setSelecionados((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(categoria)) novo.delete(categoria);
+      else novo.add(categoria);
+      return novo;
+    });
+  }
+
+  const codigosSelecionados = grupos
+    .filter(([categoria]) => selecionados.has(categoria))
+    .flatMap(([, lista]) => lista.map((p) => p.codigoPdv));
+
+  return (
+    <div>
+      <p className="callout-inline">
+        Estes {produtos.length} produtos não pertencem a nenhuma das 5 categorias de produção — não
+        aparecem no Cronograma nem em Perdas. Desmarque qualquer categoria que precise de uma segunda
+        olhada antes de excluir (ex.: um item claramente da padaria que só ficou com o nome de categoria
+        errado na planilha original do PDV).
+      </p>
+      <div className="tabela-scroll">
+        <table className="tabela-simples">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Categoria original (PDV)</th>
+              <th>Itens</th>
+            </tr>
+          </thead>
+          <tbody>
+            {grupos.map(([categoria, lista]) => (
+              <tr key={categoria}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={selecionados.has(categoria)}
+                    onChange={() => alternar(categoria)}
+                    aria-label={`Selecionar categoria ${categoria}`}
+                  />
+                </td>
+                <td>{categoria === "SEM_CATEGORIA" ? <span className="tag-pendente">sem categoria</span> : categoria}</td>
+                <td>{lista.length}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="total-linha">
+        <strong>{codigosSelecionados.length}</strong> de {produtos.length} produtos serão excluídos permanentemente.
+      </p>
+
+      {!confirmando ? (
+        <div className="acoes">
+          <button
+            type="button"
+            className="secundario"
+            disabled={codigosSelecionados.length === 0}
+            onClick={() => setConfirmando(true)}
+          >
+            Excluir selecionados
+          </button>
+        </div>
+      ) : (
+        <div className="acoes">
+          <button type="button" className="secundario" onClick={() => setConfirmando(false)}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="primario"
+            disabled={excluindo}
+            onClick={async () => {
+              setExcluindo(true);
+              await onExcluirProdutos(codigosSelecionados);
+              setExcluindo(false);
+              setConfirmando(false);
+            }}
+          >
+            {excluindo ? "Excluindo..." : `Confirmar exclusão de ${codigosSelecionados.length} produtos`}
+          </button>
+        </div>
       )}
     </div>
   );
