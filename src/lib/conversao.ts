@@ -1,8 +1,18 @@
 /**
  * src/lib/conversao.ts
  * ---------------------------------------------------------------
- * Núcleo da Regra de Negócio Crítica: normalização de perdas quando
- * o produto é produzido/vendido por unidade, mas descartado por peso.
+ * Núcleo da Regra de Negócio Crítica: normalização de perdas.
+ *
+ * Decisão operacional (ago/2026): QUILOS é a unidade canônica de toda
+ * métrica de produção e perda no app — mesmo para produtos vendidos por
+ * unidade, porque a produção em si já é planejada em quilos (ver
+ * src/types/producao.ts). Isso mantém "produzido" e "perdido" sempre na
+ * mesma unidade, então taxa de perda = perdido/produzido nunca mistura
+ * quilos com unidades.
+ *
+ * A tela de Perdas ainda aceita lançar contando unidades quebradas/sobras
+ * (mais rápido que pesar item por item às vezes) — quando isso acontece,
+ * convertemos para quilos via peso médio cadastrado no produto.
  *
  * Este módulo é INTENCIONALMENTE puro (sem I/O, sem estado global) para
  * ser testável isoladamente e reutilizável tanto no front-end (preview
@@ -10,7 +20,7 @@
  * reprocessamento em lote.
  */
 
-import type { Produto, UnidadeProducao } from "../types/produto";
+import type { Produto } from "../types/produto";
 import type { UnidadeEntradaPerda } from "../types/perda";
 
 const GRAMAS_POR_QUILO = 1000;
@@ -25,22 +35,23 @@ export class ErroConversaoPerda extends Error {
 
 export interface ResultadoNormalizacao {
   quantidadeNormalizada: number;
-  unidadeNormalizada: UnidadeProducao;
+  unidadeNormalizada: "kg";
   fatorConversaoAplicado: boolean;
 }
 
 /**
- * Normaliza uma entrada de perda (valor + unidade informados pelo operador)
- * para a unidade de produção do produto.
+ * Normaliza uma entrada de perda (valor + unidade informados pelo
+ * operador) para QUILOS.
  *
  * Regras:
- *  - Se a unidade de entrada já é igual à unidade de produção -> sem conversão.
- *  - Se o produto é produzido em "un" e a perda foi pesada em "kg" -> exige
- *    permiteRegistroPerdaPorPeso = true e pesoMedioUnitarioGramas cadastrado.
- *  - Nunca arredonda de forma silenciosa: retorna fração de unidade
- *    (ex.: 2.4 pães) para que a camada de agregação decida a política de
- *    arredondamento (ver calcularTaxaPerda) — arredondar aqui corromperia
- *    a métrica percentual em lotes pequenos.
+ *  - Entrada em "kg" -> sempre aceita direto, nenhum produto precisa de
+ *    cadastro prévio para isso (pesar na balança sempre funciona).
+ *  - Entrada em "un" -> exige pesoMedioUnitarioGramas cadastrado no
+ *    produto; sem isso não há como saber quantos quilos aquelas unidades
+ *    representam, e o app se recusa a inventar um número.
+ *  - Nunca arredonda de forma agressiva: mantém 3 casas decimais (grama
+ *    de precisão) para não corromper a métrica percentual em lotes
+ *    pequenos.
  */
 export function normalizarQuantidadePerda(
   produto: Produto,
@@ -54,79 +65,20 @@ export function normalizarQuantidadePerda(
     );
   }
 
-  const unidadeProducao = produto.unidadeProducao;
-
-  // Caso 1: unidade de entrada já bate com a unidade de produção -> passa direto.
-  if (
-    (unidadeEntrada === "kg" && unidadeProducao === "kg") ||
-    (unidadeEntrada === "un" && unidadeProducao === "un")
-  ) {
-    return {
-      quantidadeNormalizada: valor,
-      unidadeNormalizada: unidadeProducao,
-      fatorConversaoAplicado: false,
-    };
+  if (unidadeEntrada === "kg") {
+    return { quantidadeNormalizada: arredondar(valor, 3), unidadeNormalizada: "kg", fatorConversaoAplicado: false };
   }
 
-  // Caso 2: produto vendido em litros não participa da regra de conversão
-  // peso<->unidade (fora do escopo desta regra de negócio).
-  if (unidadeProducao === "l") {
+  // unidadeEntrada === "un" -> converter para quilos via peso médio.
+  if (!produto.pesoMedioUnitarioGramas || produto.pesoMedioUnitarioGramas <= 0) {
     throw new ErroConversaoPerda(
-      `Produto "${produto.nome}" é medido em litros — conversão kg/un não se aplica. ` +
-        `Lance a perda diretamente em litros.`,
+      `Produto "${produto.nome}" não tem "peso médio unitário" cadastrado — não é possível ` +
+        `converter unidades para quilos. Cadastre o peso médio (g) em Produtos, ou lance a perda direto em kg.`,
       produto.codigoPdv
     );
   }
-
-  // Caso 3: produto é "un", operador pesou em "kg" -> exige fator cadastrado.
-  if (unidadeProducao === "un" && unidadeEntrada === "kg") {
-    if (!produto.permiteRegistroPerdaPorPeso) {
-      throw new ErroConversaoPerda(
-        `Produto "${produto.nome}" não está habilitado para registro de perda por peso. ` +
-          `Habilite em Cadastro de Produtos ou lance a perda em unidades.`,
-        produto.codigoPdv
-      );
-    }
-    if (!produto.pesoMedioUnitarioGramas || produto.pesoMedioUnitarioGramas <= 0) {
-      throw new ErroConversaoPerda(
-        `Produto "${produto.nome}" está habilitado para perda por peso, mas não tem ` +
-          `"peso médio unitário" cadastrado. Cadastre o peso médio (g) antes de lançar em kg.`,
-        produto.codigoPdv
-      );
-    }
-    const gramas = valor * GRAMAS_POR_QUILO;
-    const unidades = gramas / produto.pesoMedioUnitarioGramas;
-    return {
-      quantidadeNormalizada: arredondar(unidades, 2),
-      unidadeNormalizada: "un",
-      fatorConversaoAplicado: true,
-    };
-  }
-
-  // Caso 4: produto é "kg", operador contou em "un" (menos comum, mas simétrico).
-  if (unidadeProducao === "kg" && unidadeEntrada === "un") {
-    if (!produto.pesoMedioUnitarioGramas || produto.pesoMedioUnitarioGramas <= 0) {
-      throw new ErroConversaoPerda(
-        `Produto "${produto.nome}" não tem "peso médio unitário" cadastrado — ` +
-          `não é possível converter unidades para kg.`,
-        produto.codigoPdv
-      );
-    }
-    const gramas = valor * produto.pesoMedioUnitarioGramas;
-    return {
-      quantidadeNormalizada: arredondar(gramas / GRAMAS_POR_QUILO, 3),
-      unidadeNormalizada: "kg",
-      fatorConversaoAplicado: true,
-    };
-  }
-
-  // Guarda de exaustividade — se um novo UnidadeProducao for adicionado ao
-  // tipo sem atualizar esta função, falha de forma clara em vez de silenciosa.
-  throw new ErroConversaoPerda(
-    `Combinação de unidades não suportada: produto em "${unidadeProducao}", ` +
-      `entrada em "${unidadeEntrada}".`,
-    produto.codigoPdv
-  );
+  const quilos = (valor * produto.pesoMedioUnitarioGramas) / GRAMAS_POR_QUILO;
+  return { quantidadeNormalizada: arredondar(quilos, 3), unidadeNormalizada: "kg", fatorConversaoAplicado: true };
 }
 
 function arredondar(valor: number, casasDecimais: number): number {

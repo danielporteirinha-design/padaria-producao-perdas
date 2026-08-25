@@ -48,9 +48,10 @@ export function TelaRegistroPerda({
   registradoPor,
   onSalvar,
 }: TelaRegistroPerdaProps) {
-  const unidadesDisponiveis: UnidadeEntradaPerda[] = produto.permiteRegistroPerdaPorPeso
-    ? ["un", "kg"]
-    : [produto.unidadeProducao === "kg" ? "kg" : "un"];
+  // "kg" sempre disponível (pesar na balança nunca precisa de cadastro prévio);
+  // "un" só aparece quando o peso médio está cadastrado, senão não há como converter.
+  const unidadesDisponiveis: UnidadeEntradaPerda[] =
+    produto.pesoMedioUnitarioGramas && produto.pesoMedioUnitarioGramas > 0 ? ["kg", "un"] : ["kg"];
 
   const [valor, setValor] = useState<string>("");
   const [unidadeEntrada, setUnidadeEntrada] = useState<UnidadeEntradaPerda>(

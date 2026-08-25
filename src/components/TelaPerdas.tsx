@@ -51,8 +51,9 @@ export function TelaPerdas({ produtos, perdas, planoDeHoje, operador, onRegistra
       <div className="tela">
         <h2>Registro de Perdas</h2>
         <p className="callout-inline">
-          Ainda não há um plano de produção confirmado para hoje ({rotuloDoDia(diaDaSemana)}). Registre o
-          Cronograma do dia primeiro — a tela de Perdas trabalha em cima dos produtos planejados.
+          Ainda não há um plano de produção confirmado para hoje ({rotuloDoDia(diaDaSemana)}). O Cronograma de
+          hoje deveria ter sido montado ontem, no fim do expediente — a tela de Perdas trabalha em cima dos
+          produtos que foram planejados.
         </p>
       </div>
     );
@@ -92,31 +93,33 @@ export function TelaPerdas({ produtos, perdas, planoDeHoje, operador, onRegistra
       )}
 
       <h3>Perdas lançadas hoje</h3>
-      <table className="tabela-simples">
-        <thead>
-          <tr>
-            <th>Produto</th>
-            <th>Lançado</th>
-            <th>Normalizado</th>
-            <th>Motivo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {perdasDeHoje.length === 0 && (
+      <div className="tabela-scroll">
+        <table className="tabela-simples">
+          <thead>
             <tr>
-              <td colSpan={4} className="vazio">Nenhuma perda registrada ainda hoje.</td>
+              <th>Produto</th>
+              <th>Lançado</th>
+              <th>Em quilos</th>
+              <th>Motivo</th>
             </tr>
-          )}
-          {perdasDeHoje.map((p) => (
-            <tr key={p.id}>
-              <td>{produtos.find((pr) => pr.codigoPdv === p.codigoPdv)?.nome ?? p.codigoPdv}</td>
-              <td>{p.entradaBruta.valor} {p.entradaBruta.unidade}</td>
-              <td>{p.quantidadeNormalizada} {p.unidadeNormalizada}{p.fatorConversaoAplicado ? " (convertido)" : ""}</td>
-              <td>{p.motivo}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {perdasDeHoje.length === 0 && (
+              <tr>
+                <td colSpan={4} className="vazio">Nenhuma perda registrada ainda hoje.</td>
+              </tr>
+            )}
+            {perdasDeHoje.map((p) => (
+              <tr key={p.id}>
+                <td>{produtos.find((pr) => pr.codigoPdv === p.codigoPdv)?.nome ?? p.codigoPdv}</td>
+                <td>{p.entradaBruta.valor} {p.entradaBruta.unidade}</td>
+                <td>{p.quantidadeNormalizada} kg{p.fatorConversaoAplicado ? " (convertido)" : ""}</td>
+                <td>{p.motivo}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

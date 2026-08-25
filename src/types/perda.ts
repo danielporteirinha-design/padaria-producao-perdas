@@ -4,14 +4,12 @@
  * Princípio de design (crítico): NUNCA descartar o valor bruto informado
  * pelo operador. Guardamos entrada bruta + valor normalizado lado a lado,
  * para que:
- *   1) a métrica de perda (%) seja sempre calculada na MESMA unidade em
- *      que a produção foi planejada (unidadeProducao do produto);
+ *   1) a métrica de perda (%) seja sempre calculada em QUILOS — a mesma
+ *      unidade canônica usada na produção (ver src/lib/conversao.ts);
  *   2) se o peso médio unitário do produto for recalibrado no futuro, seja
  *      possível reprocessar o histórico sem perder a informação original
  *      lançada pelo operador (auditoria/rastreabilidade).
  */
-
-import type { UnidadeProducao } from "./produto";
 
 export type UnidadeEntradaPerda = "un" | "kg";
 
@@ -37,12 +35,12 @@ export interface RegistroPerda {
   };
 
   /**
-   * Resultado da normalização (ver src/lib/conversao.ts), sempre na
-   * unidadeProducao do produto. É o valor usado em todos os cálculos
-   * de taxa de perda e nos relatórios agregados.
+   * Resultado da normalização (ver src/lib/conversao.ts), sempre em
+   * QUILOS. É o valor usado em todos os cálculos de taxa de perda e
+   * nos relatórios agregados.
    */
   quantidadeNormalizada: number;
-  unidadeNormalizada: UnidadeProducao;
+  unidadeNormalizada: "kg";
   fatorConversaoAplicado: boolean;
 
   motivo: MotivoPerda;

@@ -51,7 +51,6 @@ export class RepositorioLocalStorage implements Repositorio {
       precoVenda: input.precoVenda,
       statusVenda: "Ativo",
       ativoNaProducao: input.ativoNaProducao,
-      permiteRegistroPerdaPorPeso: input.permiteRegistroPerdaPorPeso,
       pesoMedioUnitarioGramas: input.pesoMedioUnitarioGramas,
     };
     escrever(CHAVE_PRODUTOS, [...produtos, novo]);

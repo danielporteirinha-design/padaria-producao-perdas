@@ -1,5 +1,11 @@
 /**
  * Modelo de dados — Cronograma de Produção
+ *
+ * Decisão operacional (ago/2026): o cronograma de um dia é sempre
+ * montado no FINAL DO EXPEDIENTE DO DIA ANTERIOR, para o dia seguinte —
+ * ver dataDeAmanhaIso() em src/lib/data.ts. `PlanoDeProducaoDiario.data`
+ * continua sendo "o dia em que a produção acontece" (não o dia em que
+ * foi montado); é esse campo que a tela de Perdas usa no dia seguinte.
  */
 
 export type DiaDaSemana =
@@ -11,33 +17,30 @@ export type DiaDaSemana =
   | "sabado"
   | "domingo";
 
-/**
- * Fixa   -> rotina diária recorrente (o "padrão" daquele dia da semana).
- * Especial -> encomendas, testes de receita, eventos pontuais (Páscoa,
- *             Natal, Dia das Mães, contratos institucionais avulsos).
- * Ver [[sistema-de-gestao]]: contratos recorrentes de entrega (ex.: Dona
- * Maria, Gamma Moda Livre) alimentam Sessões Fixas por dia da semana.
- */
-export type TipoSessao = "fixa" | "especial";
-
 export type StatusPlano = "rascunho" | "confirmado";
 
-/** Um item dentro do plano de produção de uma sessão. */
+/**
+ * Um item dentro do plano de produção de uma sessão.
+ * Quantidade sempre em QUILOS — decisão operacional deliberada (ago/2026):
+ * mesmo para os itens vendidos por unidade, a equipe planeja a produção
+ * pesando a massa/porção, não contando unidades finais. Ver
+ * src/lib/conversao.ts para a mesma convenção aplicada ao lado de Perdas.
+ */
 export interface ItemPlanoProducao {
   codigoPdv: number;
-  quantidadePlanejada: number; // sempre em unidadeProducao do produto — apenas número, sem foto
+  quantidadeQuilos: number;
 }
 
 /**
- * Uma Sessão de Produção é o agrupamento operacional do dia
- * (ex.: "Fornada da manhã" fixa, ou "Encomenda aniversário Fulano" especial).
+ * Uma Sessão de Produção agrupa itens por categoria de produção (ver
+ * src/lib/categorias.ts) — as 5 fixas mais "Encomendas e Especiais".
+ * Cada sessão confirmada é impressa/exportada separadamente (um papel
+ * por categoria, fixado separadamente no quadro de avisos).
  */
 export interface SessaoProducao {
   id: string;
-  tipo: TipoSessao;
-  nome: string; // ex.: "Fornada Padrão - Quinta" | "Encomenda - Bolo Aniversário Maria"
+  categoria: string; // chave de CategoriaProducaoInfo, ou CHAVE_ESPECIAL
   itens: ItemPlanoProducao[];
-  observacoes?: string;
 }
 
 /**

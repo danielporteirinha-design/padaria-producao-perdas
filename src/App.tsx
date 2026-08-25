@@ -129,7 +129,12 @@ export default function App() {
 
       <main className="conteudo-app">
         {aba === "cronograma" && (
-          <TelaCronograma produtos={produtos} operador={operador} onSalvarPlano={handleSalvarPlano} />
+          <TelaCronograma
+            produtos={produtos}
+            planos={planos}
+            operador={operador}
+            onSalvarPlano={handleSalvarPlano}
+          />
         )}
         {aba === "cadastro" && (
           <TelaCadastroProdutos

@@ -233,7 +233,125 @@ button.link {
 
 .carregando { padding: 40px; text-align: center; color: var(--cor-texto-suave); }
 
+/* Qualquer tabela larga rola dentro do próprio container — nunca a página inteira. */
+.tabela-scroll { overflow-x: auto; border-radius: var(--raio); }
+.tabela-scroll .tabela-simples { min-width: 420px; }
+
+.destaque-data {
+  font-weight: 700;
+  color: var(--cor-texto);
+  background: var(--cor-alerta-fundo);
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: var(--raio);
+}
+
+/* ---------------- Acordeão de sessões (Cronograma) ---------------- */
+.acordeao-sessao {
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  overflow: hidden;
+  background: var(--cor-superficie);
+}
+.cabecalho-sessao {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  background: none;
+  border: none;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  min-height: 52px;
+}
+.cabecalho-sessao .contagem-itens {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cor-acento);
+  white-space: nowrap;
+}
+.corpo-sessao {
+  padding: 0 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--cor-borda);
+}
+
+.linha-produto-cronograma {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.item-produto {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 10px;
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  min-height: 48px;
+}
+.item-produto.confirmado {
+  background: var(--cor-sucesso-fundo);
+  border-color: var(--cor-sucesso);
+}
+.item-produto .valor-confirmado {
+  font-size: 13px;
+  color: var(--cor-sucesso);
+  white-space: nowrap;
+}
+
+.editor-quantidade {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  background: var(--cor-superficie);
+  border: 1px dashed var(--cor-acento);
+  border-radius: var(--raio);
+}
+.editor-quantidade input { flex: 1; font-size: 18px; min-width: 0; }
+
+/* ---------------- Exportar / Imprimir ---------------- */
+.cartao-exportar {
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 16px;
+  background: var(--cor-superficie);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cartao-exportar h3 { margin: 0; display: flex; justify-content: space-between; align-items: baseline; }
+.preview-lista {
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  overflow-x: auto;
+  background: #f0f0f0;
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+}
+.canvas-preview { max-width: 100%; height: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+
 @media (max-width: 480px) {
   .linha-campos { flex-direction: column; align-items: stretch; }
   .dia-semana-badge { align-self: flex-start; }
+  .cabecalho-app { flex-wrap: wrap; gap: 8px; }
+  .abas-principais button { font-size: 13px; padding: 10px 8px; }
+  .editor-quantidade { flex-wrap: wrap; }
+  .editor-quantidade button { flex: 1; }
 }

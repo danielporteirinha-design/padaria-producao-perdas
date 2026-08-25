@@ -8,6 +8,7 @@
 import { useMemo, useState } from "react";
 import type { NovoProdutoInput, Produto, UnidadeProducao } from "../types/produto";
 import { construirVocabularioPorCategoria, sugerirCategorias } from "../lib/sugestaoCategoria";
+import { CATEGORIAS_PRODUCAO } from "../lib/categorias";
 
 interface TelaCadastroProdutosProps {
   produtos: Produto[];
@@ -17,12 +18,11 @@ interface TelaCadastroProdutosProps {
 
 const VALOR_INICIAL: NovoProdutoInput = {
   nome: "",
-  categoria: "",
+  categoria: CATEGORIAS_PRODUCAO[0].chave,
   unidadeProducao: "un",
   precoCusto: 0,
   precoVenda: 0,
   ativoNaProducao: true,
-  permiteRegistroPerdaPorPeso: false,
   pesoMedioUnitarioGramas: undefined,
 };
 
@@ -58,7 +58,17 @@ export function TelaCadastroProdutos({
     [produtos]
   );
 
-  const vocabulario = useMemo(() => construirVocabularioPorCategoria(produtos), [produtos]);
+  // Vocabulário restrito às 5 categorias de produção — sugerir uma categoria de
+  // revenda (ex.: "MERCEARIA") não ajudaria em nada, já que essas não aparecem
+  // em mais nenhuma tela do app.
+  const produtosDasCategoriasDeProducao = useMemo(
+    () => produtos.filter((p) => CATEGORIAS_PRODUCAO.some((c) => c.chave === p.categoria)),
+    [produtos]
+  );
+  const vocabulario = useMemo(
+    () => construirVocabularioPorCategoria(produtosDasCategoriasDeProducao),
+    [produtosDasCategoriasDeProducao]
+  );
 
   return (
     <div className="tela">
@@ -88,11 +98,13 @@ export function TelaCadastroProdutos({
           </label>
           <label>
             Categoria
-            <input
-              value={form.categoria}
-              onChange={(e) => setForm({ ...form, categoria: e.target.value })}
-              placeholder="Deixe em branco para SEM_CATEGORIA"
-            />
+            <select value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>
+              {CATEGORIAS_PRODUCAO.map((c) => (
+                <option key={c.chave} value={c.chave}>
+                  {c.rotulo}
+                </option>
+              ))}
+            </select>
           </label>
           <div className="linha-campos">
             <label>
@@ -138,29 +150,21 @@ export function TelaCadastroProdutos({
           </label>
 
           {form.unidadeProducao === "un" && (
-            <>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={form.permiteRegistroPerdaPorPeso}
-                  onChange={(e) => setForm({ ...form, permiteRegistroPerdaPorPeso: e.target.checked })}
-                />
-                Permitir registrar perda por peso (balança em kg)
-              </label>
-              {form.permiteRegistroPerdaPorPeso && (
-                <label>
-                  Peso médio por unidade (gramas)
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.pesoMedioUnitarioGramas ?? ""}
-                    onChange={(e) =>
-                      setForm({ ...form, pesoMedioUnitarioGramas: Number(e.target.value) || undefined })
-                    }
-                  />
-                </label>
-              )}
-            </>
+            <label>
+              Peso médio por unidade (gramas) — opcional
+              <input
+                type="number"
+                min={0}
+                value={form.pesoMedioUnitarioGramas ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, pesoMedioUnitarioGramas: Number(e.target.value) || undefined })
+                }
+              />
+              <span className="nota-rodape">
+                Cadastrando o peso médio, a tela de Perdas passa a aceitar contar unidades quebradas/sobras
+                (convertido automaticamente para quilos). Sem isso, a perda só pode ser pesada na balança.
+              </span>
+            </label>
           )}
 
           <button type="submit" className="primario" disabled={salvando}>
@@ -177,28 +181,30 @@ export function TelaCadastroProdutos({
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
-          <table className="tabela-simples">
-            <thead>
-              <tr>
-                <th>Código</th>
-                <th>Nome</th>
-                <th>Categoria</th>
-                <th>Unidade</th>
-                <th>Perda por peso</th>
-              </tr>
-            </thead>
-            <tbody>
-              {produtosFiltrados.slice(0, 200).map((p) => (
-                <tr key={p.codigoPdv}>
-                  <td className="mono">{p.codigoPdv}</td>
-                  <td>{p.nome}</td>
-                  <td>{p.categoria === "SEM_CATEGORIA" ? <span className="tag-pendente">sem categoria</span> : p.categoria}</td>
-                  <td>{p.unidadeProducao}</td>
-                  <td>{p.permiteRegistroPerdaPorPeso ? `sim (${p.pesoMedioUnitarioGramas ?? "?"}g)` : "não"}</td>
+          <div className="tabela-scroll">
+            <table className="tabela-simples">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Nome</th>
+                  <th>Categoria</th>
+                  <th>Unidade</th>
+                  <th>Peso médio</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {produtosFiltrados.slice(0, 200).map((p) => (
+                  <tr key={p.codigoPdv}>
+                    <td className="mono">{p.codigoPdv}</td>
+                    <td>{p.nome}</td>
+                    <td>{p.categoria === "SEM_CATEGORIA" ? <span className="tag-pendente">sem categoria</span> : p.categoria}</td>
+                    <td>{p.unidadeProducao}</td>
+                    <td>{p.pesoMedioUnitarioGramas ? `${p.pesoMedioUnitarioGramas}g` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {produtosFiltrados.length > 200 && (
             <p className="nota-rodape">Mostrando 200 de {produtosFiltrados.length} resultados — refine a busca.</p>
           )}
@@ -236,38 +242,40 @@ function RevisaoCategoria({
         exigem sua confirmação, nunca são aplicadas sozinhas (produtos ambíguos, ex.: "queijo",
         aparecem em várias categorias).
       </p>
-      <table className="tabela-simples">
-        <thead>
-          <tr>
-            <th>Produto</th>
-            <th>Sugestões</th>
-          </tr>
-        </thead>
-        <tbody>
-          {produtos.slice(0, 50).map((p) => {
-            const sugestoes = sugerirCategorias(p, vocabulario);
-            return (
-              <tr key={p.codigoPdv}>
-                <td>{p.nome}</td>
-                <td className="sugestoes-linha">
-                  {sugestoes.length === 0 && <span className="nota-rodape">sem sugestão — revisar manualmente</span>}
-                  {sugestoes.map((s) => (
-                    <button
-                      key={s.categoria}
-                      type="button"
-                      className="chip-sugestao"
-                      onClick={() => onAtualizarProduto({ ...p, categoria: s.categoria })}
-                      title={`confiança: ${(s.pontuacao * 100).toFixed(0)}%`}
-                    >
-                      {s.categoria}
-                    </button>
-                  ))}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="tabela-scroll">
+        <table className="tabela-simples">
+          <thead>
+            <tr>
+              <th>Produto</th>
+              <th>Sugestões</th>
+            </tr>
+          </thead>
+          <tbody>
+            {produtos.slice(0, 50).map((p) => {
+              const sugestoes = sugerirCategorias(p, vocabulario);
+              return (
+                <tr key={p.codigoPdv}>
+                  <td>{p.nome}</td>
+                  <td className="sugestoes-linha">
+                    {sugestoes.length === 0 && <span className="nota-rodape">sem sugestão — revisar manualmente</span>}
+                    {sugestoes.map((s) => (
+                      <button
+                        key={s.categoria}
+                        type="button"
+                        className="chip-sugestao"
+                        onClick={() => onAtualizarProduto({ ...p, categoria: s.categoria })}
+                        title={`confiança: ${(s.pontuacao * 100).toFixed(0)}%`}
+                      >
+                        {s.categoria}
+                      </button>
+                    ))}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       {produtos.length > 50 && (
         <p className="nota-rodape">Mostrando 50 de {produtos.length} pendentes — vá salvando e a lista avança.</p>
       )}

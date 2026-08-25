@@ -5,17 +5,36 @@ Não substitui o Sistema de Gestão (Excel VBA + Access) em construção — ver
 seção "Relação com o Sistema de Gestão" no documento de arquitetura.
 
 Documento completo de arquitetura (stack, modelo de dados, fluxo de telas,
-roadmap): ver `arquitetura.html` ou o link do Artifact enviado na conversa.
+roadmap): ver `arquitetura.html` ou o link do Artifact enviado na conversa
+(desatualizado em relação às decisões de ago/2026 abaixo — a atualizar).
 
-## Status: app funcional (MVP local)
+## Status: app em produção (MVP local)
+
+**Publicado em:** https://padaria-producao-perdas.vercel.app
+Deploy automático a cada `git push` na branch `main` (GitHub → Vercel).
 
 As 4 telas (Cronograma, Cadastro de Produtos, Perdas, Análises) estão
-implementadas e testadas de ponta a ponta — build de produção limpo
-(`tsc --strict` + `vite build`) e fluxo completo validado com Playwright
-(login → cronograma → resumo → confirmar → lançar perda → análises).
-Persistência hoje é local (`localStorage`, um dispositivo só) — ver
-"Decisões assumidas nesta versão" no documento de arquitetura para o que
-muda ao plugar o Firestore.
+implementadas, tipadas em modo `strict` e com build de produção limpo
+(`tsc --noEmit` + `vite build`). Persistência hoje é `localStorage`
+(um dispositivo só) — ver "Camada de dados" abaixo para o que muda ao
+plugar um backend real.
+
+## Decisões operacionais (ago/2026)
+
+Estas regras vieram de revisão direta com a padaria e substituem o desenho
+inicial do documento de arquitetura:
+
+| Decisão | Regra |
+|---|---|
+| Categorias de produção | Fixas: Pães e Roscas, Biscoitos, Bolos, Salgados, Confeitaria, + "Encomendas e Especiais" (busca livre no catálogo) |
+| Quando o cronograma é montado | Sempre no fim do expediente do dia anterior, para o dia seguinte (`dataDeAmanhaIso()`) |
+| Unidade de produção | **Sempre quilos**, mesmo para os ~89 produtos das 5 categorias que são vendidos por unidade no PDV — decisão deliberada para manter produzido/perdido na mesma unidade |
+| Unidade de perda | Quilos (balança) ou unidades quebradas/sobras, convertidas para quilos via peso médio unitário cadastrado no produto |
+| Impressão | Imagem PNG (canvas, 576px / ~79mm térmica), uma sessão por imagem, fonte grande, data em destaque — sem impressão automática (impressora sem rede); fluxo é Compartilhar/Baixar → WhatsApp → imprimir no PC da loja |
+
+Essa mudança inverteu a lógica de conversão original: **kg é sempre aceito
+direto (passthrough)**; a conversão só acontece quando o operador lança em
+unidades (`un → kg`, via `pesoMedioUnitarioGramas`). Ver `src/lib/conversao.ts`.
 
 ### Rodar localmente
 
@@ -27,7 +46,7 @@ npm run dev
 Abre em `http://localhost:5173`. Primeira execução já carrega o catálogo
 completo (881 produtos) direto de `data/produtos.seed.json`.
 
-### Build de produção (o que o GitHub Actions deve rodar)
+### Build de produção (o que o Vercel roda a cada push)
 
 ```
 npm run build      # tsc --noEmit && vite build -> gera dist/
@@ -39,39 +58,41 @@ npm run build      # tsc --noEmit && vite build -> gera dist/
 producao-perdas/
   src/
     types/
-      produto.ts        # Modelo de Produto (inclui campos novos de conversão)
-      producao.ts        # Sessão de Produção, Plano Diário, dia da semana
-      perda.ts            # Registro de Perda (entrada bruta + normalizada)
+      produto.ts          # Modelo de Produto
+      producao.ts          # Sessão de Produção (por categoria), Plano Diário
+      perda.ts              # Registro de Perda (entrada bruta + normalizada em kg)
     lib/
-      conversao.ts        # Regra de conversão kg <-> un
-      metricas.ts          # Taxa de perda, volume por dia, picos de perda
-      importarProdutos.ts # Mapeamento planilha -> Produto (uso no navegador)
+      categorias.ts         # As 5 categorias fixas de produção + "Encomendas e Especiais"
+      conversao.ts           # Normalização de perda para kg (kg passthrough, un -> kg)
+      numeros.ts              # Sanitização de entrada numérica (textbox à prova de erro)
+      metricas.ts               # Taxa de perda, volume por dia, picos de perda
+      data.ts                    # Datas: hoje, amanhã, dia da semana, formatação BR
+      gerarImagemLista.ts         # Gera a imagem PNG de impressão (canvas, 576px)
+      importarProdutos.ts          # Mapeamento planilha -> Produto (uso no navegador)
     components/
-      TelaRegistroPerda.tsx # Componente de referência da tela de Perdas
+      TelaCronograma.tsx       # Montagem do cronograma: acordeão -> resumo -> exportar
+      TelaCadastroProdutos.tsx  # Catálogo, categorização, peso médio
+      TelaPerdas.tsx             # Lançamento de perda de fim de expediente
+      TelaRegistroPerda.tsx       # Textbox de quantidade + toggle kg/un
+      ExportarSessao.tsx           # Preview + Compartilhar/Baixar imagem de impressão
   scripts/
-    importar_produtos.py   # Import em lote (rodado contra Produtos_881.xlsx)
-    verificar_logica.ts    # 13 verificações de conversão/agregação
+    importar_produtos.py         # Import em lote (rodado contra Produtos_881.xlsx)
+    verificar_logica.ts           # Verificações de conversão/agregação
   data/
-    produtos.seed.json     # 881 produtos já convertidos para o schema do app
+    produtos.seed.json            # 881 produtos já convertidos para o schema do app
   tsconfig.json
 ```
 
-## Como colocar no GitHub
+## Verificação
 
-1. Crie um repositório novo no GitHub e cole esta pasta inteira dentro
-   (o projeto já vem completo: `package.json`, `vite.config.ts`,
-   `index.html`, `src/`, `scripts/`, `data/`) — não precisa rodar
-   `npm create vite` de novo, isso já foi feito.
-2. `npm install` para baixar as dependências (não vão versionadas —
-   `node_modules/` deve estar no `.gitignore`).
-3. Configure um workflow de GitHub Actions rodando `npm run build` a
-   cada push e publicando `dist/` (Firebase Hosting, Vercel ou
-   GitHub Pages — o build é um site estático puro).
+```
+npm run verificar   # roda scripts/verificar_logica.ts (15 asserções)
+npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
+npm run build        # build de produção completo
+```
 
-Para reexecutar a verificação de lógica:
-```
-npm run verificar
-```
+Rodar os três antes de qualquer entrega — nenhuma alteração deve ser
+considerada pronta sem `TODOS OS CASOS PASSARAM` + build limpo.
 
 Para reimportar a planilha (ou uma versão atualizada dela):
 ```
@@ -79,14 +100,26 @@ pip install openpyxl
 python3 scripts/importar_produtos.py caminho/planilha.xlsx data/produtos.seed.json
 ```
 
-## Camada de dados (a decidir com você)
+## Atualizar o app publicado
 
-O código em `src/lib` e `src/types` é agnóstico de backend — não importa
-nenhum SDK específico. A recomendação no documento de arquitetura é
-**Firestore** (Firebase), mas as funções de `metricas.ts` e `conversao.ts`
-funcionam com qualquer fonte de dados que devolva os tipos de
-`src/types/*.ts`. Definir o backend é o próximo passo prático antes de
-começar a Fase 1 do roadmap.
+O deploy é automático a cada push na branch `main`:
+
+```
+git add -A
+git commit -m "descrição da mudança"
+git push
+```
+
+O Vercel detecta o push, builda e publica em `https://padaria-producao-perdas.vercel.app`
+em cerca de 1 minuto — sem passo manual adicional.
+
+## Camada de dados (a decidir)
+
+O código em `src/lib` e `src/types` é agnóstico de backend. `src/data/repositorioLocalStorage.ts`
+é a implementação atual (MVP, um dispositivo). `src/data/repositorioFirestore.ts` é um
+stub pronto para receber a implementação real quando o app precisar ser
+multiusuário/multi-dispositivo (mesma interface `Repositorio` — trocar backend
+é trocar uma linha em `src/App.tsx`).
 
 ## Convenções
 

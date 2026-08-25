@@ -97,10 +97,8 @@ export function importarProdutos(linhas: LinhaPlanilhaProduto[]): {
       precoVenda: Number(linha.precoVenda) || 0,
       statusVenda,
       ativoNaProducao: statusVenda === "Ativo",
-      // Campos novos do app — nunca existem na planilha de origem, entram
-      // com padrão seguro (perda por peso desabilitada) e ficam pendentes
-      // de revisão manual no Cadastro de Produtos.
-      permiteRegistroPerdaPorPeso: false,
+      // Campo novo do app — nunca existe na planilha de origem, entra
+      // vazio e fica pendente de revisão manual no Cadastro de Produtos.
       pesoMedioUnitarioGramas: undefined,
     });
     relatorio.importados += 1;

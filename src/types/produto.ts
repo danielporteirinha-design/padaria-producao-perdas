@@ -10,7 +10,7 @@
  * emissão fiscal, não ao controle de produção/perdas.
  */
 
-/** Unidade de medida em que o produto é produzido, vendido e contado. */
+/** Unidade de medida em que o produto é vendido no PDV (histórico/fiscal). */
 export type UnidadeProducao = "un" | "kg" | "l";
 
 /** Situação comercial herdada do PDV. */
@@ -23,9 +23,12 @@ export interface Produto {
   nome: string;
 
   /**
-   * Categoria original do PDV. 629 dos 881 produtos (71%) vieram sem
-   * categoria ("...") — ver relatório de importação. Use "SEM_CATEGORIA"
-   * como valor padrão e trate como pendência de cadastro, não como bug.
+   * Categoria original do PDV. Só as 5 categorias de produção (ver
+   * src/lib/categorias.ts) aparecem nas telas de Cronograma/Perdas — as
+   * demais (revenda: refrigerante, laticínio, mercearia...) ficam de
+   * fora, fora do escopo deste app. 629 dos 881 produtos importados
+   * vieram sem categoria ("...") — usam "SEM_CATEGORIA", pendência de
+   * cadastro em Produtos > Sem categoria.
    */
   categoria: string;
 
@@ -45,20 +48,15 @@ export interface Produto {
   ativoNaProducao: boolean;
 
   // ---------------------------------------------------------------------
-  // REGRA DE CONVERSÃO PESO <-> UNIDADE (registro de perdas)
+  // PESO MÉDIO — base da conversão unidade -> quilos em Registro de Perdas
   // ---------------------------------------------------------------------
 
   /**
-   * Se true, a equipe tem permissão para lançar a perda deste produto
-   * pesando na balança (em kg), mesmo que unidadeProducao seja "un".
-   * Se false, a perda só pode ser lançada na própria unidadeProducao.
-   */
-  permiteRegistroPerdaPorPeso: boolean;
-
-  /**
-   * Peso médio de 1 unidade, em GRAMAS. Obrigatório quando
-   * permiteRegistroPerdaPorPeso = true e unidadeProducao = "un".
-   * É a base de toda a conversão kg <-> un (ver src/lib/conversao.ts).
+   * Peso médio de 1 unidade, em GRAMAS. Opcional — quando ausente, a
+   * tela de Perdas só aceita lançamento direto em quilos (balança); quando
+   * cadastrado, também libera lançar contando unidades quebradas/sobras,
+   * convertido automaticamente para quilos (unidade canônica de todas as
+   * métricas de produção/perda deste app — ver src/lib/conversao.ts).
    *
    * Deve ser recalibrado periodicamente (pesagem de amostra); manter
    * histórico de alterações é responsabilidade do módulo de auditoria
@@ -75,6 +73,5 @@ export interface NovoProdutoInput {
   precoCusto: number;
   precoVenda: number;
   ativoNaProducao: boolean;
-  permiteRegistroPerdaPorPeso: boolean;
   pesoMedioUnitarioGramas?: number | null;
 }

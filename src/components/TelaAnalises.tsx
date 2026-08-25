@@ -56,58 +56,62 @@ export function TelaAnalises({ produtos, planos, perdas }: TelaAnalisesProps) {
             <div className="trilho-barra">
               <div className="barra" style={{ width: `${(v.totalPlanejado / maiorVolume) * 100}%` }} />
             </div>
-            <span className="valor-barra">{v.totalPlanejado}</span>
+            <span className="valor-barra">{v.totalPlanejado} kg</span>
           </div>
         ))}
       </div>
 
       <h3>Taxa de perda por produto</h3>
-      <table className="tabela-simples">
-        <thead>
-          <tr>
-            <th>Produto</th>
-            <th>Produzido</th>
-            <th>Perdido</th>
-            <th>Perda %</th>
-          </tr>
-        </thead>
-        <tbody>
-          {taxas.length === 0 && (
-            <tr><td colSpan={4} className="vazio">Sem dados de perda ainda.</td></tr>
-          )}
-          {taxas.slice(0, 30).map((t) => (
-            <tr key={t.codigoPdv}>
-              <td>{t.nomeProduto}</td>
-              <td>{t.totalProduzido}</td>
-              <td>{t.totalPerdido}</td>
-              <td className={t.perdaPercentual >= 15 ? "perda-alta" : t.perdaPercentual > 0 ? "perda-media" : ""}>
-                {t.perdaPercentual}%
-              </td>
+      <div className="tabela-scroll">
+        <table className="tabela-simples">
+          <thead>
+            <tr>
+              <th>Produto</th>
+              <th>Produzido (kg)</th>
+              <th>Perdido (kg)</th>
+              <th>Perda %</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {taxas.length === 0 && (
+              <tr><td colSpan={4} className="vazio">Sem dados de perda ainda.</td></tr>
+            )}
+            {taxas.slice(0, 30).map((t) => (
+              <tr key={t.codigoPdv}>
+                <td>{t.nomeProduto}</td>
+                <td>{t.totalProduzido}</td>
+                <td>{t.totalPerdido}</td>
+                <td className={t.perdaPercentual >= 15 ? "perda-alta" : t.perdaPercentual > 0 ? "perda-media" : ""}>
+                  {t.perdaPercentual}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <h3>Picos de perda por dia da semana</h3>
-      <table className="tabela-simples">
-        <thead>
-          <tr>
-            <th>Dia</th>
-            <th>Perda % média</th>
-          </tr>
-        </thead>
-        <tbody>
-          {picos.length === 0 && (
-            <tr><td colSpan={2} className="vazio">Sem dados suficientes ainda.</td></tr>
-          )}
-          {picos.slice(0, 7).map((p) => (
-            <tr key={p.diaDaSemana}>
-              <td>{rotuloDoDia(p.diaDaSemana)}</td>
-              <td className={p.perdaPercentualMedia >= 15 ? "perda-alta" : ""}>{p.perdaPercentualMedia}%</td>
+      <div className="tabela-scroll">
+        <table className="tabela-simples">
+          <thead>
+            <tr>
+              <th>Dia</th>
+              <th>Perda % média</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {picos.length === 0 && (
+              <tr><td colSpan={2} className="vazio">Sem dados suficientes ainda.</td></tr>
+            )}
+            {picos.slice(0, 7).map((p) => (
+              <tr key={p.diaDaSemana}>
+                <td>{rotuloDoDia(p.diaDaSemana)}</td>
+                <td className={p.perdaPercentualMedia >= 15 ? "perda-alta" : ""}>{p.perdaPercentualMedia}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

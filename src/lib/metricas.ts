@@ -4,9 +4,10 @@
  * Cálculos de análise: taxa de perda, volume de produção por dia da
  * semana e identificação de picos de perda (geral e por categoria).
  *
- * Todas as funções operam sobre dados JÁ NORMALIZADOS (quantidadeNormalizada
- * em RegistroPerda, quantidadePlanejada em ItemPlanoProducao) — nunca
- * misturam unidades diferentes na mesma soma.
+ * Todas as funções operam sobre dados JÁ NORMALIZADOS EM QUILOS
+ * (quantidadeNormalizada em RegistroPerda, quantidadeQuilos em
+ * ItemPlanoProducao) — produzido e perdido sempre na mesma unidade,
+ * então perdido/produzido nunca mistura quilos com contagem de unidades.
  */
 
 import type { DiaDaSemana, PlanoDeProducaoDiario } from "../types/producao";
@@ -16,9 +17,9 @@ import type { Produto } from "../types/produto";
 export interface TaxaPerdaProduto {
   codigoPdv: number;
   nomeProduto: string;
-  totalProduzido: number;
-  totalPerdido: number;
-  perdaAbsoluta: number; // mesma unidade de produção do item
+  totalProduzido: number; // quilos
+  totalPerdido: number; // quilos
+  perdaAbsoluta: number; // quilos
   perdaPercentual: number; // 0-100, arredondado a 2 casas
 }
 
@@ -38,7 +39,7 @@ export function calcularTaxaPerdaPorProduto(
       for (const item of sessao.itens) {
         produzidoPorProduto.set(
           item.codigoPdv,
-          (produzidoPorProduto.get(item.codigoPdv) ?? 0) + item.quantidadePlanejada
+          (produzidoPorProduto.get(item.codigoPdv) ?? 0) + item.quantidadeQuilos
         );
       }
     }
@@ -77,11 +78,11 @@ export function calcularTaxaPerdaPorProduto(
 
 export interface VolumeProducaoPorDia {
   diaDaSemana: DiaDaSemana;
-  totalPlanejado: number;
+  totalPlanejado: number; // quilos
   numeroDePlanos: number;
 }
 
-/** Volume de produção consolidado por dia da semana (soma de quantidadePlanejada). */
+/** Volume de produção consolidado por dia da semana, em quilos. */
 export function calcularVolumeProducaoPorDiaDaSemana(
   planos: PlanoDeProducaoDiario[]
 ): VolumeProducaoPorDia[] {
@@ -91,7 +92,7 @@ export function calcularVolumeProducaoPorDiaDaSemana(
     const atual = acumulado.get(plano.diaDaSemana) ?? { total: 0, qtdPlanos: 0 };
     const totalDoPlano = plano.sessoes
       .flatMap((s) => s.itens)
-      .reduce((soma, item) => soma + item.quantidadePlanejada, 0);
+      .reduce((soma, item) => soma + item.quantidadeQuilos, 0);
     acumulado.set(plano.diaDaSemana, {
       total: atual.total + totalDoPlano,
       qtdPlanos: atual.qtdPlanos + 1,
@@ -135,7 +136,7 @@ export function identificarPicosDePerda(
       for (const item of sessao.itens) {
         const produto = produtoPorCodigo.get(item.codigoPdv);
         const chave = chaveDe(plano.diaDaSemana, produto?.categoria);
-        produzido.set(chave, (produzido.get(chave) ?? 0) + item.quantidadePlanejada);
+        produzido.set(chave, (produzido.get(chave) ?? 0) + item.quantidadeQuilos);
       }
     }
   }

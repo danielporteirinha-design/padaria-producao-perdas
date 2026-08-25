@@ -98,7 +98,6 @@ def importar(caminho_entrada: str, caminho_saida: str) -> RelatorioImportacao:
                 # Campos abaixo NAO existem na planilha de origem -- entram com
                 # valor padrao seguro e devem ser revisados no Cadastro de Produtos.
                 "ativoNaProducao": (ws.cell(row=r, column=COL_STATUS_VENDA).value == "Ativo"),
-                "permiteRegistroPerdaPorPeso": False,
                 "pesoMedioUnitarioGramas": None,
             }
         )
