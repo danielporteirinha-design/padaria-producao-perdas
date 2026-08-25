@@ -10,7 +10,33 @@
  * chama o Gemini diretamente do navegador.
  */
 
+// Ver comentário completo sobre o alias "latest" e o retry para 429/503 em
+// api/sugestao-producao.ts — mesma decisão, mesma lógica, duplicada aqui de
+// propósito (funções serverless são arquivos independentes neste projeto).
 const MODELO_GEMINI = "gemini-flash-latest";
+
+export async function chamarGeminiComRetry(url: string, corpoRequisicao: unknown, maxTentativas = 2): Promise<Response> {
+  let respostaMaisRecente: Response | undefined;
+  for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
+    const resposta = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corpoRequisicao),
+    });
+    if (resposta.ok) return resposta;
+
+    respostaMaisRecente = resposta;
+    const transitorio = resposta.status === 503 || resposta.status === 429;
+    if (!transitorio || tentativa === maxTentativas) return resposta;
+
+    await esperar(800 * tentativa); // 800ms na 1ª espera, cresce se maxTentativas for chamado com um valor maior
+  }
+  return respostaMaisRecente!;
+}
+
+function esperar(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 interface ResumoProdutoParaInsights {
   codigoPdv: number;
@@ -57,21 +83,23 @@ export default async function handler(req: any, res: any) {
   try {
     const prompt = montarPrompt(resumo);
 
-    const respostaGemini = await fetch(
+    const respostaGemini = await chamarGeminiComRetry(
       `https://generativelanguage.googleapis.com/v1beta/models/${MODELO_GEMINI}:generateContent?key=${apiKey}`,
       {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.4 },
-        }),
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.4 },
       }
     );
 
     if (!respostaGemini.ok) {
       const detalhe = await respostaGemini.text();
-      res.status(502).json({ erro: `Gemini respondeu com erro (HTTP ${respostaGemini.status}).`, detalhe });
+      const sobrecarregado = respostaGemini.status === 503 || respostaGemini.status === 429;
+      res.status(502).json({
+        erro: sobrecarregado
+          ? "O serviço de IA do Gemini está temporariamente sobrecarregado (já tentamos de novo automaticamente) — tente novamente em alguns minutos."
+          : `Gemini respondeu com erro (HTTP ${respostaGemini.status}).`,
+        detalhe,
+      });
       return;
     }
 

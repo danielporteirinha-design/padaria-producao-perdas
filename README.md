@@ -166,6 +166,22 @@ nunca vê a chave da API. Usa a mesma variável `GEMINI_API_KEY` já
 configurada no Vercel (ver seção anterior) — nenhuma configuração
 adicional é necessária se a sugestão de produção já estiver ativa.
 
+### Instabilidade do Gemini (erro 503/429) — set/2026
+
+Sob alta demanda, a própria API do Gemini pode responder **503 (modelo
+sobrecarregado)** ou **429 (limite de taxa)** — não é um problema de
+configuração deste app, é o serviço da Google momentaneamente
+indisponível. As duas funções serverless (`api/sugestao-producao.ts` e
+`api/insights-catalogo.ts`) já tentam de novo automaticamente uma vez
+(espera de 800ms) antes de desistir, seguindo a orientação oficial da
+Google para esses dois códigos. Se mesmo assim o erro aparecer, a
+mensagem agora deixa claro que é temporário — tente de novo em alguns
+minutos. Não tentamos mais vezes que isso de propósito: cada função
+serverless do Vercel tem um tempo máximo de execução (10s no plano
+Hobby), e cada chamada ao Gemini já pode levar alguns segundos — retries
+demais arriscam estourar esse limite, o que seria um erro pior (sem
+mensagem nenhuma) do que simplesmente informar que está sobrecarregado.
+
 ## Estrutura
 
 ```

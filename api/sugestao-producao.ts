@@ -23,7 +23,59 @@
 // produção rigorosos, mas aqui o custo de ficar preso a um nome que expira sem
 // aviso é maior que o risco de uma mudança de comportamento discreta entre
 // versões do Flash — é uma sugestão assistida, não uma função crítica.
+//
+// Efeito colateral conhecido do alias "latest" (set/2026): a Google troca o
+// modelo por trás dele de tempos em tempos (ex.: apontou para o
+// "gemini-3-flash-preview" e depois para o "gemini-3.5-flash"), e cada troca
+// pode gerar uma janela de sobrecarga (HTTP 503 "model is overloaded") até o
+// tráfego estabilizar no novo backend — daí o retry com espera crescente logo
+// abaixo, que é a mitigação oficial da Google para 429/503 (ver
+// chamarGeminiComRetry). Erro 503 depois de esgotar as tentativas é
+// normalmente transitório do lado da Google, não um problema de configuração
+// deste app.
 const MODELO_GEMINI = "gemini-flash-latest";
+
+/**
+ * Chama o endpoint generateContent do Gemini com retry e espera crescente
+ * para os dois códigos de erro que a própria documentação da Google classifica
+ * como transitórios: 503 (modelo sobrecarregado) e 429 (limite de taxa
+ * momentâneo). Qualquer outro erro (ex.: 400 payload inválido, 404 modelo
+ * inexistente) retorna na primeira tentativa — repetir não ajudaria.
+ *
+ * Padrão default de 2 tentativas (1 retry, espera de 800ms) deliberadamente
+ * conservador: funções serverless do Vercel têm um tempo máximo de execução
+ * (10s no plano Hobby, sem configuração extra) e cada chamada ao Gemini já
+ * pode levar alguns segundos — tentativas demais arriscam a função inteira
+ * estourar o tempo limite, o que é um erro pior (opaco, sem mensagem clara
+ * pro operador) do que simplesmente devolver o 503 depois de 1 retry.
+ *
+ * Duplicado em api/insights-catalogo.ts (mesma lógica) — as duas funções
+ * serverless são arquivos independentes de propósito (ver comentário em
+ * src/lib/importarProdutos.ts sobre o mesmo tipo de duplicação deliberada
+ * neste projeto); qualquer ajuste no retry deve ser replicado nos dois locais.
+ */
+export async function chamarGeminiComRetry(url: string, corpoRequisicao: unknown, maxTentativas = 2): Promise<Response> {
+  let respostaMaisRecente: Response | undefined;
+  for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
+    const resposta = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corpoRequisicao),
+    });
+    if (resposta.ok) return resposta;
+
+    respostaMaisRecente = resposta;
+    const transitorio = resposta.status === 503 || resposta.status === 429;
+    if (!transitorio || tentativa === maxTentativas) return resposta;
+
+    await esperar(800 * tentativa); // 800ms na 1ª espera, cresce se maxTentativas for chamado com um valor maior
+  }
+  return respostaMaisRecente!;
+}
+
+function esperar(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 interface ItemHistoricoProducao {
   codigoPdv: number;
@@ -70,21 +122,23 @@ export default async function handler(req: any, res: any) {
   try {
     const prompt = montarPrompt(diaDaSemana, categoria, historico);
 
-    const respostaGemini = await fetch(
+    const respostaGemini = await chamarGeminiComRetry(
       `https://generativelanguage.googleapis.com/v1beta/models/${MODELO_GEMINI}:generateContent?key=${apiKey}`,
       {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.4 },
-        }),
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.4 },
       }
     );
 
     if (!respostaGemini.ok) {
       const detalhe = await respostaGemini.text();
-      res.status(502).json({ erro: `Gemini respondeu com erro (HTTP ${respostaGemini.status}).`, detalhe });
+      const sobrecarregado = respostaGemini.status === 503 || respostaGemini.status === 429;
+      res.status(502).json({
+        erro: sobrecarregado
+          ? "O serviço de IA do Gemini está temporariamente sobrecarregado (já tentamos de novo automaticamente) — tente novamente em alguns minutos."
+          : `Gemini respondeu com erro (HTTP ${respostaGemini.status}).`,
+        detalhe,
+      });
       return;
     }
 
