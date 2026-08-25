@@ -15,7 +15,15 @@
  * chama o Gemini diretamente do navegador.
  */
 
-const MODELO_GEMINI = "gemini-2.0-flash";
+// Usa o alias "latest" em vez de fixar uma versão (ex.: "gemini-2.0-flash") de
+// propósito: essa é uma função que ninguém vai ficar monitorando para trocar o
+// nome do modelo toda vez que a Google aposentar uma versão (já aconteceu uma
+// vez — "gemini-2.0-flash" retornou 404 em ago/2026 por ter sido descontinuado).
+// A documentação da Google recomenda fixar uma versão estável em apps de
+// produção rigorosos, mas aqui o custo de ficar preso a um nome que expira sem
+// aviso é maior que o risco de uma mudança de comportamento discreta entre
+// versões do Flash — é uma sugestão assistida, não uma função crítica.
+const MODELO_GEMINI = "gemini-flash-latest";
 
 interface ItemHistoricoProducao {
   codigoPdv: number;
