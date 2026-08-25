@@ -15,6 +15,7 @@ import {
   identificarPicosDePerda,
 } from "../src/lib/metricas";
 import { calcularCandidatosPerda } from "../src/lib/janelaValidade";
+import { construirResumoParaInsights } from "../src/lib/insightsCatalogo";
 import { diasEntreDatas } from "../src/lib/data";
 import type { Produto } from "../src/types/produto";
 import type { PlanoDeProducaoDiario } from "../src/types/producao";
@@ -258,6 +259,183 @@ const perdas: RegistroPerda[] = [
 
   const semFuturo = calcularCandidatosPerda("2026-08-24", [paoFrances], [planoFuturo]);
   afirmar(semFuturo.length === 0, "plano com data futura em relação à referência é ignorado");
+}
+
+// ---------------------------------------------------------------
+// Caso 11: construirResumoParaInsights — só entram produtos ATIVOS das 5
+// categorias de produção; inativos e fora de escopo ficam de fora.
+// ---------------------------------------------------------------
+{
+  const confeitariaAtiva: Produto = {
+    codigoPdv: 700,
+    nome: "TORTA DE LIMÃO",
+    categoria: "CONFEITARIA",
+    unidadeProducao: "un",
+    precoCusto: 5,
+    precoVenda: 12,
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+  };
+  const confeitariaInativa: Produto = { ...confeitariaAtiva, codigoPdv: 701, nome: "TORTA INATIVA", ativoNaProducao: false };
+  const revendaAtiva: Produto = {
+    ...confeitariaAtiva,
+    codigoPdv: 702,
+    nome: "REFRIGERANTE",
+    categoria: "REFRIGERANTES",
+  };
+
+  const resumo = construirResumoParaInsights(
+    [confeitariaAtiva, confeitariaInativa, revendaAtiva],
+    [],
+    [],
+    "2026-08-24"
+  );
+  afirmar(resumo.length === 1 && resumo[0].codigoPdv === 700, "resumo inclui só o produto ativo de categoria de produção");
+}
+
+// ---------------------------------------------------------------
+// Caso 12: construirResumoParaInsights — produto nunca produzido tem
+// diasDesdeUltimaProducao null e taxaPerdaPercentual null (não força 0).
+// ---------------------------------------------------------------
+{
+  const produtoNuncaProduzido: Produto = {
+    codigoPdv: 703,
+    nome: "PÃO NOVO",
+    categoria: "PÃES E ROSCAS",
+    unidadeProducao: "un",
+    precoCusto: 0.2,
+    precoVenda: 0.5,
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+  };
+  const resumo = construirResumoParaInsights([produtoNuncaProduzido], [], [], "2026-08-24");
+  afirmar(resumo[0].diasDesdeUltimaProducao === null, "produto nunca produzido: diasDesdeUltimaProducao é null");
+  afirmar(resumo[0].taxaPerdaPercentual === null, "produto nunca produzido: taxaPerdaPercentual é null (não 0)");
+}
+
+// ---------------------------------------------------------------
+// Caso 13: construirResumoParaInsights — separa perda por "sobra_nao_vendida"
+// do total perdido, e a última produção é a verdadeira última data (mesmo
+// fora da janela de 60 dias usada para os totais agregados).
+// ---------------------------------------------------------------
+{
+  const confeitaria: Produto = {
+    codigoPdv: 704,
+    nome: "BRIGADEIRO GOURMET",
+    categoria: "CONFEITARIA",
+    unidadeProducao: "un",
+    precoCusto: 1,
+    precoVenda: 3,
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+  };
+  const dataReferencia = "2026-08-24";
+  const planoAntigo: PlanoDeProducaoDiario = {
+    id: "plano-antigo",
+    data: "2026-05-01", // bem mais de 60 dias atrás — fora da janela de totais, mas é a última produção real
+    diaDaSemana: "sexta",
+    status: "confirmado",
+    criadoPor: "teste",
+    criadoEm: "2026-05-01T18:00:00Z",
+    sessoes: [{ id: "s1", categoria: "CONFEITARIA", itens: [{ codigoPdv: 704, quantidadeUnidades: 50 }] }],
+  };
+  const perdasBrigadeiro = [
+    {
+      id: "p1",
+      codigoPdv: 704,
+      planoDeProducaoId: "plano-antigo",
+      data: "2026-05-01",
+      diaDaSemana: "sexta" as const,
+      quantidadeQuilos: 1,
+      pesoUnitarioGramasInformado: 20,
+      quantidadeUnidadesEstimada: 10,
+      motivo: "sobra_nao_vendida" as const,
+      registradoPor: "teste",
+      registradoEm: "2026-05-01T20:00:00Z",
+    },
+    {
+      id: "p2",
+      codigoPdv: 704,
+      planoDeProducaoId: "plano-antigo",
+      data: "2026-05-01",
+      diaDaSemana: "sexta" as const,
+      quantidadeQuilos: 0.4,
+      pesoUnitarioGramasInformado: 20,
+      quantidadeUnidadesEstimada: 5,
+      motivo: "queimado" as const,
+      registradoPor: "teste",
+      registradoEm: "2026-05-01T20:05:00Z",
+    },
+  ];
+
+  const resumo = construirResumoParaInsights([confeitaria], [planoAntigo], perdasBrigadeiro, dataReferencia);
+  afirmar(
+    resumo[0].diasDesdeUltimaProducao === diasEntreDatas("2026-05-01", dataReferencia),
+    `última produção reflete a data real mesmo fora da janela de 60 dias (obtido: ${resumo[0].diasDesdeUltimaProducao})`
+  );
+  afirmar(resumo[0].totalProduzidoUnidades === 0, "produção de mais de 60 dias atrás não entra no total da janela");
+  afirmar(resumo[0].totalPerdidoUnidades === 0, "perda de mais de 60 dias atrás não entra no total da janela");
+}
+
+// ---------------------------------------------------------------
+// Caso 14: construirResumoParaInsights — dentro da janela, separa
+// corretamente sobra de outros motivos e calcula a taxa de perda.
+// ---------------------------------------------------------------
+{
+  const confeitaria: Produto = {
+    codigoPdv: 705,
+    nome: "PALHA ITALIANA",
+    categoria: "CONFEITARIA",
+    unidadeProducao: "un",
+    precoCusto: 1,
+    precoVenda: 3,
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+  };
+  const dataReferencia = "2026-08-24";
+  const planoRecente: PlanoDeProducaoDiario = {
+    id: "plano-recente",
+    data: "2026-08-23",
+    diaDaSemana: "domingo",
+    status: "confirmado",
+    criadoPor: "teste",
+    criadoEm: "2026-08-23T18:00:00Z",
+    sessoes: [{ id: "s1", categoria: "CONFEITARIA", itens: [{ codigoPdv: 705, quantidadeUnidades: 100 }] }],
+  };
+  const perdasPalha = [
+    {
+      id: "p3",
+      codigoPdv: 705,
+      planoDeProducaoId: "plano-recente",
+      data: "2026-08-23",
+      diaDaSemana: "domingo" as const,
+      quantidadeQuilos: 1,
+      pesoUnitarioGramasInformado: 40,
+      quantidadeUnidadesEstimada: 25,
+      motivo: "sobra_nao_vendida" as const,
+      registradoPor: "teste",
+      registradoEm: "2026-08-23T20:00:00Z",
+    },
+    {
+      id: "p4",
+      codigoPdv: 705,
+      planoDeProducaoId: "plano-recente",
+      data: "2026-08-23",
+      diaDaSemana: "domingo" as const,
+      quantidadeQuilos: 0.2,
+      pesoUnitarioGramasInformado: 40,
+      quantidadeUnidadesEstimada: 5,
+      motivo: "quebra_transporte" as const,
+      registradoPor: "teste",
+      registradoEm: "2026-08-23T20:05:00Z",
+    },
+  ];
+
+  const resumo = construirResumoParaInsights([confeitaria], [planoRecente], perdasPalha, dataReferencia);
+  afirmar(resumo[0].totalProduzidoUnidades === 100, "produção dentro da janela contabilizada corretamente");
+  afirmar(resumo[0].totalPerdidoUnidades === 30, `perda total soma todos os motivos (obtido: ${resumo[0].totalPerdidoUnidades})`);
+  afirmar(resumo[0].perdaPorSobraUnidades === 25, `perda por sobra isola só o motivo sobra_nao_vendida (obtido: ${resumo[0].perdaPorSobraUnidades})`);
+  afirmar(resumo[0].taxaPerdaPercentual === 30, `taxa de perda = 30/100 = 30% (obtido: ${resumo[0].taxaPerdaPercentual})`);
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

@@ -1,7 +1,8 @@
 /**
  * src/components/TelaCadastroProdutos.tsx
  * ---------------------------------------------------------------
- * Cadastro rápido de produto novo + lista/busca do catálogo + revisão
+ * Cadastro rápido de produto novo + lista/busca do catálogo (com edição
+ * inline de nome, categoria, unidade, peso médio e validade) + revisão
  * assistida de categoria para os itens "SEM_CATEGORIA" + limpeza de
  * produtos fora das 5 categorias de produção (decisão do dono do
  * negócio — ago/2026: o catálogo deste app deve conter só o que é
@@ -43,6 +44,20 @@ export function TelaCadastroProdutos({
   const [busca, setBusca] = useState("");
   const [abaAtiva, setAbaAtiva] = useState<"novo" | "lista" | "revisao" | "limpeza">("novo");
 
+  // Edição inline do catálogo — nome, categoria, unidade, peso médio e
+  // validade (decisão do dono do negócio — set/2026: esses 5 campos podem
+  // ter vindo errados da planilha original ou precisar de ajuste depois do
+  // cadastro inicial, sem precisar excluir e recriar o produto).
+  const [codigoEmEdicao, setCodigoEmEdicao] = useState<number | null>(null);
+  const [rascunhoEdicao, setRascunhoEdicao] = useState<{
+    nome: string;
+    categoria: string;
+    unidadeProducao: UnidadeProducao;
+    pesoMedioUnitarioGramas: string;
+    prazoValidadeDias: string;
+  } | null>(null);
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+
   // Ao trocar a categoria, sugere o prazo de validade típico dela — só se o
   // operador ainda não tiver ajustado esse campo manualmente (ex.: uma
   // rosca dentro de "Pães e Roscas" precisa de um valor diferente do pão).
@@ -61,6 +76,40 @@ export function TelaCadastroProdutos({
     setSalvando(false);
     setForm(VALOR_INICIAL);
     setValidadeTocada(false);
+  }
+
+  function iniciarEdicao(p: Produto) {
+    setCodigoEmEdicao(p.codigoPdv);
+    setRascunhoEdicao({
+      nome: p.nome,
+      categoria: p.categoria,
+      unidadeProducao: p.unidadeProducao,
+      pesoMedioUnitarioGramas: p.pesoMedioUnitarioGramas != null ? String(p.pesoMedioUnitarioGramas) : "",
+      prazoValidadeDias: p.prazoValidadeDias != null ? String(p.prazoValidadeDias) : "",
+    });
+  }
+
+  function cancelarEdicao() {
+    setCodigoEmEdicao(null);
+    setRascunhoEdicao(null);
+  }
+
+  async function salvarEdicao(produtoOriginal: Produto) {
+    if (!rascunhoEdicao || !rascunhoEdicao.nome.trim()) return;
+    setSalvandoEdicao(true);
+    await onAtualizarProduto({
+      ...produtoOriginal,
+      nome: rascunhoEdicao.nome.trim(),
+      categoria: rascunhoEdicao.categoria,
+      unidadeProducao: rascunhoEdicao.unidadeProducao,
+      pesoMedioUnitarioGramas: rascunhoEdicao.pesoMedioUnitarioGramas.trim()
+        ? Number(rascunhoEdicao.pesoMedioUnitarioGramas)
+        : undefined,
+      prazoValidadeDias: rascunhoEdicao.prazoValidadeDias.trim() ? Number(rascunhoEdicao.prazoValidadeDias) : null,
+    });
+    setSalvandoEdicao(false);
+    setCodigoEmEdicao(null);
+    setRascunhoEdicao(null);
   }
 
   const produtosFiltrados = useMemo(() => {
@@ -245,19 +294,112 @@ export function TelaCadastroProdutos({
                   <th>Unidade</th>
                   <th>Peso médio</th>
                   <th>Validade</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                {produtosFiltrados.slice(0, 200).map((p) => (
-                  <tr key={p.codigoPdv}>
-                    <td className="mono">{p.codigoPdv}</td>
-                    <td>{p.nome}</td>
-                    <td>{p.categoria === "SEM_CATEGORIA" ? <span className="tag-pendente">sem categoria</span> : p.categoria}</td>
-                    <td>{p.unidadeProducao}</td>
-                    <td>{p.pesoMedioUnitarioGramas ? `${p.pesoMedioUnitarioGramas}g` : "—"}</td>
-                    <td>{p.prazoValidadeDias ? `${p.prazoValidadeDias} dia(s)` : "—"}</td>
-                  </tr>
-                ))}
+                {produtosFiltrados.slice(0, 200).map((p) => {
+                  if (codigoEmEdicao === p.codigoPdv && rascunhoEdicao) {
+                    const opcoesCategoria = CATEGORIAS_PRODUCAO.some((c) => c.chave === rascunhoEdicao.categoria)
+                      ? CATEGORIAS_PRODUCAO
+                      : [
+                          {
+                            chave: rascunhoEdicao.categoria,
+                            rotulo:
+                              rascunhoEdicao.categoria === "SEM_CATEGORIA" ? "Sem categoria" : rascunhoEdicao.categoria,
+                          },
+                          ...CATEGORIAS_PRODUCAO,
+                        ];
+                    return (
+                      <tr key={p.codigoPdv} className="linha-em-edicao">
+                        <td className="mono">{p.codigoPdv}</td>
+                        <td>
+                          <input
+                            value={rascunhoEdicao.nome}
+                            onChange={(e) => setRascunhoEdicao({ ...rascunhoEdicao, nome: e.target.value })}
+                            aria-label="Nome do produto"
+                          />
+                        </td>
+                        <td>
+                          <select
+                            value={rascunhoEdicao.categoria}
+                            onChange={(e) => setRascunhoEdicao({ ...rascunhoEdicao, categoria: e.target.value })}
+                            aria-label="Categoria do produto"
+                          >
+                            {opcoesCategoria.map((c) => (
+                              <option key={c.chave} value={c.chave}>
+                                {c.rotulo}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <select
+                            value={rascunhoEdicao.unidadeProducao}
+                            onChange={(e) =>
+                              setRascunhoEdicao({ ...rascunhoEdicao, unidadeProducao: e.target.value as UnidadeProducao })
+                            }
+                            aria-label="Unidade de produção"
+                          >
+                            <option value="un">un</option>
+                            <option value="kg">kg</option>
+                            <option value="l">l</option>
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min={0}
+                            value={rascunhoEdicao.pesoMedioUnitarioGramas}
+                            onChange={(e) =>
+                              setRascunhoEdicao({ ...rascunhoEdicao, pesoMedioUnitarioGramas: e.target.value })
+                            }
+                            placeholder="g"
+                            aria-label="Peso médio por unidade em gramas"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min={1}
+                            value={rascunhoEdicao.prazoValidadeDias}
+                            onChange={(e) => setRascunhoEdicao({ ...rascunhoEdicao, prazoValidadeDias: e.target.value })}
+                            placeholder="dias"
+                            aria-label="Prazo de validade em dias"
+                          />
+                        </td>
+                        <td className="acoes-linha">
+                          <button
+                            type="button"
+                            className="link"
+                            disabled={salvandoEdicao || !rascunhoEdicao.nome.trim()}
+                            onClick={() => salvarEdicao(p)}
+                          >
+                            {salvandoEdicao ? "Salvando..." : "Salvar"}
+                          </button>
+                          <button type="button" className="link" disabled={salvandoEdicao} onClick={cancelarEdicao}>
+                            Cancelar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr key={p.codigoPdv}>
+                      <td className="mono">{p.codigoPdv}</td>
+                      <td>{p.nome}</td>
+                      <td>{p.categoria === "SEM_CATEGORIA" ? <span className="tag-pendente">sem categoria</span> : p.categoria}</td>
+                      <td>{p.unidadeProducao}</td>
+                      <td>{p.pesoMedioUnitarioGramas ? `${p.pesoMedioUnitarioGramas}g` : "—"}</td>
+                      <td>{p.prazoValidadeDias ? `${p.prazoValidadeDias} dia(s)` : "—"}</td>
+                      <td className="acoes-linha">
+                        <button type="button" className="link" onClick={() => iniciarEdicao(p)}>
+                          Editar
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

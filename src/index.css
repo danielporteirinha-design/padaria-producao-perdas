@@ -146,6 +146,9 @@ button.link {
 .tabela-simples td { padding: 10px; border-bottom: 1px solid var(--cor-borda); }
 .tabela-simples .vazio { color: var(--cor-texto-suave); text-align: center; padding: 20px; }
 .tabela-simples .mono { font-family: monospace; }
+.tabela-simples .acoes-linha { display: flex; gap: 10px; white-space: nowrap; }
+.linha-em-edicao td { background: var(--cor-alerta-fundo); vertical-align: middle; }
+.linha-em-edicao input, .linha-em-edicao select { width: 100%; min-width: 90px; font-size: 13px; }
 
 .dia-semana-badge {
   align-self: flex-end;
@@ -218,6 +221,30 @@ button.link {
 
 .perda-alta { color: var(--cor-alerta); font-weight: 700; }
 .perda-media { color: #8a6b1f; font-weight: 600; }
+
+.cartao-insights {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 16px;
+}
+.cabecalho-insights { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cabecalho-insights h3 { margin: 0; }
+.lista-insights { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.cartao-insight {
+  border-radius: var(--raio);
+  padding: 10px 14px;
+  font-size: 14px;
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+}
+.cartao-insight strong { display: block; margin-bottom: 4px; }
+.cartao-insight p { margin: 0; color: var(--cor-texto-suave); }
+.cartao-insight.atencao { background: var(--cor-alerta-fundo); border-color: transparent; }
+.cartao-insight.atencao strong { color: var(--cor-alerta); }
 
 .tela-identificacao {
   max-width: 360px;

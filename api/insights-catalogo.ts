@@ -1,0 +1,141 @@
+/**
+ * api/insights-catalogo.ts
+ * ---------------------------------------------------------------
+ * Função serverless (Vercel publica automaticamente qualquer arquivo em
+ * /api). Segunda ponta que fala com o Gemini — mesma arquitetura de
+ * api/sugestao-producao.ts (ver comentários lá para o porquê da chave só
+ * existir no servidor e do alias de modelo "latest").
+ *
+ * Frontend chama este endpoint via src/lib/insightsCatalogo.ts — nunca
+ * chama o Gemini diretamente do navegador.
+ */
+
+const MODELO_GEMINI = "gemini-flash-latest";
+
+interface ResumoProdutoParaInsights {
+  codigoPdv: number;
+  nome: string;
+  categoria: string;
+  diasDesdeUltimaProducao: number | null;
+  totalProduzidoUnidades: number;
+  totalPerdidoUnidades: number;
+  perdaPorSobraUnidades: number;
+  taxaPerdaPercentual: number | null;
+}
+
+interface RequisicaoInsights {
+  resumo?: ResumoProdutoParaInsights[];
+}
+
+// Tipagem mínima e deliberadamente solta (evita depender de @types/node ou
+// @vercel/node só para isto) — o runtime do Vercel injeta req/res
+// compatíveis com http.IncomingMessage / http.ServerResponse + helpers.
+export default async function handler(req: any, res: any) {
+  if (req.method !== "POST") {
+    res.status(405).json({ erro: "Método não permitido — use POST." });
+    return;
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    res.status(503).json({
+      erro:
+        "Insights por IA ainda não configurados: falta a variável de ambiente GEMINI_API_KEY no Vercel " +
+        "(Settings > Environment Variables, depois faça um novo deploy).",
+    });
+    return;
+  }
+
+  const corpo: RequisicaoInsights = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body ?? {};
+  const { resumo } = corpo;
+
+  if (!Array.isArray(resumo) || resumo.length === 0) {
+    res.status(400).json({ erro: "Payload inválido — informe resumo (lista de produtos)." });
+    return;
+  }
+
+  try {
+    const prompt = montarPrompt(resumo);
+
+    const respostaGemini = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODELO_GEMINI}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json", temperature: 0.4 },
+        }),
+      }
+    );
+
+    if (!respostaGemini.ok) {
+      const detalhe = await respostaGemini.text();
+      res.status(502).json({ erro: `Gemini respondeu com erro (HTTP ${respostaGemini.status}).`, detalhe });
+      return;
+    }
+
+    const dados = await respostaGemini.json();
+    const textoGerado: string | undefined = dados?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textoGerado) {
+      res.status(502).json({ erro: "Resposta do Gemini veio sem conteúdo utilizável." });
+      return;
+    }
+
+    let corpoResposta: unknown;
+    try {
+      corpoResposta = JSON.parse(textoGerado);
+    } catch {
+      res.status(502).json({ erro: "Não foi possível interpretar a resposta do Gemini como JSON.", bruto: textoGerado });
+      return;
+    }
+
+    const insights = extrairInsights(corpoResposta);
+    res.status(200).json({ insights });
+  } catch (erro) {
+    res.status(500).json({ erro: "Erro inesperado ao gerar insights.", detalhe: String(erro) });
+  }
+}
+
+function montarPrompt(resumo: ResumoProdutoParaInsights[]): string {
+  return `Você é um analista de operações de uma padaria de bairro, revisando o catálogo de produtos e o
+histórico recente de produção/perda para apontar padrões que ajudem o dono do negócio a decidir melhor
+quanto produzir de cada item.
+
+Resumo por produto (últimos ~60 dias, só produtos ativos das categorias de produção):
+${JSON.stringify(resumo)}
+
+Cada item tem: codigoPdv, nome, categoria, diasDesdeUltimaProducao (null = nunca apareceu num plano
+confirmado no histórico disponível), totalProduzidoUnidades, totalPerdidoUnidades (todos os motivos),
+perdaPorSobraUnidades (subconjunto de totalPerdidoUnidades com motivo "sobra não vendida" — indica
+excesso de produção, não erro de forno) e taxaPerdaPercentual (null se não produzido no período).
+
+Tarefa: gere até 8 insights ACIONÁVEIS e ESPECÍFICOS (cite o produto pelo nome), priorizando nesta ordem:
+1) Produtos com perdaPorSobraUnidades alta relativa ao totalProduzidoUnidades — sinal de que está sendo
+   produzido além do que vende, sobrando e sendo descartado.
+2) Produtos ativos com diasDesdeUltimaProducao alto (ex.: acima de 14) — ativos no cronograma mas parados
+   há muito tempo, o que pode ser esquecimento ou falta de demanda que ninguém formalizou.
+3) Qualquer outro padrão útil visível nos números (ex.: taxa de perda geral muito alta num produto mesmo
+   sem ser por sobra, uma categoria inteira com comportamento fora do padrão).
+
+Regras: baseie-se SOMENTE nos números fornecidos, nunca invente causa raiz (sugira hipóteses com
+linguagem de possibilidade, não certeza). Se os dados forem insuficientes para qualquer insight
+confiável, retorne uma lista vazia — não force insight artificial. Classifique cada insight como
+"atencao" (pede alguma ação ou decisão do dono) ou "informativo" (só contexto útil, sem ação urgente).
+
+Responda SOMENTE com um JSON válido, sem nenhum texto antes ou depois, no formato exato:
+{"insights": [{"tipo": "atencao", "titulo": "frase curta", "detalhe": "1-2 frases explicando o padrão e uma sugestão"}]}`;
+}
+
+function extrairInsights(corpo: unknown): Array<{ tipo: "atencao" | "informativo"; titulo: string; detalhe: string }> {
+  if (!corpo || typeof corpo !== "object" || !Array.isArray((corpo as any).insights)) {
+    return [];
+  }
+  return (corpo as any).insights
+    .filter((i: any) => i && typeof i.titulo === "string" && typeof i.detalhe === "string")
+    .map((i: any) => ({
+      tipo: i.tipo === "atencao" ? "atencao" : "informativo",
+      titulo: i.titulo,
+      detalhe: i.detalhe,
+    }));
+}

@@ -36,6 +36,8 @@ inicial do documento de arquitetura:
 | Sugestão de produção | Botão "✨ Sugerir com IA" por categoria (Gemini) — sempre assistido: pré-preenche quantidades vazias com base no histórico, operador revisa/ajusta antes de confirmar |
 | Escopo do catálogo | Só as 5 categorias de produção — o catálogo importado do PDV tem ~19 categorias, a maioria revenda (mercearia, refrigerante, laticínio...), fora do escopo deste app (ago/2026: limpeza feita em Cadastro de Produtos → aba "Fora de escopo") |
 | Prazo de validade | Por produto (`Produto.prazoValidadeDias`, editável, sugerido por categoria) — uma perda lançada hoje nem sempre vem da produção de ontem (a etiqueta não traz data de fabricação isolada), então a tela de Perdas considera qualquer fornada confirmada ainda dentro do prazo do produto, não só a de hoje |
+| Edição de cadastro | Nome, categoria, unidade, peso médio e prazo de validade são editáveis direto na tabela do Catálogo (edição inline por linha) — corrige erro de cadastro ou de importação sem precisar excluir e recriar o produto |
+| Insights de catálogo | Botão "✨ Gerar insights com IA" em Análises (Gemini) — aponta produtos sobrando (perda por sobra alta), produtos ativos parados há muito tempo, ou outros padrões úteis; sempre informativo, nunca altera nada sozinho |
 
 Produção (unidades) e perda (derivada em unidades a partir do peso pesado
 ÷ peso unitário informado) ficam sempre na mesma unidade de medida, então
@@ -145,12 +147,32 @@ Sem a chave configurada, o botão continua visível mas mostra uma mensagem
 clara pedindo a configuração — nunca trava a tela nem impede montar o
 cronograma manualmente.
 
+## Insights de catálogo com IA (Gemini)
+
+Na tela de Análises, botão "✨ Gerar insights com IA": reúne um resumo por
+produto ATIVO das 5 categorias de produção (dias desde a última produção,
+total produzido/perdido nos últimos ~60 dias, perda separada por motivo
+"sobra não vendida") e pede ao Gemini para apontar padrões — ex.: um
+produto sendo produzido além do que vende (sobra alta), um produto ativo
+que não aparece em nenhum plano confirmado há muitas semanas, ou qualquer
+outra tendência visível nos números. Puramente informativo: só lista
+observações para o operador avaliar, nunca pausa produto, muda cadastro
+ou altera o cronograma sozinho — mesmo padrão "sempre assistido" das
+outras sugestões por IA do app.
+
+**Arquitetura:** mesmo desenho da sugestão de produção — a chamada ao
+Gemini acontece só no servidor (`api/insights-catalogo.ts`), o navegador
+nunca vê a chave da API. Usa a mesma variável `GEMINI_API_KEY` já
+configurada no Vercel (ver seção anterior) — nenhuma configuração
+adicional é necessária se a sugestão de produção já estiver ativa.
+
 ## Estrutura
 
 ```
 producao-perdas/
   api/
-    sugestao-producao.ts       # Função serverless — única ponta que fala com o Gemini
+    sugestao-producao.ts       # Função serverless — sugestão de quantidades de produção
+    insights-catalogo.ts        # Função serverless — insights de catálogo (sobra, produto parado, etc.)
   src/
     types/
       produto.ts                # Modelo de Produto
@@ -164,17 +186,19 @@ producao-perdas/
       data.ts                           # Datas: hoje, amanhã, dia da semana, formatação BR, diferença em dias
       janelaValidade.ts                  # Quais fornadas confirmadas ainda estão dentro do prazo de validade do produto
       gerarImagemLista.ts                # Gera a fita PNG única de impressão (canvas, 576px, com linhas de corte)
-      sugestaoProducao.ts                 # Cliente da sugestão por IA — monta histórico, chama /api
+      sugestaoProducao.ts                 # Cliente da sugestão de produção por IA — monta histórico, chama /api
+      insightsCatalogo.ts                  # Cliente dos insights de catálogo por IA — monta resumo, chama /api
       importarProdutos.ts                  # Mapeamento planilha -> Produto (uso no navegador), já filtra fora de escopo
     components/
       TelaCronograma.tsx       # Montagem do cronograma: acordeão -> resumo -> exportar (+ sugestão IA)
-      TelaCadastroProdutos.tsx  # Catálogo, categorização, validade, peso médio (autoatualizado pelas perdas), limpeza de escopo
+      TelaCadastroProdutos.tsx  # Catálogo (com edição inline), categorização, validade, peso médio, limpeza de escopo
       TelaPerdas.tsx             # Lançamento de perda de fim de expediente (considera a janela de validade)
       TelaRegistroPerda.tsx       # Peso perdido (kg) + peso unitário informado + fornada de origem, com preview ao vivo
+      TelaAnalises.tsx              # Taxa de perda, volume por dia, picos de perda + insights de catálogo por IA
       ExportarFita.tsx             # Preview + Compartilhar/Baixar da fita única de impressão
   scripts/
     importar_produtos.py         # Import em lote (rodado contra Produtos_881.xlsx), já filtra fora de escopo
-    verificar_logica.ts           # Verificações de conversão/agregação/janela de validade
+    verificar_logica.ts           # Verificações de conversão/agregação/janela de validade/resumo de insights
   data/
     produtos.seed.json            # 89 produtos das 5 categorias de produção, já convertidos para o schema do app
   tsconfig.json
@@ -183,7 +207,7 @@ producao-perdas/
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (24 asserções)
+npm run verificar   # roda scripts/verificar_logica.ts (32 asserções)
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```
