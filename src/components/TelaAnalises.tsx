@@ -1,12 +1,26 @@
 /**
  * src/components/TelaAnalises.tsx
  * ---------------------------------------------------------------
- * Consome src/lib/metricas.ts para mostrar taxa de perda por produto,
- * volume de produção por dia da semana e picos de perda. Também oferece
- * insights por IA (Gemini) sobre o catálogo — produtos sobrando, parados
- * há muito tempo, ou outros padrões úteis (ver src/lib/insightsCatalogo.ts).
- * Sempre informativo, nunca automático: só aponta padrões para o operador
- * avaliar, não altera nada no cadastro nem no cronograma sozinho.
+ * Painel de análises (ago/2026). A pergunta que o dono do negócio quer
+ * responder de relance: "existe padrão de perda por dia da semana ou por
+ * semana do mês?". Se terça desperdiça o dobro de sexta, o cronograma de
+ * terça está errado — e isso é dinheiro que dá para parar de jogar fora
+ * sem cortar nada da operação.
+ *
+ * UM FILTRO SÓ, NO TOPO, VALENDO PARA TUDO
+ * -----------------------------------------
+ * Período, loja e categoria são aplicados uma única vez (ver
+ * src/lib/analises.ts) e alimentam os números, os três gráficos E o
+ * resumo mandado para a IA. É o que garante que a tela e a IA estejam
+ * olhando exatamente o mesmo recorte — se cada bloco filtrasse por conta
+ * própria, a IA acabaria comentando dados que não estão na tela.
+ *
+ * PERCENTUAL, NÃO VOLUME
+ * -----------------------
+ * Os gráficos comparam TAXA de perda. Sábado produz muito mais que
+ * segunda, então o total perdido no sábado seria sempre maior sem que
+ * isso significasse desperdício pior. O percentual é o que torna os dias
+ * comparáveis.
  */
 
 import { useMemo, useState } from "react";
@@ -14,17 +28,24 @@ import type { Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { RegistroPerda } from "../types/perda";
 import {
-  calcularTaxaPerdaPorProduto,
-  calcularVolumeProducaoPorDiaDaSemana,
-  identificarPicosDePerda,
-} from "../lib/metricas";
-import { ORDEM_DIAS, dataDeHojeIso, rotuloDoDia } from "../lib/data";
+  calcularTotais,
+  perdaPorDiaDaSemana,
+  perdaPorSemanaDoMes,
+  formatarPercentual,
+  recortar,
+  topProdutosPorPerda,
+  type FiltroAnalise,
+} from "../lib/analises";
+import { CATEGORIAS_PRODUCAO } from "../lib/categorias";
+import { LOJAS } from "../lib/lojas";
+import { dataDeHojeIso } from "../lib/data";
 import {
   buscarInsightsCatalogo,
   construirResumoParaInsights,
   ErroInsightsCatalogo,
   type InsightCatalogo,
 } from "../lib/insightsCatalogo";
+import { GraficoBarras } from "./GraficoBarras";
 
 interface TelaAnalisesProps {
   produtos: Produto[];
@@ -32,10 +53,25 @@ interface TelaAnalisesProps {
   perdas: RegistroPerda[];
 }
 
+const PERIODOS = [
+  { dias: 7, rotulo: "7 dias" },
+  { dias: 30, rotulo: "30 dias" },
+  { dias: 90, rotulo: "90 dias" },
+];
+
 export function TelaAnalises({ produtos, planos, perdas }: TelaAnalisesProps) {
-  const taxas = useMemo(() => calcularTaxaPerdaPorProduto(produtos, planos, perdas), [produtos, planos, perdas]);
-  const volumes = useMemo(() => calcularVolumeProducaoPorDiaDaSemana(planos), [planos]);
-  const picos = useMemo(() => identificarPicosDePerda(produtos, planos, perdas, false), [produtos, planos, perdas]);
+  const [filtro, setFiltro] = useState<FiltroAnalise>({ dias: 30 });
+  const hoje = dataDeHojeIso();
+
+  const recorte = useMemo(
+    () => recortar(produtos, planos, perdas, hoje, filtro),
+    [produtos, planos, perdas, hoje, filtro]
+  );
+
+  const totais = useMemo(() => calcularTotais(recorte), [recorte]);
+  const porDia = useMemo(() => perdaPorDiaDaSemana(recorte), [recorte]);
+  const porSemana = useMemo(() => perdaPorSemanaDoMes(recorte), [recorte]);
+  const porProduto = useMemo(() => topProdutosPorPerda(recorte), [recorte]);
 
   const [insights, setInsights] = useState<InsightCatalogo[] | null>(null);
   const [statusInsights, setStatusInsights] = useState<"" | "carregando" | "erro">("");
@@ -45,61 +81,159 @@ export function TelaAnalises({ produtos, planos, perdas }: TelaAnalisesProps) {
     setStatusInsights("carregando");
     setMensagemInsights("");
     try {
-      const resumo = construirResumoParaInsights(produtos, planos, perdas, dataDeHojeIso());
+      const resumo = construirResumoParaInsights(produtos, planos, perdas, hoje);
       if (resumo.length === 0) {
-        setStatusInsights("");
-        setInsights([]);
-        setMensagemInsights("Nenhum produto ativo das categorias de produção para analisar ainda.");
+        setStatusInsights("erro");
+        setMensagemInsights("Ainda não há histórico suficiente para analisar.");
         return;
       }
-      const resultado = await buscarInsightsCatalogo(resumo);
+      // Os padrões vão junto do resumo por produto: sem eles a IA só
+      // consegue falar de item isolado, e a pergunta do dono do negócio é
+      // sobre PADRÃO — que dia, que semana, e o que fazer a respeito.
+      const resultado = await buscarInsightsCatalogo(resumo, {
+        porDiaDaSemana: porDia,
+        porSemanaDoMes: porSemana,
+        taxaGeral: totais.taxaPerda,
+        janelaDias: filtro.dias,
+      });
       setInsights(resultado);
       setStatusInsights("");
-      setMensagemInsights(resultado.length === 0 ? "A IA não encontrou padrões confiáveis com os dados atuais." : "");
+      if (resultado.length === 0) {
+        setMensagemInsights("A IA não encontrou padrões relevantes neste recorte.");
+      }
     } catch (erro) {
+      console.error("Falha ao gerar insights:", erro);
       setStatusInsights("erro");
-      setInsights(null);
       setMensagemInsights(
-        erro instanceof ErroInsightsCatalogo ? erro.message : "Não foi possível gerar os insights agora."
+        erro instanceof ErroInsightsCatalogo
+          ? erro.message
+          : "Não foi possível gerar os insights agora. Tente de novo em alguns minutos."
       );
     }
   }
 
-  const volumePorDiaOrdenado = ORDEM_DIAS.map(
-    (dia) => volumes.find((v) => v.diaDaSemana === dia) ?? { diaDaSemana: dia, totalPlanejado: 0, numeroDePlanos: 0 }
-  );
-  const maiorVolume = Math.max(1, ...volumePorDiaOrdenado.map((v) => v.totalPlanejado));
-
-  if (planos.length === 0) {
-    return (
-      <div className="tela">
-        <h2>Análises</h2>
-        <p className="callout-inline">
-          Ainda não há planos de produção confirmados — as análises aparecem aqui assim que o
-          Cronograma e as Perdas tiverem pelo menos alguns dias registrados.
-        </p>
-      </div>
-    );
-  }
+  const semDados = totais.produzido === 0 && totais.perdido === 0;
 
   return (
     <div className="tela">
       <h2>Análises</h2>
 
+      {/* Filtros numa linha só, acima de tudo — vale para os números, os
+          gráficos e a IA ao mesmo tempo. */}
+      <div className="filtros-analise">
+        <div className="grupo-periodo">
+          {PERIODOS.map((p) => (
+            <button
+              key={p.dias}
+              type="button"
+              className={filtro.dias === p.dias ? "ativa" : ""}
+              onClick={() => setFiltro((f) => ({ ...f, dias: p.dias }))}
+            >
+              {p.rotulo}
+            </button>
+          ))}
+        </div>
+        <div className="grupo-selects">
+          <select
+            value={filtro.lojaId ?? ""}
+            aria-label="Loja"
+            onChange={(e) => setFiltro((f) => ({ ...f, lojaId: e.target.value || undefined }))}
+          >
+            <option value="">Todas as lojas</option>
+            {LOJAS.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.nomeCurto}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filtro.categoria ?? ""}
+            aria-label="Categoria"
+            onChange={(e) => setFiltro((f) => ({ ...f, categoria: e.target.value || undefined }))}
+          >
+            <option value="">Todas as categorias</option>
+            {CATEGORIAS_PRODUCAO.map((c) => (
+              <option key={c.chave} value={c.chave}>
+                {c.rotulo}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {semDados ? (
+        <p className="callout-inline">
+          Nenhum dado neste recorte. Amplie o período ou tire os filtros de loja e categoria.
+        </p>
+      ) : (
+        <>
+          {/* Números-cabeçalho: três valores, não um gráfico de três barras. */}
+          <div className="linha-kpis">
+            <div className="kpi">
+              <span className="valor-kpi">
+                {totais.taxaPerda === null ? "—" : formatarPercentual(totais.taxaPerda)}
+              </span>
+              <span className="rotulo-kpi">Taxa de perda</span>
+            </div>
+            <div className="kpi">
+              <span className="valor-kpi">{formatar(totais.produzido)}</span>
+              <span className="rotulo-kpi">Produzido (un)</span>
+            </div>
+            <div className="kpi">
+              <span className="valor-kpi">{formatar(totais.perdido)}</span>
+              <span className="rotulo-kpi">Perdido (un)</span>
+            </div>
+            <div className="kpi">
+              <span className="valor-kpi">{formatar(totais.perdidoQuilos)}</span>
+              <span className="rotulo-kpi">Perdido (kg)</span>
+            </div>
+          </div>
+
+          <GraficoBarras
+            titulo="Perda por dia da semana"
+            descricao="Percentual, não volume — sábado produz mais que segunda, e sem a taxa a comparação seria injusta. Toque numa barra para ver os números."
+            barras={porDia}
+            vazio="Ainda não há produção registrada neste recorte."
+          />
+
+          <GraficoBarras
+            titulo="Perda por semana do mês"
+            descricao="Pega efeito de salário, feriado e data comemorativa no movimento."
+            barras={porSemana}
+            vazio="Ainda não há produção registrada neste recorte."
+          />
+
+          <GraficoBarras
+            titulo="Produtos que mais desperdiçam"
+            descricao="Só itens com pelo menos 20 unidades produzidas no período — abaixo disso a porcentagem é ruído, não padrão."
+            barras={porProduto}
+            vazio="Nenhum produto com produção suficiente para comparar ainda."
+          />
+        </>
+      )}
+
       <div className="cartao-insights">
         <div className="cabecalho-insights">
-          <h3>✨ Insights do catálogo (IA)</h3>
-          <button type="button" className="secundario" disabled={statusInsights === "carregando"} onClick={gerarInsights}>
-            {statusInsights === "carregando" ? "Analisando..." : insights ? "Gerar de novo" : "Gerar insights com IA"}
+          <h3>✨ Insights e melhorias (IA)</h3>
+          <button
+            type="button"
+            className="secundario"
+            disabled={statusInsights === "carregando"}
+            onClick={gerarInsights}
+          >
+            {statusInsights === "carregando" ? "Analisando..." : insights ? "Gerar de novo" : "Analisar"}
           </button>
         </div>
         <p className="nota-rodape">
-          Analisa o histórico dos últimos ~60 dias para apontar produtos que estão sobrando (perda por
-          sobra alta), produtos ativos parados há muito tempo, ou outros padrões úteis. Sempre
-          informativo — nunca pausa produto nem altera o cadastro sozinho, só o operador decide.
+          Lê os mesmos números da tela — inclusive os padrões por dia e por semana — e aponta o que
+          está fora da curva e o que dá para fazer a respeito. Sempre informativo: nunca altera
+          cadastro nem cronograma sozinho.
         </p>
         {mensagemInsights && (
-          <p className={statusInsights === "erro" ? "erro-conversao" : "nota-rodape"} role={statusInsights === "erro" ? "alert" : undefined}>
+          <p
+            className={statusInsights === "erro" ? "erro-conversao" : "nota-rodape"}
+            role={statusInsights === "erro" ? "alert" : undefined}
+          >
             {mensagemInsights}
           </p>
         )}
@@ -114,73 +248,10 @@ export function TelaAnalises({ produtos, planos, perdas }: TelaAnalisesProps) {
           </ul>
         )}
       </div>
-
-      <h3>Volume de produção por dia da semana</h3>
-      <div className="barras">
-        {volumePorDiaOrdenado.map((v) => (
-          <div key={v.diaDaSemana} className="linha-barra">
-            <span className="rotulo-barra">{rotuloDoDia(v.diaDaSemana)}</span>
-            <div className="trilho-barra">
-              <div className="barra" style={{ width: `${(v.totalPlanejado / maiorVolume) * 100}%` }} />
-            </div>
-            <span className="valor-barra">{v.totalPlanejado} un</span>
-          </div>
-        ))}
-      </div>
-
-      <h3>Taxa de perda por produto</h3>
-      <div className="tabela-scroll">
-        <table className="tabela-simples">
-          <thead>
-            <tr>
-              <th>Produto</th>
-              <th>Produzido (un)</th>
-              <th>Perdido (un)</th>
-              <th>Perdido (kg)</th>
-              <th>Perda %</th>
-            </tr>
-          </thead>
-          <tbody>
-            {taxas.length === 0 && (
-              <tr><td colSpan={5} className="vazio">Sem dados de perda ainda.</td></tr>
-            )}
-            {taxas.slice(0, 30).map((t) => (
-              <tr key={t.codigoPdv}>
-                <td>{t.nomeProduto}</td>
-                <td>{t.totalProduzido}</td>
-                <td>{t.totalPerdido}</td>
-                <td>{t.totalPerdidoQuilos} kg</td>
-                <td className={t.perdaPercentual >= 15 ? "perda-alta" : t.perdaPercentual > 0 ? "perda-media" : ""}>
-                  {t.perdaPercentual}%
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <h3>Picos de perda por dia da semana</h3>
-      <div className="tabela-scroll">
-        <table className="tabela-simples">
-          <thead>
-            <tr>
-              <th>Dia</th>
-              <th>Perda % média</th>
-            </tr>
-          </thead>
-          <tbody>
-            {picos.length === 0 && (
-              <tr><td colSpan={2} className="vazio">Sem dados suficientes ainda.</td></tr>
-            )}
-            {picos.slice(0, 7).map((p) => (
-              <tr key={p.diaDaSemana}>
-                <td>{rotuloDoDia(p.diaDaSemana)}</td>
-                <td className={p.perdaPercentualMedia >= 15 ? "perda-alta" : ""}>{p.perdaPercentualMedia}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
+}
+
+function formatar(valor: number): string {
+  return valor.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 }

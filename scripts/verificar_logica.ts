@@ -49,6 +49,14 @@ import {
   type FornadaPronta,
 } from "../src/types/fornada";
 import { consolidarProducao, itensParaLoja, quantidadeDaLoja } from "../src/lib/consolidacao";
+import {
+  calcularTotais,
+  perdaPorDiaDaSemana,
+  perdaPorSemanaDoMes,
+  recortar,
+  semanaDoMes,
+  topProdutosPorPerda,
+} from "../src/lib/analises";
 import { base64DoDataUrl, ErroImpressao, LIMITE_BASE64_BYTES } from "../src/types/impressao";
 
 let falhas = 0;
@@ -1156,6 +1164,322 @@ const perdas: RegistroPerda[] = [
     ehPedidoDiario({ ...diario, tipo: undefined }),
     "pedido anterior ao campo `tipo` continua contando como diário"
   );
+}
+
+// ---------------------------------------------------------------
+// Caso 17: painel de análises (src/lib/analises.ts)
+//
+// O painel existe para responder "que dia da semana desperdiça mais?".
+// Um erro aqui não trava o app — ele mostra um número plausível e errado,
+// e o dono do negócio muda o cronograma com base nele. Por isso os casos
+// abaixo cobrem principalmente as decisões silenciosas: o que NÃO entra
+// na conta e quando a resposta certa é "não sei" em vez de zero.
+// ---------------------------------------------------------------
+{
+  const HOJE = "2026-08-26"; // quarta-feira
+
+  const biscoito: Produto = {
+    codigoPdv: 300,
+    nome: "BISCOITO DE QUEIJO",
+    categoria: "BISCOITOS",
+    unidadeProducao: "un",
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+    pesoMedioUnitarioGramas: 25,
+  };
+
+  const catalogo: Produto[] = [paoFrances, biscoito];
+
+  function plano(
+    id: string,
+    data: string,
+    diaDaSemana: PlanoDeProducaoDiario["diaDaSemana"],
+    itens: { codigoPdv: number; quantidadeUnidades: number }[],
+    status: PlanoDeProducaoDiario["status"] = "confirmado"
+  ): PlanoDeProducaoDiario {
+    return {
+      id,
+      data,
+      diaDaSemana,
+      status,
+      criadoPor: "teste",
+      criadoEm: `${data}T05:00:00Z`,
+      sessoes: [{ id: `${id}-s1`, categoria: "PÃES E ROSCAS", itens }],
+    };
+  }
+
+  function perda(
+    id: string,
+    data: string,
+    diaDaSemana: PlanoDeProducaoDiario["diaDaSemana"],
+    codigoPdv: number,
+    unidades: number,
+    extra: Partial<RegistroPerda> = {}
+  ): RegistroPerda {
+    return {
+      id,
+      codigoPdv,
+      planoDeProducaoId: "plano",
+      data,
+      diaDaSemana,
+      quantidadeQuilos: unidades * 0.05,
+      pesoUnitarioGramasInformado: 50,
+      quantidadeUnidadesEstimada: unidades,
+      motivo: "sobra_nao_vendida",
+      registradoPor: "teste",
+      registradoEm: `${data}T20:00:00Z`,
+      lojaId: "MATRIZ",
+      ...extra,
+    };
+  }
+
+  // --- semanaDoMes: bordas do bloco de 7 dias corridos ---
+  afirmar(semanaDoMes("2026-08-01") === 1, "dia 1 cai na 1ª semana");
+  afirmar(semanaDoMes("2026-08-07") === 1, "dia 7 ainda é 1ª semana (bloco fechado em 7)");
+  afirmar(semanaDoMes("2026-08-08") === 2, "dia 8 abre a 2ª semana");
+  afirmar(semanaDoMes("2026-08-28") === 4, "dia 28 fecha a 4ª semana");
+  afirmar(semanaDoMes("2026-08-29") === 5, "dia 29 abre a 5ª semana");
+  afirmar(
+    semanaDoMes("2026-08-31") === 5,
+    "dia 31 continua na 5ª — o mês nunca gera uma 6ª barra"
+  );
+
+  // --- Janela de período: inclui hoje, exclui o dia que caiu fora ---
+  {
+    const planos = [
+      plano("p-hoje", HOJE, "quarta", [{ codigoPdv: 112, quantidadeUnidades: 100 }]),
+      // 7 dias antes de hoje: com janela de 7, este JÁ está fora (0..6).
+      plano("p-antigo", "2026-08-19", "quarta", [{ codigoPdv: 112, quantidadeUnidades: 100 }]),
+    ];
+    const recorte = recortar(catalogo, planos, [], HOJE, { dias: 7 });
+    afirmar(
+      calcularTotais(recorte).produzido === 100,
+      `janela de 7 dias pega hoje e exclui o 7º dia atrás (obtido: ${calcularTotais(recorte).produzido})`
+    );
+
+    const recorte30 = recortar(catalogo, planos, [], HOJE, { dias: 30 });
+    afirmar(calcularTotais(recorte30).produzido === 200, "janela de 30 dias alcança os dois planos");
+  }
+
+  // --- Rascunho e produção não realizada não entram no denominador ---
+  {
+    const rascunho = plano("p-rascunho", HOJE, "quarta", [{ codigoPdv: 112, quantidadeUnidades: 999 }], "rascunho");
+    const confirmado = plano("p-ok", HOJE, "quarta", [
+      { codigoPdv: 112, quantidadeUnidades: 100 },
+      { codigoPdv: 300, quantidadeUnidades: 80 },
+    ]);
+    const comNaoProduzido: PlanoDeProducaoDiario = {
+      ...confirmado,
+      producaoRealizada: {
+        confirmadoPor: "teste",
+        confirmadoEm: `${HOJE}T12:00:00Z`,
+        codigosNaoProduzidos: [300],
+      },
+    };
+
+    const soRascunho = recortar(catalogo, [rascunho], [], HOJE, { dias: 30 });
+    afirmar(
+      calcularTotais(soRascunho).produzido === 0,
+      "cronograma em rascunho não conta como produção"
+    );
+
+    const comFalha = recortar(catalogo, [comNaoProduzido], [], HOJE, { dias: 30 });
+    afirmar(
+      calcularTotais(comFalha).produzido === 100,
+      `item marcado como não produzido sai do denominador (obtido: ${calcularTotais(comFalha).produzido})`
+    );
+  }
+
+  // --- taxaPerda é null (e não 0) quando não houve produção ---
+  {
+    const semProducao = recortar(catalogo, [], [perda("x1", HOJE, "quarta", 112, 10)], HOJE, { dias: 30 });
+    const totais = calcularTotais(semProducao);
+    afirmar(
+      totais.taxaPerda === null,
+      "sem produção no recorte, a taxa é null — 0% seria afirmar que não se desperdiça"
+    );
+    afirmar(totais.perdido === 10, "a perda continua sendo somada mesmo sem denominador");
+  }
+
+  // --- Perda anulada nunca entra em conta nenhuma ---
+  {
+    const planos = [plano("p1", HOJE, "quarta", [{ codigoPdv: 112, quantidadeUnidades: 100 }])];
+    const perdas = [
+      perda("boa", HOJE, "quarta", 112, 10),
+      perda("erro", HOJE, "quarta", 112, 1000, {
+        cancelada: true,
+        canceladaPor: "matriz",
+        canceladaEm: `${HOJE}T21:00:00Z`,
+      }),
+    ];
+    const recorte = recortar(catalogo, planos, perdas, HOJE, { dias: 30 });
+    const totais = calcularTotais(recorte);
+    afirmar(
+      totais.perdido === 10 && totais.taxaPerda === 10,
+      `lançamento anulado fica fora da taxa (obtido: ${totais.perdido} un, ${totais.taxaPerda}%)`
+    );
+  }
+
+  // --- O filtro de loja recorta as PERDAS, nunca os PLANOS ---
+  // Produção é sempre da matriz. Se o filtro de filial recortasse os planos,
+  // o denominador iria a zero e a taxa da filial apareceria como "—" para
+  // sempre — exatamente o número que o dono do negócio quer ver.
+  {
+    const planos = [plano("p1", HOJE, "quarta", [{ codigoPdv: 112, quantidadeUnidades: 200 }])];
+    const perdas = [
+      perda("m", HOJE, "quarta", 112, 10, { lojaId: "MATRIZ" }),
+      perda("f", HOJE, "quarta", 112, 30, { lojaId: "FILIAL_ARTHUR_BERNARDES" }),
+    ];
+
+    const soFilial = recortar(catalogo, planos, perdas, HOJE, {
+      dias: 30,
+      lojaId: "FILIAL_ARTHUR_BERNARDES",
+    });
+    const totais = calcularTotais(soFilial);
+    afirmar(
+      totais.produzido === 200,
+      `filtro de filial preserva o denominador da matriz (obtido: ${totais.produzido})`
+    );
+    afirmar(
+      totais.perdido === 30 && totais.taxaPerda === 15,
+      `filtro de filial isola a perda da filial: 30/200 = 15% (obtido: ${totais.taxaPerda}%)`
+    );
+
+    const semFiltro = calcularTotais(recortar(catalogo, planos, perdas, HOJE, { dias: 30 }));
+    afirmar(semFiltro.perdido === 40, "sem filtro de loja, as perdas das três lojas somam");
+  }
+
+  // --- Perda sem lojaId (registro anterior às filiais) conta como matriz ---
+  {
+    const planos = [plano("p1", HOJE, "quarta", [{ codigoPdv: 112, quantidadeUnidades: 100 }])];
+    const antiga = perda("antiga", HOJE, "quarta", 112, 10, { lojaId: undefined });
+    const comoMatriz = recortar(catalogo, planos, [antiga], HOJE, { dias: 30, lojaId: "MATRIZ" });
+    afirmar(
+      calcularTotais(comoMatriz).perdido === 10,
+      "registro sem loja (antes das filiais) é lido como matriz"
+    );
+    const naFilial = recortar(catalogo, planos, [antiga], HOJE, {
+      dias: 30,
+      lojaId: "FILIAL_ARTHUR_BERNARDES",
+    });
+    afirmar(calcularTotais(naFilial).perdido === 0, "e não aparece no recorte de uma filial");
+  }
+
+  // --- Filtro de categoria vale para os dois lados da conta ---
+  {
+    const planos = [
+      plano("p1", HOJE, "quarta", [
+        { codigoPdv: 112, quantidadeUnidades: 100 }, // PÃES E ROSCAS
+        { codigoPdv: 300, quantidadeUnidades: 100 }, // BISCOITOS
+      ]),
+    ];
+    const perdas = [
+      perda("a", HOJE, "quarta", 112, 5),
+      perda("b", HOJE, "quarta", 300, 40),
+    ];
+    const soBiscoito = recortar(catalogo, planos, perdas, HOJE, { dias: 30, categoria: "BISCOITOS" });
+    const totais = calcularTotais(soBiscoito);
+    afirmar(
+      totais.produzido === 100 && totais.perdido === 40,
+      `categoria recorta produção E perda (obtido: ${totais.produzido} / ${totais.perdido})`
+    );
+    afirmar(totais.taxaPerda === 40, "e a taxa fecha com o próprio denominador da categoria");
+  }
+
+  // --- Comparação entre dias é por PERCENTUAL, não por volume ---
+  // Sábado produz muito mais que segunda; sem a taxa, sábado apareceria
+  // sempre como o pior dia só por ser o maior.
+  {
+    const planos = [
+      plano("seg", "2026-08-24", "segunda", [{ codigoPdv: 112, quantidadeUnidades: 100 }]),
+      plano("sab", "2026-08-22", "sabado", [{ codigoPdv: 112, quantidadeUnidades: 1000 }]),
+    ];
+    const perdas = [
+      perda("ps", "2026-08-24", "segunda", 112, 20), // 20%
+      perda("pb", "2026-08-22", "sabado", 112, 50), // 5%, porém o dobro em volume
+    ];
+    const barras = perdaPorDiaDaSemana(recortar(catalogo, planos, perdas, HOJE, { dias: 30 }));
+    const segunda = barras.find((b) => b.rotulo === "Segunda")!;
+    const sabado = barras.find((b) => b.rotulo === "Sábado")!;
+    afirmar(
+      segunda.valor === 20 && sabado.valor === 5,
+      `taxa por dia: segunda 20%, sábado 5% (obtido: ${segunda.valor}% / ${sabado.valor}%)`
+    );
+    afirmar(
+      (segunda.valor ?? 0) > (sabado.valor ?? 0) && segunda.perdido < sabado.perdido,
+      "o dia pior em taxa é o menor em volume — é este o padrão que o gráfico precisa mostrar"
+    );
+    afirmar(barras.length === 7, "os sete dias sempre aparecem, mesmo sem movimento");
+    const terca = barras.find((b) => b.rotulo === "Terça")!;
+    afirmar(terca.valor === null, "dia sem produção fica null (barra vazia), não 0%");
+  }
+
+  // --- Semana do mês: só as semanas com movimento viram barra ---
+  {
+    const planos = [
+      plano("s1", "2026-08-03", "segunda", [{ codigoPdv: 112, quantidadeUnidades: 100 }]),
+      plano("s3", "2026-08-17", "segunda", [{ codigoPdv: 112, quantidadeUnidades: 100 }]),
+    ];
+    const perdas = [perda("x", "2026-08-17", "segunda", 112, 25)];
+    const barras = perdaPorSemanaDoMes(recortar(catalogo, planos, perdas, HOJE, { dias: 30 }));
+    afirmar(barras.length === 2, `só semanas com movimento viram barra (obtido: ${barras.length})`);
+    afirmar(
+      barras.find((b) => b.rotulo === "3ª semana")?.valor === 25,
+      "3ª semana: 25 de 100 = 25%"
+    );
+    afirmar(barras.find((b) => b.rotulo === "1ª semana")?.valor === 0, "1ª semana produziu e não perdeu: 0%");
+  }
+
+  // --- Top produtos: o mínimo de 20 unidades corta o ruído ---
+  {
+    const planos = [
+      plano("p1", HOJE, "quarta", [
+        { codigoPdv: 112, quantidadeUnidades: 100 }, // volume bom
+        { codigoPdv: 300, quantidadeUnidades: 3 }, // amostra pequena
+      ]),
+    ];
+    const perdas = [
+      perda("a", HOJE, "quarta", 112, 10), // 10%
+      perda("b", HOJE, "quarta", 300, 1), // 33% — porém sobre 3 unidades
+    ];
+    const top = topProdutosPorPerda(recortar(catalogo, planos, perdas, HOJE, { dias: 30 }));
+    afirmar(
+      top.length === 1 && top[0].rotulo === "PÃO FRANCÊS",
+      `item com menos de 20 un produzidas não entra no ranking (obtido: ${top.map((t) => t.rotulo).join(", ")})`
+    );
+
+    // Com produção suficiente, o mesmo item entra e ordena por taxa.
+    const planosMaiores = [
+      plano("p2", HOJE, "quarta", [
+        { codigoPdv: 112, quantidadeUnidades: 100 },
+        { codigoPdv: 300, quantidadeUnidades: 50 },
+      ]),
+    ];
+    const perdasMaiores = [
+      perda("a", HOJE, "quarta", 112, 10), // 10%
+      perda("b", HOJE, "quarta", 300, 15), // 30%
+    ];
+    const ranking = topProdutosPorPerda(recortar(catalogo, planosMaiores, perdasMaiores, HOJE, { dias: 30 }));
+    afirmar(
+      ranking.length === 2 && ranking[0].rotulo === "BISCOITO DE QUEIJO",
+      "ranking ordena por taxa, do pior para o melhor"
+    );
+    afirmar(
+      topProdutosPorPerda(recortar(catalogo, planosMaiores, perdasMaiores, HOJE, { dias: 30 }), 1).length === 1,
+      "o limite de quantidade do ranking é respeitado"
+    );
+  }
+
+  // --- Perda de produto sem produção registrada não vira barra de 100% ---
+  {
+    const planos = [plano("p1", HOJE, "quarta", [{ codigoPdv: 112, quantidadeUnidades: 100 }])];
+    const perdas = [perda("órfã", HOJE, "quarta", 300, 40)]; // biscoito não foi produzido
+    const top = topProdutosPorPerda(recortar(catalogo, planos, perdas, HOJE, { dias: 30 }));
+    afirmar(
+      top.every((b) => b.rotulo !== "BISCOITO DE QUEIJO"),
+      "perda sem produção no recorte não entra no ranking (evitaria uma barra de taxa infinita)"
+    );
+  }
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

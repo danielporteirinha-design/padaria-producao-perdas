@@ -928,6 +928,77 @@ Enquanto a `CHAVE_VAPID` estiver vazia, o app não quebra: a tela da filial
 mostra "avisos ainda não configurados" e as fornadas continuam aparecendo
 ao abrir o app.
 
+## Painel de análises (ago/2026)
+
+A pergunta que o painel existe para responder: **existe padrão de perda por
+dia da semana ou por semana do mês?** Se terça desperdiça o dobro de sexta,
+o cronograma de terça está errado — e isso é dinheiro que dá para parar de
+jogar fora sem cortar nada da operação.
+
+### Um filtro só, no topo, valendo para tudo
+
+Período (7/30/90 dias), loja e categoria são aplicados **uma vez** em
+`recortar()` (`src/lib/analises.ts`), e o mesmo recorte alimenta os números,
+os três gráficos **e** o resumo mandado para a IA. Se cada bloco filtrasse
+por conta própria, a IA acabaria comentando dados que não estão na tela — e
+o operador não teria como saber qual dos dois estava errado.
+
+### O filtro de loja recorta as perdas, nunca os planos
+
+Produção é sempre da matriz; não existe plano de filial. Filtrar a produção
+por uma filial devolveria vazio, o denominador da taxa iria a zero e a
+resposta viraria "—" justamente para quem quer ver o número. Por isso a loja
+recorta só as **perdas** e o denominador segue sendo a produção da matriz.
+Registro de perda anterior às filiais (sem `lojaId`) é lido como matriz.
+
+### Percentual, não volume
+
+Os três gráficos comparam **taxa**. Sábado produz muito mais que segunda:
+em volume absoluto, sábado seria sempre o pior dia sem que isso significasse
+desperdício pior. Nos casos de verificação isso está fixado explicitamente —
+segunda com 20% e sábado com 5%, sendo sábado o maior em unidades perdidas.
+
+### Quando a resposta certa é "não sei"
+
+`taxaPerda` é `null`, e não `0`, quando não houve produção no recorte: 0%
+afirmaria que não se desperdiça naquele dia, quando o que houve foi ausência
+de dado. Na tela isso vira "—" e uma barra vazia. Pela mesma razão, o ranking
+de produtos exige **20 unidades produzidas** no período — 1 perdida de 3
+produzidas dá 33%, e isso é ruído, não padrão — e produto com perda mas sem
+produção registrada no recorte fica fora (senão viraria uma barra de taxa
+infinita).
+
+### Gráficos em HTML/CSS, sem biblioteca
+
+O pacote já carrega o Firebase e o app roda em celular com internet ruim;
+uma biblioteca de gráficos custaria mais que toda a tela para desenhar
+retângulos. Em HTML as barras já são responsivas, o texto quebra sozinho e o
+leitor de tela lê o conteúdo. Barra **deitada** porque "Segunda-feira" e
+"PÃO DE QUEIJO CONGELADO" não cabem embaixo de uma coluna em tela de celular,
+e o rótulo vai em até duas linhas em vez de ser cortado — o catálogo tem
+itens que começam igual, e "PÃO DE QUEIJ…" deixaria de dizer de quem é a
+barra.
+
+O valor vai escrito em **todas** as barras, contra a recomendação usual de
+deixar o resto no tooltip: aquela recomendação pressupõe mouse. Aqui é dedo
+em tela, e número que só aparece no hover simplesmente não existe para este
+operador. Uma série por gráfico, então nenhuma legenda (o título já diz o
+que é) e uma cor só — colorir cada barra por tamanho codificaria duas vezes
+a mesma informação que o comprimento já dá. A escala vai até o maior valor,
+não até 100%: taxas vivem entre 2% e 15%, e uma escala fixa em 100 deixaria
+todas as barras rentes a zero, escondendo exatamente a diferença que
+interessa. Percentual sempre em formato brasileiro, com uma casa decimal —
+duas casas numa taxa de perda são precisão falsa e deixam a coluna de
+números irregular.
+
+### O que a IA recebe a mais
+
+Junto do resumo por produto vão os padrões por dia da semana e por semana do
+mês, a taxa geral e a janela em dias. Sem isso a IA só consegue falar de item
+isolado, e a pergunta do dono do negócio é sobre padrão: qual dia está fora
+da curva, de quantos pontos percentuais é a diferença contra a média dos
+outros dias, e qual ajuste de cronograma fazer.
+
 ## Estrutura
 
 ```
@@ -968,7 +1039,8 @@ producao-perdas/
       producaoRealizada.ts                # Separa o que foi planejado do que realmente saiu do forno
       gerarImagemLista.ts                # Gera a(s) fita(s) PNG de impressão (canvas, 576px, linhas de corte, assinatura por sessão) — divide em mais de uma imagem se passar do limite seguro de altura
       sugestaoProducao.ts                 # Cliente da sugestão de produção por IA — monta histórico, chama /api
-      insightsCatalogo.ts                  # Cliente dos insights de catálogo por IA — monta resumo, chama /api
+      insightsCatalogo.ts                  # Cliente dos insights de catálogo por IA — monta resumo + padrões, chama /api
+      analises.ts                           # Agregações do painel: recorte único (período/loja/categoria), taxa por dia, por semana do mês, ranking de produtos
       importarProdutos.ts                  # Mapeamento planilha -> Produto (uso no navegador), já filtra fora de escopo
     components/
       Icones.tsx               # Ícones SVG inline (só traço, currentColor) — sem CDN
@@ -988,7 +1060,8 @@ producao-perdas/
       TelaCadastroProdutos.tsx  # Catálogo (com edição inline), categorização, validade, peso médio, limpeza de escopo
       TelaPerdas.tsx             # Lançamento de perda de fim de expediente (considera a janela de validade)
       TelaRegistroPerda.tsx       # Peso perdido (kg) + peso unitário informado + fornada de origem, com preview ao vivo
-      TelaAnalises.tsx              # Taxa de perda, volume por dia, picos de perda + insights de catálogo por IA
+      GraficoBarras.tsx             # Barras horizontais em HTML/CSS (sem biblioteca), valor escrito em toda barra, toque mostra o detalhe
+      TelaAnalises.tsx              # Painel: filtro único no topo, 4 números-cabeçalho, 3 gráficos + insights por IA
       ExportarFita.tsx             # Preview + Compartilhar/Baixar da(s) fita(s) de impressão (botão manual por imagem quando divide em mais de uma)
   scripts/
     importar_produtos.py         # Import em lote (rodado contra Produtos_881.xlsx), já filtra fora de escopo
@@ -1009,7 +1082,7 @@ producao-perdas/
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (118 asserções)
+npm run verificar   # roda scripts/verificar_logica.ts (149 asserções)
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```

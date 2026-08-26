@@ -51,6 +51,7 @@ interface ResumoProdutoParaInsights {
 
 interface RequisicaoInsights {
   resumo?: ResumoProdutoParaInsights[];
+  padroes?: PadroesParaInsights;
 }
 
 // Tipagem mínima e deliberadamente solta (evita depender de @types/node ou
@@ -73,7 +74,7 @@ export default async function handler(req: any, res: any) {
   }
 
   const corpo: RequisicaoInsights = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body ?? {};
-  const { resumo } = corpo;
+  const { resumo, padroes } = corpo;
 
   if (!Array.isArray(resumo) || resumo.length === 0) {
     res.status(400).json({ erro: "Payload inválido — informe resumo (lista de produtos)." });
@@ -81,7 +82,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const prompt = montarPrompt(resumo);
+    const prompt = montarPrompt(resumo, padroes);
 
     const respostaGemini = await chamarGeminiComRetry(
       `https://generativelanguage.googleapis.com/v1beta/models/${MODELO_GEMINI}:generateContent?key=${apiKey}`,
@@ -125,10 +126,36 @@ export default async function handler(req: any, res: any) {
   }
 }
 
-function montarPrompt(resumo: ResumoProdutoParaInsights[]): string {
+/**
+ * Padrões calculados na tela e mandados junto (ago/2026). Sem eles a IA
+ * só fala de produto isolado; a pergunta do dono do negócio é sobre
+ * PADRÃO — que dia, que semana, e o que fazer a respeito.
+ */
+interface PadroesParaInsights {
+  porDiaDaSemana?: { rotulo: string; valor: number | null; produzido: number; perdido: number }[];
+  porSemanaDoMes?: { rotulo: string; valor: number | null; produzido: number; perdido: number }[];
+  taxaGeral?: number | null;
+  janelaDias?: number;
+}
+
+function montarPrompt(resumo: ResumoProdutoParaInsights[], padroes?: PadroesParaInsights): string {
+  const blocoPadroes = padroes
+    ? `
+Padrões agregados que o dono do negócio está vendo na tela agora (janela de ${padroes.janelaDias ?? 30} dias,
+taxa de perda geral do período: ${padroes.taxaGeral ?? "sem produção"}%):
+
+Taxa de perda por DIA DA SEMANA (valor = percentual; null = sem produção naquele dia):
+${JSON.stringify(padroes.porDiaDaSemana ?? [])}
+
+Taxa de perda por SEMANA DO MÊS (1ª = dias 1-7, 2ª = 8-14, e assim por diante):
+${JSON.stringify(padroes.porSemanaDoMes ?? [])}
+`
+    : "";
+
   return `Você é um analista de operações de uma padaria de bairro, revisando o catálogo de produtos e o
 histórico recente de produção/perda para apontar padrões que ajudem o dono do negócio a decidir melhor
 quanto produzir de cada item.
+${blocoPadroes}
 
 Resumo por produto (últimos ~60 dias, só produtos ativos das categorias de produção):
 ${JSON.stringify(resumo)}
@@ -143,11 +170,17 @@ Tarefa: gere até 8 insights ACIONÁVEIS e ESPECÍFICOS (cite o produto pelo nom
    produzido além do que vende, sobrando e sendo descartado.
 2) Produtos ativos com diasDesdeUltimaProducao alto (ex.: acima de 14) — ativos no cronograma mas parados
    há muito tempo, o que pode ser esquecimento ou falta de demanda que ninguém formalizou.
-3) Qualquer outro padrão útil visível nos números (ex.: taxa de perda geral muito alta num produto mesmo
+3) DIA DA SEMANA ou SEMANA DO MÊS fora da curva, quando esses dados vierem. Se um dia desperdiça
+   bem mais que os outros, o cronograma daquele dia provavelmente está superdimensionado — diga qual dia,
+   a diferença em pontos percentuais, e sugira o ajuste (ex.: "reduzir a produção de terça em X%").
+   Compare sempre com a média dos outros dias, nunca com o dia de menor perda isoladamente.
+4) Qualquer outro padrão útil visível nos números (ex.: taxa de perda geral muito alta num produto mesmo
    sem ser por sobra, uma categoria inteira com comportamento fora do padrão).
 
 Regras: baseie-se SOMENTE nos números fornecidos, nunca invente causa raiz (sugira hipóteses com
-linguagem de possibilidade, não certeza). Se os dados forem insuficientes para qualquer insight
+linguagem de possibilidade, não certeza). Sempre que apontar um problema, diga o que fazer a respeito —
+um insight sem próximo passo não ajuda quem está tocando a padaria. Ignore dia ou semana com pouquíssima
+produção: percentual sobre base pequena é ruído, não padrão. Se os dados forem insuficientes para qualquer insight
 confiável, retorne uma lista vazia — não force insight artificial. Classifique cada insight como
 "atencao" (pede alguma ação ou decisão do dono) ou "informativo" (só contexto útil, sem ação urgente).
 

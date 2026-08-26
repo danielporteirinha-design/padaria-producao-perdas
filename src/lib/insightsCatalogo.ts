@@ -133,13 +133,32 @@ export function construirResumoParaInsights(
  * Lança ErroInsightsCatalogo com mensagem apresentável em qualquer cenário de
  * falha — a tela de Análises nunca trava nem finge sucesso.
  */
-export async function buscarInsightsCatalogo(resumo: ResumoProdutoParaInsights[]): Promise<InsightCatalogo[]> {
+/**
+ * Padrões que a tela está mostrando, mandados junto do resumo por
+ * produto. Sem eles a IA só consegue falar de item isolado — e a pergunta
+ * do dono do negócio é sobre PADRÃO: que dia da semana, que semana do
+ * mês, e o que fazer a respeito.
+ *
+ * É também o que garante que a IA comente exatamente o recorte que está
+ * na tela, e não um período diferente do que o operador está vendo.
+ */
+export interface PadroesParaInsights {
+  porDiaDaSemana: { rotulo: string; valor: number | null; produzido: number; perdido: number }[];
+  porSemanaDoMes: { rotulo: string; valor: number | null; produzido: number; perdido: number }[];
+  taxaGeral: number | null;
+  janelaDias: number;
+}
+
+export async function buscarInsightsCatalogo(
+  resumo: ResumoProdutoParaInsights[],
+  padroes?: PadroesParaInsights
+): Promise<InsightCatalogo[]> {
   let resposta: Response;
   try {
     resposta = await fetch("/api/insights-catalogo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ resumo }),
+      body: JSON.stringify({ resumo, padroes }),
     });
   } catch {
     throw new ErroInsightsCatalogo("Não foi possível conectar ao serviço de insights. Verifique sua internet.");

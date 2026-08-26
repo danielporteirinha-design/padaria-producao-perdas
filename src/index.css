@@ -215,8 +215,6 @@ button.link {
 .erro-conversao { color: var(--cor-alerta); font-size: 13.5px; margin: 0; }
 
 .barras { display: flex; flex-direction: column; gap: 8px; }
-.linha-barra { display: grid; grid-template-columns: 90px 1fr 50px; align-items: center; gap: 10px; font-size: 13px; }
-.trilho-barra { background: var(--cor-borda); border-radius: 999px; height: 14px; overflow: hidden; }
 .barra { background: var(--cor-acento); height: 100%; border-radius: 999px; }
 .valor-barra { text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -934,3 +932,124 @@ button.perigo:hover { background: #822525; }
 .texto-avisos { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
 .texto-avisos span { font-size: 14px; color: var(--cor-texto-suave); }
 .acoes-avisos { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* ---------------------------------------------------------------
+   Painel de análises (TelaAnalises.tsx + GraficoBarras.tsx).
+
+   Barras em HTML, sem biblioteca de gráfico: o pacote já carrega o
+   Firebase, e uma biblioteca custaria mais que a tela inteira para
+   desenhar retângulos. Uma cor só por gráfico — colorir cada barra por
+   tamanho codificaria duas vezes o que o comprimento já diz.
+   --------------------------------------------------------------- */
+
+.filtros-analise { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.grupo-periodo {
+  display: flex;
+  gap: 4px;
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 4px;
+}
+.grupo-periodo button {
+  flex: 1;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  padding: 9px 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--cor-texto-suave);
+  cursor: pointer;
+}
+.grupo-periodo button.ativa { background: var(--cor-acento); color: var(--cor-acento-texto); }
+.grupo-selects { display: flex; gap: 8px; }
+.grupo-selects select { flex: 1; min-width: 0; }
+
+/* Quatro números-cabeçalho, não um gráfico de quatro barras. */
+.linha-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.kpi {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.valor-kpi { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.rotulo-kpi { font-size: 13px; color: var(--cor-texto-suave); }
+
+.cartao-grafico {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.cartao-grafico h4 { margin: 0 0 4px; font-size: 16px; }
+.cartao-grafico .nota-rodape { margin: 0 0 12px; }
+
+.barras { display: flex; flex-direction: column; gap: 6px; }
+.linha-barra {
+  display: grid;
+  grid-template-columns: minmax(72px, 34%) 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 4px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--cor-texto);
+}
+.linha-barra.aberta { background: var(--cor-fundo); }
+/* Nome em até duas linhas, e não cortado numa só: "COXINHA DE FRANGO" e
+   "PÃO DE QUEIJO CONGELADO" não cabem numa linha de celular, e o catálogo
+   tem itens que começam igual — cortar viraria "PÃO DE QUEIJ…" para mais
+   de um produto, e aí a barra deixa de dizer de quem ela é. */
+.rotulo-barra {
+  font-size: 14px;
+  line-height: 1.25;
+  text-align: left;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+/* Trilha um passo fora da superfície — recessiva, nunca disputando com o dado. */
+.trilha-barra { display: block; background: var(--cor-fundo); border-radius: 4px; height: 18px; }
+.preenchimento-barra {
+  display: block;
+  height: 100%;
+  background: var(--cor-acento);
+  /* Reta na base, arredondada só na ponta do dado. */
+  border-radius: 0 4px 4px 0;
+  min-width: 3px;
+  transition: width 0.2s ease;
+}
+.valor-barra {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 46px;
+  text-align: right;
+}
+.detalhe-barra {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  background: var(--cor-fundo);
+  border-radius: var(--raio);
+  font-size: 14px;
+  color: var(--cor-texto-suave);
+}
