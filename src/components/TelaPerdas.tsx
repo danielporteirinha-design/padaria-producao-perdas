@@ -18,10 +18,12 @@ import type { Produto } from "../types/produto";
 import type { RegistroPerda } from "../types/perda";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import { TelaRegistroPerda } from "./TelaRegistroPerda";
-import { calcularCandidatosPerda } from "../lib/janelaValidade";
+import { calcularCandidatosPerda, type ProdutoComOrigens } from "../lib/janelaValidade";
+import { CATEGORIAS_PRODUCAO } from "../lib/categorias";
+import { IconeSeta } from "./Icones";
 import { LOJA_MATRIZ, nomeDaLoja, type Loja } from "../lib/lojas";
 import { IconeLixeira } from "./Icones";
-import { dataDeHojeIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
+import { dataDeHojeIso, diaDaSemanaDeData, rotuloDoDia } from "../lib/data";
 
 interface TelaPerdasProps {
   produtos: Produto[];
@@ -48,6 +50,28 @@ interface TelaPerdasProps {
   }) => Promise<void>;
 }
 
+/** Um produto na lista de escolha, com o contexto de fornada quando existe. */
+function BotaoProdutoPerda({
+  candidato,
+  onEscolher,
+}: {
+  candidato: ProdutoComOrigens;
+  onEscolher: (codigoPdv: number) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="item-produto"
+      onClick={() => onEscolher(candidato.produto.codigoPdv)}
+    >
+      <span>{candidato.produto.nome}</span>
+      {candidato.origens.length > 1 && (
+        <span className="tag-pendente">{candidato.origens.length} fornadas</span>
+      )}
+    </button>
+  );
+}
+
 export function TelaPerdas({
   produtos,
   planos,
@@ -58,6 +82,8 @@ export function TelaPerdas({
   onAnularPerda,
   onRegistrarPerda,
 }: TelaPerdasProps) {
+  const [buscaProduto, setBuscaProduto] = useState("");
+  const [categoriasAbertas, setCategoriasAbertas] = useState<Record<string, boolean>>({});
   const [perdaAAnular, setPerdaAAnular] = useState<RegistroPerda | null>(null);
   const [motivoAnulacao, setMotivoAnulacao] = useState("");
   const [anulando, setAnulando] = useState(false);
@@ -103,6 +129,12 @@ export function TelaPerdas({
 
   const candidatoSelecionado = candidatos.find((c) => c.produto.codigoPdv === codigoSelecionado);
 
+  const resultadosDaBusca = useMemo(() => {
+    const termo = buscaProduto.trim().toUpperCase();
+    if (!termo) return [];
+    return candidatos.filter((c) => c.produto.nome.toUpperCase().includes(termo)).slice(0, 40);
+  }, [candidatos, buscaProduto]);
+
   return (
     <div className="tela">
       <h2>Registro de Perdas</h2>
@@ -127,28 +159,62 @@ export function TelaPerdas({
         </p>
       ) : !candidatoSelecionado ? (
         <div>
-          <p>Selecione o produto para lançar a perda:</p>
-          <div className="grade-produtos">
-            {candidatos.map((c) => (
-              <button
-                key={c.produto.codigoPdv}
-                type="button"
-                className="cartao-produto"
-                onClick={() => setCodigoSelecionado(c.produto.codigoPdv)}
-              >
-                {c.produto.nome}
-                {c.origens.length > 1 && (
-                  <span className="tag-pendente"> · {c.origens.length} fornadas válidas</span>
-                )}
-                {c.origens.length === 0 && (
-                  <span className="tag-sem-fornada">
-                    {" "}
-                    · última produção {formatarDataBr(c.ultimaProducao)}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+          {/* Antes era uma grade com TODOS os candidatos de uma vez — na
+              filial isso dava 86 blocos empilhados e ninguém achava nada.
+              Busca no topo para quem sabe o nome, acordeão por categoria
+              para quem está procurando; o mesmo padrão da tela de Pedido,
+              que o operador já conhece (ago/2026). */}
+          <input
+            className="campo-busca"
+            placeholder="Buscar produto pelo nome..."
+            value={buscaProduto}
+            onChange={(e) => setBuscaProduto(e.target.value)}
+          />
+
+          {buscaProduto.trim() ? (
+            <>
+              {resultadosDaBusca.length === 0 ? (
+                <p className="nota-rodape">Nenhum produto encontrado com "{buscaProduto}".</p>
+              ) : (
+                <div className="lista-produtos-perda">
+                  {resultadosDaBusca.map((c) => (
+                    <BotaoProdutoPerda key={c.produto.codigoPdv} candidato={c} onEscolher={setCodigoSelecionado} />
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            CATEGORIAS_PRODUCAO.map((categoria) => {
+              const daCategoria = candidatos.filter((c) => c.produto.categoria === categoria.chave);
+              if (daCategoria.length === 0) return null;
+              const aberto = !!categoriasAbertas[categoria.chave];
+              return (
+                <div key={categoria.chave} className={`acordeao-sessao ${aberto ? "aberta" : ""}`}>
+                  <div className="cabecalho-sessao">
+                    <button
+                      type="button"
+                      className="abrir-sessao"
+                      aria-expanded={aberto}
+                      onClick={() =>
+                        setCategoriasAbertas((a) => ({ ...a, [categoria.chave]: !a[categoria.chave] }))
+                      }
+                    >
+                      <span className="nome-sessao">{categoria.rotulo}</span>
+                      <span className="contagem-itens">{daCategoria.length}</span>
+                      <IconeSeta className="seta-sessao" />
+                    </button>
+                  </div>
+                  {aberto && (
+                    <div className="corpo-sessao">
+                      {daCategoria.map((c) => (
+                        <BotaoProdutoPerda key={c.produto.codigoPdv} candidato={c} onEscolher={setCodigoSelecionado} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       ) : (
         <div>

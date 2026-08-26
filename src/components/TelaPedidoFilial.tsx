@@ -23,7 +23,7 @@ import { useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { ItemPlanoProducao } from "../types/producao";
 import type { PedidoFilial } from "../types/pedido";
-import { idDoPedido, totalDoPedido } from "../types/pedido";
+import { idDoPedido } from "../types/pedido";
 import type { Loja } from "../lib/lojas";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
@@ -151,15 +151,13 @@ export function TelaPedidoFilial({
       {jaEnviado ? (
         <p className="cartao-producao-confirmada">
           <span>
-            <IconeConfere tamanho={16} /> <strong>Pedido enviado</strong> — {totalDoPedido(pedidoExistente)}{" "}
-            unidades. Dá para ajustar e enviar de novo até a matriz fechar a produção.
+            <IconeConfere tamanho={16} /> <strong>Pedido enviado</strong> ·{" "}
+            {pedidoExistente?.itens.length ?? 0} produtos
           </span>
         </p>
       ) : (
         <p className="callout-inline">
-          Informe quanto vai precisar de cada item e toque em <strong>Enviar pedido</strong> no fim.
-          Enquanto não enviar, a matriz vê a sua loja como "aguardando" e a quantidade não entra na
-          produção.
+          Enquanto não enviar, a matriz vê "aguardando" e a quantidade não entra na produção.
         </p>
       )}
 

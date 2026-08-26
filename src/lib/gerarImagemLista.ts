@@ -38,6 +38,8 @@ const ALTURA_CABECALHO_BLOCO = 210;
 const ALTURA_RODAPE_BLOCO = 30;
 const ALTURA_RODAPE_BLOCO_ASSINADO = 56;
 export const ALTURA_FAIXA_CORTE = 90;
+/** Faixa preta com o nome do destino, entre os pedidos de duas lojas. */
+export const ALTURA_MARCADOR_DESTINO = 120;
 /** Rodapé no fim da imagem inteira (contagem de sessões/itens + nome do app). */
 export const ALTURA_RODAPE_FINAL = 36;
 
@@ -59,6 +61,15 @@ export class ErroGeracaoImagem extends Error {}
 export interface BlocoSessaoImpressao {
   rotuloSessao: string;
   itens: ItemPlanoProducao[];
+  /**
+   * Marca o início do documento de OUTRO destino dentro da mesma bobina.
+   * Quando as duas filiais são impressas de uma vez, a separação entre
+   * elas precisa ser inconfundível — misturar o pedido de uma loja com o
+   * da outra na hora de despachar é erro caro e silencioso. A faixa de
+   * corte comum entre categorias não basta: é a mesma que aparece
+   * dezenas de vezes na mesma fita.
+   */
+  inicioDeDestino?: string;
 }
 
 export interface DadosImpressaoFita {
@@ -89,6 +100,7 @@ interface LinhaItem {
 export interface BlocoComputado {
   rotuloSessao: string;
   linhas: LinhaItem[];
+  inicioDeDestino?: string;
   /** Altura que este bloco ocupa sozinho (cabeçalho + linhas + rodapé), sem faixa de corte. */
   altura: number;
 }
@@ -109,8 +121,10 @@ export function computarBlocos(
   const alturaRodape = temAssinatura ? ALTURA_RODAPE_BLOCO_ASSINADO : ALTURA_RODAPE_BLOCO;
   return sessoes.map((sessao) => {
     const linhas = linhasDoBloco(sessao.itens, produtos);
-    const altura = ALTURA_CABECALHO_BLOCO + Math.max(linhas.length, 1) * ALTURA_LINHA + alturaRodape;
-    return { rotuloSessao: sessao.rotuloSessao, linhas, altura };
+    const alturaMarcador = sessao.inicioDeDestino ? ALTURA_MARCADOR_DESTINO : 0;
+    const altura =
+      alturaMarcador + ALTURA_CABECALHO_BLOCO + Math.max(linhas.length, 1) * ALTURA_LINHA + alturaRodape;
+    return { rotuloSessao: sessao.rotuloSessao, linhas, altura, inicioDeDestino: sessao.inicioDeDestino };
   });
 }
 
@@ -174,6 +188,9 @@ function desenharCanvasParaGrupo(
 
   let y = 0;
   grupo.forEach((bloco, indice) => {
+    if (bloco.inicioDeDestino) {
+      y = desenharMarcadorDeDestino(ctx, y, bloco.inicioDeDestino);
+    }
     y = desenharBloco(ctx, y, bloco.rotuloSessao, bloco.linhas, titulo, dataFormatada, montadoPor);
     if (indice < grupo.length - 1) {
       y = desenharFaixaDeCorte(ctx, y);
@@ -304,6 +321,47 @@ function desenharBloco(
   }
 
   return y;
+}
+
+/**
+ * Faixa preta cheia com o nome da loja, marcando onde começa o pedido de
+ * OUTRO destino na mesma bobina. É deliberadamente mais pesada que a
+ * faixa de corte comum: quem despacha percorre metros de papel e precisa
+ * enxergar essa transição sem procurar.
+ */
+function desenharMarcadorDeDestino(
+  ctx: CanvasRenderingContext2D,
+  yInicial: number,
+  nomeDestino: string
+): number {
+  let y = yInicial + 14;
+
+  // Tesoura de corte, mais larga que a comum, avisando que aqui separa.
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([14, 8]);
+  ctx.beginPath();
+  ctx.moveTo(0, y);
+  ctx.lineTo(LARGURA_PX, y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineWidth = 1;
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#000000";
+  ctx.font = "20px system-ui, -apple-system, sans-serif";
+  ctx.fillText("✂", LARGURA_PX / 2, y - 12);
+  y += 16;
+
+  const alturaFaixa = 54;
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, y, LARGURA_PX, alturaFaixa);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 26px system-ui, -apple-system, sans-serif";
+  ctx.fillText(nomeDestino.toUpperCase(), LARGURA_PX / 2, y + 14);
+  y += alturaFaixa;
+
+  return yInicial + ALTURA_MARCADOR_DESTINO;
 }
 
 /** Linha pontilhada + ícone de tesoura, marcando onde cortar entre duas sessões. */

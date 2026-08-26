@@ -118,15 +118,39 @@ export function TelaCronograma({
     return new Map(consolidado.map((c) => [c.codigoPdv, c.totalUnidades]));
   }, [planoDeHoje, pedidos, hojeIso]);
 
-  /** Um documento de produção + um romaneio por filial que enviou pedido. */
+  const filiaisQueEnviaram = useMemo(
+    () => FILIAIS.filter((f) => pedidosDoDia.some((p) => p.lojaId === f.id && p.status === "enviado")),
+    [pedidosDoDia]
+  );
+
+  /**
+   * Documentos disponíveis. Com MAIS DE UMA filial, entra a opção de sair
+   * tudo numa bobina só (ago/2026): quem despacha não quer gerar,
+   * compartilhar e imprimir duas vezes. A separação entre as lojas é
+   * marcada por uma faixa preta com o nome da loja — ver
+   * desenharMarcadorDeDestino em gerarImagemLista.ts.
+   */
   const documentos = useMemo(() => {
     const lista = [{ id: "producao", rotulo: "Produção" }];
-    for (const filial of FILIAIS) {
-      const enviou = pedidosDoDia.some((p) => p.lojaId === filial.id && p.status === "enviado");
-      if (enviou) lista.push({ id: filial.id, rotulo: filial.nomeCurto });
+    if (filiaisQueEnviaram.length > 1) lista.push({ id: "todas-filiais", rotulo: "Filiais (todas)" });
+    for (const filial of filiaisQueEnviaram) {
+      lista.push({ id: filial.id, rotulo: filial.nomeCurto });
     }
     return lista;
-  }, [pedidosDoDia]);
+  }, [filiaisQueEnviaram]);
+
+  /** Todas as filiais numa bobina só, cada uma aberta por uma faixa preta. */
+  function blocosDeTodasAsFiliais(consolidado: ItemConsolidado[]) {
+    return filiaisQueEnviaram.flatMap((filial) =>
+      blocosDeSeparacao(consolidado, filial.id).map((bloco, indice) => ({
+        ...bloco,
+        // Só o PRIMEIRO bloco de cada loja carrega o marcador — os
+        // seguintes são categorias da mesma loja, separadas pela faixa
+        // de corte comum.
+        inicioDeDestino: indice === 0 ? filial.nome : undefined,
+      }))
+    );
+  }
 
   function blocosDeSeparacao(consolidado: ItemConsolidado[], lojaId: string) {
     // Agrupado por categoria também no romaneio: quem separa anda pela
@@ -330,7 +354,17 @@ export function TelaCronograma({
           ))}
         </div>
 
-        {documentoSelecionado.id === "producao" ? (
+        {documentoSelecionado.id === "todas-filiais" ? (
+          <ExportarFita
+            blocos={blocosDeTodasAsFiliais(consolidado)}
+            titulo="Separação por loja"
+            instrucao="As duas filiais numa bobina só. Cada loja começa depois de uma faixa preta com o nome dela — corte ali para separar os pedidos antes de despachar."
+            dataFormatada={dataFormatada}
+            produtos={produtos}
+            montadoPor={planoConfirmado.criadoPor}
+            nomeArquivoBase={`separacao-filiais-${dataAlvo}`}
+          />
+        ) : documentoSelecionado.id === "producao" ? (
           <ExportarFita
             blocos={blocosProducao}
             titulo="Lista de Produção"
@@ -442,8 +476,8 @@ export function TelaCronograma({
 
       {planoExistente && (
         <p className="callout-inline">
-          Já existe um plano {planoExistente.status === "confirmado" ? "confirmado" : "salvo"} para esta data —
-          os itens abaixo foram carregados dele. Salvar de novo atualiza a lista.
+          {planoExistente.status === "confirmado" ? "Plano confirmado" : "Rascunho salvo"} — carregado
+          abaixo.
           {planoExistente.status === "confirmado" && (
             <>
               {" "}
@@ -455,7 +489,7 @@ export function TelaCronograma({
                   setFase("exportar");
                 }}
               >
-                reimprimir esta lista sem mexer nela
+                reimprimir
               </button>
             </>
           )}

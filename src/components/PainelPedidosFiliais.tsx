@@ -13,10 +13,23 @@
  * não ter o que pedir, e travar o cronograma da padaria inteira por causa
  * de uma loja seria pior. O que se garante é que ninguém confirme sem ter
  * visto que faltava alguém.
+ *
+ * O desenho é de CARTÃO por loja, não de linha de tabela (ago/2026): a
+ * primeira versão era compacta demais e exigia leitura para entender o
+ * estado. Cada loja agora ocupa um bloco com cor de fundo própria — verde
+ * ou âmbar — e o estado se lê pela cor, antes de ler a palavra.
  */
 
 import type { PedidoFilial } from "../types/pedido";
-import { totalDoPedido } from "../types/pedido";
+
+/**
+ * Quantas VARIEDADES o pedido tem, não quantas unidades (ago/2026): "195
+ * unidades" não diz nada a quem confere de relance, enquanto "12
+ * produtos" dá a dimensão da lista que vai chegar para separar.
+ */
+function variedadesDoPedido(pedido: PedidoFilial | undefined): number {
+  return pedido?.itens.length ?? 0;
+}
 import { FILIAIS } from "../lib/lojas";
 import { IconeAtencao, IconeConfere } from "./Icones";
 
@@ -34,26 +47,23 @@ export function PainelPedidosFiliais({ pedidos, data }: PainelPedidosFiliaisProp
   const faltando = situacao.filter((s) => !s.enviado);
 
   return (
-    <div className={`painel-pedidos ${faltando.length > 0 ? "aguardando" : "completo"}`}>
-      <div className="linhas-pedidos">
-        {situacao.map(({ filial, pedido, enviado }) => (
-          <div key={filial.id} className="linha-pedido-filial">
-            <span className="icone-status">
-              {enviado ? <IconeConfere tamanho={16} /> : <IconeAtencao tamanho={16} />}
-            </span>
-            <span className="nome-filial">{filial.nomeCurto}</span>
+    <div className="painel-pedidos">
+      {situacao.map(({ filial, pedido, enviado }) => (
+        <div key={filial.id} className={`cartao-filial ${enviado ? "enviado" : "aguardando"}`}>
+          <span className="icone-status">
+            {enviado ? <IconeConfere tamanho={22} /> : <IconeAtencao tamanho={22} />}
+          </span>
+          <span className="dados-filial">
+            <strong>{filial.nomeCurto}</strong>
             <span className="status-filial">
-              {enviado ? `enviado · ${totalDoPedido(pedido)} un` : "aguardando"}
+              {enviado ? `${variedadesDoPedido(pedido)} produtos` : "não enviou o pedido"}
             </span>
-          </div>
-        ))}
-      </div>
+          </span>
+        </div>
+      ))}
       {faltando.length > 0 && (
         <p className="nota-rodape">
-          {faltando.length === 1
-            ? `${faltando[0].filial.nomeCurto} ainda não enviou o pedido.`
-            : "Nenhuma filial enviou o pedido ainda."}{" "}
-          Se confirmar a produção agora, a quantidade dessa loja não entra.
+          Confirmando agora, o que falta não entra na produção.
         </p>
       )}
     </div>

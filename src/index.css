@@ -700,24 +700,33 @@ button.perigo:hover { background: #822525; }
    enviaram — a mesma linguagem de cor do resto do app.
    --------------------------------------------------------------- */
 
-.painel-pedidos {
-  border: 1px solid var(--cor-borda);
-  border-left-width: 4px;
-  border-radius: var(--raio);
+.painel-pedidos { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+
+/* Um cartão por loja, com a cor dizendo o estado antes da palavra. */
+.cartao-filial {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   padding: 12px 14px;
-  margin-bottom: 16px;
-  background: var(--cor-superficie);
+  border-radius: var(--raio);
+  border: 1px solid var(--cor-borda);
+  border-left-width: 5px;
 }
-.painel-pedidos.aguardando { border-left-color: var(--cor-alerta); background: var(--cor-alerta-fundo); }
-.painel-pedidos.completo { border-left-color: var(--cor-sucesso); background: var(--cor-sucesso-fundo); }
-.linhas-pedidos { display: flex; flex-direction: column; gap: 6px; }
-.linha-pedido-filial { display: flex; align-items: center; gap: 8px; font-size: 15px; }
-.linha-pedido-filial .icone-status { display: flex; flex-shrink: 0; }
-.painel-pedidos.completo .icone-status { color: var(--cor-sucesso); }
-.painel-pedidos.aguardando .icone-status { color: var(--cor-alerta); }
-.nome-filial { flex: 1; font-weight: 600; }
-.status-filial { color: var(--cor-texto-suave); font-size: 14px; white-space: nowrap; }
-.painel-pedidos .nota-rodape { margin: 10px 0 0; }
+.cartao-filial.enviado {
+  background: var(--cor-sucesso-fundo);
+  border-left-color: var(--cor-sucesso);
+}
+.cartao-filial.aguardando {
+  background: var(--cor-alerta-fundo);
+  border-left-color: var(--cor-alerta);
+}
+.cartao-filial .icone-status { display: flex; flex-shrink: 0; }
+.cartao-filial.enviado .icone-status { color: var(--cor-sucesso); }
+.cartao-filial.aguardando .icone-status { color: var(--cor-alerta); }
+.dados-filial { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.dados-filial strong { font-size: 16px; }
+.status-filial { font-size: 14px; color: var(--cor-texto-suave); }
+.painel-pedidos .nota-rodape { margin: 2px 0 0; }
 
 .resumo-pedido { margin-top: 16px; }
 .largura-cheia { width: 100%; margin-top: 12px; }
@@ -749,4 +758,18 @@ button.perigo:hover { background: #822525; }
 .seletor-documento button.ativa {
   background: var(--cor-acento);
   color: var(--cor-acento-texto);
+}
+
+/* Lista de produtos na escolha de perda — resultado de busca fora do
+   acordeão. Mesma linha do acordeão para o olho não trocar de padrão. */
+.lista-produtos-perda { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.lista-produtos-perda .item-produto,
+.corpo-sessao .item-produto .tag-pendente { width: auto; }
+.item-produto .tag-pendente {
+  font-size: 12px;
+  color: var(--cor-alerta);
+  background: var(--cor-alerta-fundo);
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
 }

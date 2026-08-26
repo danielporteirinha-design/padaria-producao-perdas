@@ -715,6 +715,35 @@ dia sem cronograma confirmado, a matriz ficava sem conseguir corrigir uma
 perda digitada errada. O aviso virou um bloco dentro da tela, e o
 histórico agora aparece sempre.
 
+### Ajustes de legibilidade — segunda rodada (ago/2026)
+
+Todos vieram de uso real, e o padrão que se repetiu vale registrar:
+**texto explicativo na tela vira ruído depois que o operador aprende o
+fluxo.** O que ensina na primeira semana atrapalha na segunda.
+
+| O que estava | O que virou | Por quê |
+|---|---|---|
+| "Já existe um plano confirmado para esta data — os itens abaixo foram carregados dele. Salvar de novo atualiza a lista. / reimprimir esta lista sem mexer nela" | "Plano confirmado — carregado abaixo. / reimprimir" | Ninguém lê o parágrafo na décima vez |
+| "Pedido enviado — 195 unidades. Dá para ajustar e enviar de novo até a matriz fechar a produção." | "Pedido enviado · 12 produtos" | Idem |
+| Painel de pedidos em linhas compactas, com total de unidades | Um cartão por loja, verde ou âmbar, com a **variedade** de produtos | "195 unidades" não diz nada de relance; "12 produtos" dá a dimensão da lista que vai chegar. E o estado passou a se ler pela cor, antes da palavra |
+| Grade com todos os produtos candidatos a perda | Busca no topo + acordeão por categoria | Na filial eram 86 blocos empilhados. O acordeão é o mesmo padrão da tela de Pedido, que o operador já conhece |
+
+### Duas filiais numa bobina só
+
+Com mais de uma filial tendo enviado pedido, aparece a opção **"Filiais
+(todas)"**: um único documento com os pedidos das duas, para não gerar,
+compartilhar e imprimir duas vezes.
+
+A separação entre as lojas **não pode ser a faixa de corte comum** — essa
+mesma faixa aparece dezenas de vezes na mesma fita, entre categorias.
+`desenharMarcadorDeDestino` desenha um traço pontilhado mais grosso e uma
+**faixa preta cheia com o nome da loja**, em caixa alta. Quem despacha
+percorre metros de papel e precisa enxergar essa transição sem procurar;
+misturar o pedido de uma loja com o da outra é um erro caro e silencioso.
+
+Só o primeiro bloco de cada loja carrega o marcador — os seguintes são
+categorias da mesma loja e continuam com a faixa de corte comum.
+
 ## Estrutura
 
 ```
