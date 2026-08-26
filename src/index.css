@@ -450,3 +450,7 @@ button.perigo:hover { background: #822525; }
 .texto-aviso-perda { display: flex; flex-direction: column; gap: 2px; min-width: 200px; flex: 1; }
 .texto-aviso-perda span { font-size: 14px; color: var(--cor-texto-suave); }
 .acoes-aviso-perda { display: flex; align-items: center; gap: 10px; }
+
+/* Produto sem fornada dentro do prazo, mas já produzido antes — a perda é
+   permitida assim mesmo (ver janelaValidade.ts). */
+.tag-sem-fornada { font-size: 12px; color: var(--cor-texto-suave); }

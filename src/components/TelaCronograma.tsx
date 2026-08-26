@@ -137,6 +137,10 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
     setItensPorGrupo((atual) => ({ ...atual, [chaveGrupo]: [] }));
     setSessaoAConfirmarLimpeza(null);
     setProdutoAtivo(null);
+    // Recolhe o acordeão depois de limpar: a sessão ficou vazia, e deixá-la
+    // aberta com a lista inteira de produtos disponíveis empurra as outras
+    // sessões para fora da tela justamente quando o operador vai remontar.
+    setExpandido((atual) => ({ ...atual, [chaveGrupo]: false }));
   }
 
   function nomeDoProduto(codigoPdv: number): string {

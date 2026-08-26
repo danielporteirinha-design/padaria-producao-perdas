@@ -7,13 +7,26 @@
  * dia, mas uma confeitaria pode ter sido produzida até 5 dias atrás e só
  * agora ser descartada.
  *
- * Este módulo calcula, para uma data de referência (normalmente hoje),
- * quais itens de quais planos de produção CONFIRMADOS ainda estão dentro
- * do próprio prazo de validade (Produto.prazoValidadeDias) — esses são os
- * candidatos válidos para lançamento de perda naquele dia. Um produto
- * pode aparecer com mais de uma origem (mais de um dia de produção ainda
- * válido); nesse caso a tela de Perdas deixa o operador escolher, com o
- * lote mais antigo pré-selecionado (FIFO — descarta-se o mais velho primeiro).
+ * IMPORTANTE — perda NÃO é sinônimo de vencimento (correção conceitual
+ * pedida pela padaria, ago/2026): um produto pode sair do forno queimado
+ * ou fora do padrão e virar perda no mesmo dia em que foi feito, sem ter
+ * nada a ver com prazo de validade. O prazo serve só para dizer de QUAL
+ * fornada a perda provavelmente veio, nunca para autorizar ou barrar o
+ * lançamento.
+ *
+ * Por isso este módulo devolve duas camadas:
+ *
+ * 1. `origens` — fornadas confirmadas ainda dentro do prazo do produto
+ *    (inclui a fornada de HOJE, `diasDesdeProducao === 0`). O operador
+ *    escolhe qual, com a mais antiga pré-selecionada (FIFO).
+ * 2. Produtos que já foram produzidos em alguma ocasião mas não têm
+ *    nenhuma fornada dentro do prazo agora: entram na lista com `origens`
+ *    vazio. A perda é registrada sem fornada de origem identificada.
+ *
+ * A única trava é a regra do dono do negócio: para lançar perda, o
+ * produto precisa ter sido produzido em alguma oportunidade. Produto que
+ * nunca apareceu em cronograma confirmado não entra na lista — não existe
+ * fornada nenhuma da qual ele pudesse ter vindo.
  *
  * Produto sem prazoValidadeDias cadastrado cai no comportamento anterior,
  * mais restritivo (só considera o plano do próprio dia) — nunca inventa
@@ -34,8 +47,15 @@ export interface OrigemCandidata {
 
 export interface ProdutoComOrigens {
   produto: Produto;
-  /** Ordenadas da mais antiga para a mais nova (FIFO — descartar a mais antiga primeiro). */
+  /**
+   * Fornadas ainda dentro do prazo, da mais antiga para a mais nova (FIFO).
+   * Pode vir VAZIO: o produto já foi produzido antes, mas nenhuma fornada
+   * está dentro do prazo hoje. A perda continua podendo ser lançada — só
+   * fica sem fornada de origem identificada.
+   */
   origens: OrigemCandidata[];
+  /** Data da fornada confirmada mais recente, mesmo fora do prazo. */
+  ultimaProducao: string;
 }
 
 export function calcularCandidatosPerda(
@@ -45,6 +65,9 @@ export function calcularCandidatosPerda(
 ): ProdutoComOrigens[] {
   const produtoPorCodigo = new Map(produtos.map((p) => [p.codigoPdv, p]));
   const origensPorProduto = new Map<number, OrigemCandidata[]>();
+  // Todo produto já produzido alguma vez entra aqui, mesmo fora do prazo —
+  // é o que autoriza o lançamento (regra: precisa ter sido produzido).
+  const ultimaProducaoPorProduto = new Map<number, string>();
 
   for (const plano of planos) {
     if (plano.status !== "confirmado") continue;
@@ -55,6 +78,11 @@ export function calcularCandidatosPerda(
       for (const item of sessao.itens) {
         const produto = produtoPorCodigo.get(item.codigoPdv);
         if (!produto) continue;
+
+        const anterior = ultimaProducaoPorProduto.get(item.codigoPdv);
+        if (!anterior || plano.data > anterior) {
+          ultimaProducaoPorProduto.set(item.codigoPdv, plano.data);
+        }
 
         const prazo = produto.prazoValidadeDias;
         const dentroDoPrazo = prazo && prazo > 0 ? diasDesdeProducao < prazo : diasDesdeProducao === 0;
@@ -71,12 +99,20 @@ export function calcularCandidatosPerda(
   }
 
   const resultado: ProdutoComOrigens[] = [];
-  for (const [codigoPdv, origens] of origensPorProduto) {
+  for (const [codigoPdv, ultimaProducao] of ultimaProducaoPorProduto) {
     const produto = produtoPorCodigo.get(codigoPdv);
     if (!produto) continue;
+    const origens = origensPorProduto.get(codigoPdv) ?? [];
     origens.sort((a, b) => b.diasDesdeProducao - a.diasDesdeProducao); // mais antigo primeiro
-    resultado.push({ produto, origens });
+    resultado.push({ produto, origens, ultimaProducao });
   }
 
-  return resultado.sort((a, b) => a.produto.nome.localeCompare(b.produto.nome, "pt-BR"));
+  // Produtos com fornada dentro do prazo primeiro — são o caso comum e
+  // ficam no topo; depois os que só têm produção mais antiga.
+  return resultado.sort((a, b) => {
+    const aTem = a.origens.length > 0;
+    const bTem = b.origens.length > 0;
+    if (aTem !== bTem) return aTem ? -1 : 1;
+    return a.produto.nome.localeCompare(b.produto.nome, "pt-BR");
+  });
 }

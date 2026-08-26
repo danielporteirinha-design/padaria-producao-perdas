@@ -35,11 +35,12 @@ inicial do documento de arquitetura:
 | Impressão | Normalmente UMA fita PNG com todas as sessões confirmadas, separadas por linha de corte (pontilhado + tesoura) — corta-se fisicamente após imprimir, um pedaço por quadro de aviso de cada setor. Se o cronograma do dia for grande demais para uma imagem só, divide automaticamente em mais de uma (ver seção "Fita de impressão" abaixo) |
 | Sugestão de produção | Botão "✨ Sugerir com IA" por categoria (Gemini) — sempre assistido: pré-preenche quantidades vazias com base no histórico, operador revisa/ajusta antes de confirmar |
 | Escopo do catálogo | Só as 5 categorias de produção — o catálogo importado do PDV tem ~19 categorias, a maioria revenda (mercearia, refrigerante, laticínio...), fora do escopo deste app (ago/2026: limpeza feita em Cadastro de Produtos → aba "Fora de escopo") |
-| Prazo de validade | Por produto (`Produto.prazoValidadeDias`, editável, sugerido por categoria) — uma perda lançada hoje nem sempre vem da produção de ontem (a etiqueta não traz data de fabricação isolada), então a tela de Perdas considera qualquer fornada confirmada ainda dentro do prazo do produto, não só a de hoje |
+| Prazo de validade | Por produto (`Produto.prazoValidadeDias`, editável, sugerido por categoria). Serve para identificar de QUAL fornada a perda veio — **nunca para autorizar ou barrar o lançamento** (ver "Perda não é vencimento" abaixo) |
 | Edição de cadastro | Nome, categoria, unidade, peso médio e prazo de validade são editáveis direto na tabela do Catálogo (edição inline por linha) — corrige erro de cadastro ou de importação sem precisar excluir e recriar o produto |
 | Limpar sessão | Botão "limpar esta sessão" por acordeão, com confirmação em dois toques. **Nunca existe um "limpar tudo" global** — um toque errado apagaria o cronograma inteiro montado no fim do expediente, sem desfazer |
 | Assinatura da fita | "Montado por" sai no rodapé de **cada sessão**, não uma vez só no fim: a fita é cortada e cada pedaço vai para o quadro de um setor — pedaço sem nome é pedaço sem responsável |
 | Perda no mesmo dia | Fornada queimada ou fora do padrão deve ser pesada e lançada no dia, nunca no dia seguinte. O app sempre aceitou isso; o que faltava era chamar o operador — ver "Perda no mesmo dia" abaixo |
+| Quem pode receber perda | Qualquer produto que já tenha sido produzido em **alguma** ocasião. Produto nunca produzido não entra (não existe fornada da qual pudesse ter vindo) |
 | Instalação | App instalável (PWA): ícone próprio na tela de início do celular e na área de trabalho do PC — ver seção "Instalar como app" abaixo |
 | Insights de catálogo | Botão "✨ Gerar insights com IA" em Análises (Gemini) — aponta produtos sobrando (perda por sobra alta), produtos ativos parados há muito tempo, ou outros padrões úteis; sempre informativo, nunca altera nada sozinho |
 
@@ -68,10 +69,11 @@ só agora ser descartada.
 - `src/lib/janelaValidade.ts` (`calcularCandidatosPerda`): módulo puro que,
   para uma data de referência, varre os planos de produção confirmados e
   identifica quais fornadas de cada produto ainda estão dentro do próprio
-  prazo de validade — essas são as candidatas a lançamento de perda
-  naquele dia. Produto sem `prazoValidadeDias` cadastrado cai no
-  comportamento anterior (só o plano do próprio dia), nunca inventa um
-  prazo que ninguém confirmou.
+  prazo — essas são as fornadas ATRIBUÍVEIS a uma perda naquele dia.
+  Produto sem `prazoValidadeDias` cadastrado só tem a fornada do próprio
+  dia como atribuível, nunca inventa um prazo que ninguém confirmou.
+  Atenção: estar fora do prazo **não impede** o lançamento — ver "Perda
+  não é vencimento" abaixo.
 - Quando um produto tem mais de uma fornada ainda válida, a tela de
   Perdas (`TelaPerdas.tsx`) mostra a contagem ("· N fornadas válidas") e
   `TelaRegistroPerda.tsx` exibe um seletor "Produzido em" com a fornada
@@ -220,6 +222,39 @@ fita incompleta). Em vez disso aparece um botão "Baixar imagem N de M"
 por imagem — cada download exige um clique de verdade do operador,
 garantido de funcionar em qualquer navegador.
 
+### Perda não é vencimento (ago/2026)
+
+Correção conceitual pedida pelo dono do negócio depois de topar com a
+mensagem *"Nenhum produto dentro do prazo de validade está disponível"*:
+
+> Produtos podem ficar prontos porém fora do padrão. No entanto, devem ser
+> lançados como perdas, mesmo que feitos no mesmo dia. Produtos
+> considerados como perda não necessariamente são os produtos que não
+> foram vendidos dentro do prazo de validade.
+
+O desenho anterior tratava o prazo de validade como **autorização** para
+lançar. Estava errado: um pão sai do forno queimado às 5h e é perda às 5h,
+sem nenhuma relação com validade.
+
+O prazo agora serve só para **atribuição** — dizer de qual fornada a perda
+provavelmente veio. `calcularCandidatosPerda` devolve duas camadas:
+
+| Situação | `origens` | O que acontece na tela |
+|---|---|---|
+| Tem fornada dentro do prazo | preenchido, FIFO | Operador escolhe a fornada (mais antiga pré-selecionada) |
+| Já produzido antes, nada no prazo | vazio | Lança mesmo assim, sem fornada de origem; o cartão mostra a data da última produção |
+| Nunca produzido | — | Não entra na lista |
+
+A única trava que restou é a regra do dono do negócio: para lançar perda, o
+produto precisa ter sido produzido em alguma oportunidade.
+
+**Armadilha corrigida junto:** `TelaRegistroPerda` tinha
+`podeSalvar = preview.ok && planoDeProducaoId !== ""`. Com a nova camada de
+produtos sem fornada atribuível, `planoDeProducaoId` é legitimamente vazio —
+o botão "Registrar perda" ficaria permanentemente desabilitado e a
+funcionalidade apareceria na tela sem funcionar. A fornada de origem só é
+exigida quando existe alguma para escolher.
+
 ### Perda no mesmo dia (ago/2026)
 
 Gargalo levantado pela padaria: uma fornada queimada ou fora do padrão
@@ -352,7 +387,7 @@ producao-perdas/
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (43 asserções)
+npm run verificar   # roda scripts/verificar_logica.ts (47 asserções)
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```

@@ -1,14 +1,16 @@
 /**
  * src/components/TelaPerdas.tsx
  * ---------------------------------------------------------------
- * Tela de fim de expediente: escolhe o produto, usa TelaRegistroPerda
- * (já com o cálculo kg -> unidades embutido) e mostra o histórico do dia.
+ * Escolhe o produto, usa TelaRegistroPerda (já com o cálculo kg ->
+ * unidades embutido) e mostra o histórico do dia. Serve tanto para o
+ * lançamento de fim de expediente quanto para uma perda no meio do dia —
+ * fornada queimada ou fora do padrão tem que ser lançada na hora.
  *
- * A lista de produtos disponível NÃO é só o plano de hoje — cada produto
- * tem seu próprio prazo de validade (ver src/lib/janelaValidade.ts), então
- * uma perda lançada hoje pode vir de uma fornada de vários dias atrás
- * (ex.: confeitaria dura 5 dias). Quando um produto tem mais de uma
- * fornada ainda válida, o operador escolhe qual — ver TelaRegistroPerda.
+ * Perda NÃO é sinônimo de vencimento: um produto pode sair do forno fora
+ * do padrão e virar perda no mesmo dia. Por isso a lista aqui traz todo
+ * produto que já foi produzido em alguma ocasião, e não só os que estão
+ * dentro do prazo — o prazo serve para identificar de qual fornada a
+ * perda veio, nunca para autorizar o lançamento (ver janelaValidade.ts).
  */
 
 import { useMemo, useState } from "react";
@@ -17,7 +19,7 @@ import type { RegistroPerda } from "../types/perda";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import { TelaRegistroPerda } from "./TelaRegistroPerda";
 import { calcularCandidatosPerda } from "../lib/janelaValidade";
-import { dataDeHojeIso, diaDaSemanaDeData, rotuloDoDia } from "../lib/data";
+import { dataDeHojeIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 
 interface TelaPerdasProps {
   produtos: Produto[];
@@ -53,10 +55,15 @@ export function TelaPerdas({ produtos, planos, perdas, operador, onRegistrarPerd
       <div className="tela">
         <h2>Registro de Perdas</h2>
         <p className="callout-inline">
-          Nenhum produto dentro do prazo de validade está disponível para lançar perda hoje
-          ({rotuloDoDia(diaDaSemana)}). Isso normalmente significa que ainda não há um cronograma
-          confirmado nos últimos dias — o Cronograma de hoje deveria ter sido montado ontem, no fim do
-          expediente.
+          Ainda não há nenhuma fornada confirmada no app, então não existe produção à qual atribuir
+          uma perda. Isso não tem relação com prazo de validade — assim que existir um cronograma
+          confirmado, qualquer item dele pode ser lançado como perda, inclusive no mesmo dia em que
+          foi produzido.
+          <br />
+          <br />
+          Se a padaria já produziu hoje ({rotuloDoDia(diaDaSemana)}) sem passar pelo app, vá em{" "}
+          <strong>Cronograma</strong> → <strong>planejar para outra data</strong>, escolha hoje,
+          registre o que foi produzido e confirme. Os itens passam a aparecer aqui.
         </p>
       </div>
     );
@@ -81,6 +88,12 @@ export function TelaPerdas({ produtos, planos, perdas, operador, onRegistrarPerd
                 {c.produto.nome}
                 {c.origens.length > 1 && (
                   <span className="tag-pendente"> · {c.origens.length} fornadas válidas</span>
+                )}
+                {c.origens.length === 0 && (
+                  <span className="tag-sem-fornada">
+                    {" "}
+                    · última produção {formatarDataBr(c.ultimaProducao)}
+                  </span>
                 )}
               </button>
             ))}

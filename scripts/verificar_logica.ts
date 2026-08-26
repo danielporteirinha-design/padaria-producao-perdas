@@ -166,9 +166,10 @@ const perdas: RegistroPerda[] = [
 }
 
 // ---------------------------------------------------------------
-// Caso 8: calcularCandidatosPerda — produto SEM prazoValidadeDias
-// cadastrado só aceita o plano do próprio dia (comportamento anterior,
-// mais restritivo — nunca inventa um prazo que ninguém confirmou).
+// Caso 8: calcularCandidatosPerda — produto SEM prazoValidadeDias.
+// Só a fornada do próprio dia é ATRIBUÍVEL (não inventa um prazo que
+// ninguém confirmou), mas o produto continua LANÇÁVEL se já foi produzido
+// antes: perda não é sinônimo de vencimento (revisão ago/2026).
 // ---------------------------------------------------------------
 {
   const paoSemValidade: Produto = { ...paoFrances, prazoValidadeDias: undefined };
@@ -189,10 +190,36 @@ const perdas: RegistroPerda[] = [
     "sem prazoValidadeDias: plano do próprio dia é aceito"
   );
 
+  // Regra revisada (ago/2026): perda NÃO é sinônimo de vencimento. A fornada
+  // de ontem, fora do prazo, deixa de ser ATRIBUÍVEL (origens vazio) mas o
+  // produto continua LANÇÁVEL, porque já foi produzido em alguma ocasião —
+  // um item pode sair fora do padrão e virar perda independentemente de prazo.
   const semValidadeOntem = calcularCandidatosPerda("2026-08-24", [paoSemValidade], [planoDeOntem]);
   afirmar(
-    semValidadeOntem.length === 0,
-    "sem prazoValidadeDias: plano de ontem é rejeitado (não pode inventar um prazo)"
+    semValidadeOntem.length === 1,
+    "produto já produzido antes continua lançável mesmo sem fornada no prazo"
+  );
+  afirmar(
+    semValidadeOntem[0].origens.length === 0,
+    "sem prazoValidadeDias: fornada de ontem não é atribuída (não inventa um prazo)"
+  );
+  afirmar(
+    semValidadeOntem[0].ultimaProducao === "2026-08-23",
+    `última produção aponta para a fornada real (obtido: ${semValidadeOntem[0].ultimaProducao})`
+  );
+
+  // A única trava que resta: produto que NUNCA foi produzido não entra.
+  const nuncaProduzido = calcularCandidatosPerda("2026-08-24", [paoSemValidade], []);
+  afirmar(
+    nuncaProduzido.length === 0,
+    "produto nunca produzido não pode receber perda (não existe fornada de origem)"
+  );
+
+  // Produtos com fornada no prazo vêm ANTES dos que só têm produção antiga.
+  const misturado = calcularCandidatosPerda("2026-08-24", [paoSemValidade], [planoDeHoje, planoDeOntem]);
+  afirmar(
+    misturado.length === 1 && misturado[0].origens.length === 1,
+    "fornada de hoje continua sendo atribuída quando existe"
   );
 }
 

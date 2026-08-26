@@ -29,7 +29,13 @@ const MOTIVOS: { valor: MotivoPerda; rotulo: string }[] = [
 
 interface TelaRegistroPerdaProps {
   produto: Produto;
-  /** Fornadas ainda dentro do prazo de validade, da mais antiga para a mais nova (ver janelaValidade.ts). */
+  /**
+   * Fornadas ainda dentro do prazo, da mais antiga para a mais nova (ver
+   * janelaValidade.ts). Pode vir VAZIO — o produto já foi produzido antes
+   * mas nenhuma fornada está dentro do prazo agora. Nesse caso a perda é
+   * registrada sem fornada de origem identificada, e não é bloqueada:
+   * perda não é sinônimo de vencimento.
+   */
   origens: OrigemCandidata[];
   registradoPor: string;
   onSalvar: (payload: {
@@ -75,7 +81,13 @@ export function TelaRegistroPerda({
     }
   }, [produto, quilos, pesoUnitario, quilosValidos, pesoValido]);
 
-  const podeSalvar = preview?.ok === true && planoDeProducaoId !== "";
+  // A fornada de origem só é obrigatória quando existe alguma para escolher.
+  // Produto já produzido antes, mas sem fornada dentro do prazo, é lançado
+  // sem vínculo de fornada — perda não é sinônimo de vencimento e não pode
+  // ficar bloqueada por não haver lote atribuível (ver janelaValidade.ts).
+  const exigeFornadaDeOrigem = origens.length > 0;
+  const podeSalvar =
+    preview?.ok === true && (!exigeFornadaDeOrigem || planoDeProducaoId !== "");
 
   function handleSalvar() {
     if (!podeSalvar || preview?.ok !== true) return;
@@ -94,6 +106,14 @@ export function TelaRegistroPerda({
   return (
     <div className="tela-registro-perda">
       <h2>{produto.nome}</h2>
+
+      {origens.length === 0 && (
+        <p className="callout-inline">
+          Nenhuma fornada deste produto está dentro do prazo hoje. A perda vai ser registrada mesmo
+          assim, sem fornada de origem identificada — as análises tratam esse caso à parte para não
+          distorcer a taxa de perda.
+        </p>
+      )}
 
       {origens.length > 1 && (
         <label>
