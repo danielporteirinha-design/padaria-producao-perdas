@@ -15,6 +15,12 @@ import {
   identificarPicosDePerda,
 } from "../src/lib/metricas";
 import { calcularCandidatosPerda } from "../src/lib/janelaValidade";
+import {
+  itensPlanejados,
+  naoFoiProduzido,
+  producaoFoiConfirmada,
+  unidadesProduzidas,
+} from "../src/lib/producaoRealizada";
 import { construirResumoParaInsights } from "../src/lib/insightsCatalogo";
 import { diasEntreDatas } from "../src/lib/data";
 import {
@@ -638,6 +644,109 @@ const perdas: RegistroPerda[] = [
   afirmar(
     typeof ALTURA_RODAPE_FINAL === "number" && ALTURA_RODAPE_FINAL > 0,
     "rodapé final tem altura fixa, independente de assinatura"
+  );
+}
+
+// ---------------------------------------------------------------
+// Caso 19: produção realizada × planejada (ago/2026). Na rotina da padaria
+// acontece de um item da lista simplesmente não sair. Antes o app tratava
+// plano como realidade, o que contaminava justamente a métrica que ele
+// existe para medir: taxa de perda = perdido ÷ produzido.
+// ---------------------------------------------------------------
+{
+  const planoBase: PlanoDeProducaoDiario = {
+    id: "plano-real",
+    data: "2026-08-20",
+    diaDaSemana: "quinta",
+    status: "confirmado",
+    criadoPor: "teste",
+    criadoEm: "2026-08-19T18:00:00Z",
+    sessoes: [
+      {
+        id: "s1",
+        categoria: "PÃES E ROSCAS",
+        itens: [
+          { codigoPdv: 112, quantidadeUnidades: 200 },
+          { codigoPdv: 999, quantidadeUnidades: 50 },
+        ],
+      },
+    ],
+  };
+
+  // Sem confirmação: tudo conta como produzido (comportamento anterior preservado).
+  afirmar(!producaoFoiConfirmada(planoBase), "plano sem confirmação é reconhecido como não confirmado");
+  afirmar(unidadesProduzidas(planoBase) === 250, `sem confirmação, conta o plano inteiro (obtido: ${unidadesProduzidas(planoBase)})`);
+
+  // Com confirmação dizendo que o 999 não saiu.
+  const planoConfirmado: PlanoDeProducaoDiario = {
+    ...planoBase,
+    producaoRealizada: {
+      confirmadoPor: "teste",
+      confirmadoEm: "2026-08-20T20:00:00Z",
+      codigosNaoProduzidos: [999],
+    },
+  };
+  afirmar(producaoFoiConfirmada(planoConfirmado), "plano com confirmação é reconhecido");
+  afirmar(naoFoiProduzido(planoConfirmado, 999), "item marcado como não produzido é reconhecido");
+  afirmar(!naoFoiProduzido(planoConfirmado, 112), "item que saiu continua contando como produzido");
+  afirmar(
+    unidadesProduzidas(planoConfirmado) === 200,
+    `item não produzido sai da conta (esperado 200, obtido: ${unidadesProduzidas(planoConfirmado)})`
+  );
+  afirmar(
+    itensPlanejados(planoConfirmado).length === 2,
+    "o PLANO não é reescrito — os 2 itens planejados continuam registrados"
+  );
+
+  // O efeito que motivou tudo isso: a taxa de perda muda de denominador.
+  const perdaDoDia: RegistroPerda[] = [
+    {
+      id: "perda-real",
+      codigoPdv: 112,
+      planoDeProducaoId: "plano-real",
+      data: "2026-08-20",
+      diaDaSemana: "quinta",
+      quantidadeQuilos: 1,
+      pesoUnitarioGramasInformado: 50,
+      quantidadeUnidadesEstimada: 20,
+      motivo: "queimado",
+      registradoPor: "teste",
+      registradoEm: "2026-08-20T20:00:00Z",
+    },
+  ];
+  const taxaSemConfirmar = calcularTaxaPerdaPorProduto([paoFrances], [planoBase], perdaDoDia);
+  const taxaConfirmada = calcularTaxaPerdaPorProduto([paoFrances], [planoConfirmado], perdaDoDia);
+  afirmar(
+    taxaSemConfirmar[0].perdaPercentual === 10 && taxaConfirmada[0].perdaPercentual === 10,
+    "produto que SAIU mantém a taxa (200 produzidas, 20 perdidas = 10%)"
+  );
+
+  // Caso extremo: nada saiu — a produção do dia é 0, não a lista inteira.
+  const nadaSaiu: PlanoDeProducaoDiario = {
+    ...planoBase,
+    producaoRealizada: {
+      confirmadoPor: "teste",
+      confirmadoEm: "2026-08-20T20:00:00Z",
+      codigosNaoProduzidos: [112, 999],
+    },
+  };
+  afirmar(unidadesProduzidas(nadaSaiu) === 0, "dia em que nada saiu conta produção 0");
+  const volumeNada = calcularVolumeProducaoPorDiaDaSemana([nadaSaiu]);
+  afirmar(
+    volumeNada[0].totalPlanejado === 0,
+    `volume do dia reflete o que saiu, não o que foi planejado (obtido: ${volumeNada[0].totalPlanejado})`
+  );
+
+  // Não se perde o que não foi produzido: o item cortado sai dos candidatos.
+  const produto999: Produto = { ...paoFrances, codigoPdv: 999, nome: "PAO TESTE 999", prazoValidadeDias: 5 };
+  const candidatos = calcularCandidatosPerda("2026-08-20", [paoFrances, produto999], [planoConfirmado]);
+  afirmar(
+    candidatos.some((c) => c.produto.codigoPdv === 112),
+    "produto que saiu do forno continua podendo receber perda"
+  );
+  afirmar(
+    !candidatos.some((c) => c.produto.codigoPdv === 999),
+    "produto que NÃO saiu do forno não pode receber perda (não existe fornada dele)"
   );
 }
 

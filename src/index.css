@@ -256,8 +256,19 @@ button.link {
   flex-direction: column;
   gap: 14px;
 }
-.tela-identificacao form { display: flex; gap: 8px; }
-.tela-identificacao input { flex: 1; }
+/* A tela original tinha um campo só (nome) e cabia numa linha. Com o
+   login por loja são dois campos + botão, então empilha em coluna — em
+   linha, no celular, os campos saíam da tela. */
+.tela-identificacao form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+.tela-identificacao input,
+.tela-identificacao select { width: 100%; }
+.tela-identificacao form button { width: 100%; margin-top: 4px; }
+.tela-identificacao .tabela-simples { text-align: left; margin: 4px 0; }
 
 .carregando { padding: 40px; text-align: center; color: var(--cor-texto-suave); }
 
@@ -454,3 +465,66 @@ button.perigo:hover { background: #822525; }
 /* Produto sem fornada dentro do prazo, mas já produzido antes — a perda é
    permitida assim mesmo (ver janelaValidade.ts). */
 .tag-sem-fornada { font-size: 12px; color: var(--cor-texto-suave); }
+
+/* ---------------------------------------------------------------
+   Confirmação do que realmente saiu do forno (ConfirmarProducao.tsx).
+   Fica no topo da tela de Perdas, no fechamento do dia.
+   --------------------------------------------------------------- */
+
+.cartao-confirmar-producao {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.cartao-confirmar-producao h3 { margin: 0 0 4px; }
+.cartao-confirmar-producao h4 {
+  margin: 14px 0 6px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cor-texto-suave);
+}
+.cartao-confirmar-producao > button.primario { width: 100%; margin-top: 14px; }
+
+/* Precisa sobrescrever o `label` global (coluna, 13px, semibold, cinza) —
+   aqui a linha é horizontal e o nome do produto é texto normal de leitura. */
+.linha-confirmacao {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--cor-borda);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--cor-texto);
+}
+.linha-confirmacao input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--cor-acento);
+}
+.nome-confirmacao { flex: 1; text-align: left; }
+.qtd-confirmacao { color: var(--cor-texto-suave); font-variant-numeric: tabular-nums; }
+.linha-confirmacao.nao-saiu .nome-confirmacao { text-decoration: line-through; opacity: 0.55; }
+.linha-confirmacao.nao-saiu .qtd-confirmacao { color: #9b2c2c; }
+
+.cartao-producao-confirmada {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background: var(--cor-sucesso-fundo);
+  border: 1px solid var(--cor-sucesso);
+  border-radius: var(--raio);
+  font-size: 14px;
+}

@@ -24,6 +24,31 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        /**
+         * Separa as bibliotecas do app em pedaços próprios.
+         *
+         * O motivo é o cache do service worker, não o tamanho total: o
+         * Firebase sozinho responde por ~190KB (gzip) do bundle, e sem
+         * essa separação QUALQUER alteração no código do app invalidaria
+         * esses 190KB também — a cada `git push`, todo celular baixaria
+         * o Firebase de novo. Com o pedaço separado, uma correção de
+         * tela faz o aparelho baixar só a tela.
+         */
+        manualChunks: {
+          firebase: ["firebase/app", "firebase/auth", "firebase/firestore"],
+          react: ["react", "react-dom"],
+        },
+      },
+    },
+    // O pedaço do Firebase passa de 500KB antes da compressão e não há o
+    // que fazer quanto a isso (a versão "lite" do Firestore não tem
+    // persistência offline, que é justamente por que ele foi escolhido).
+    // O aviso padrão só geraria ruído a cada build.
+    chunkSizeWarningLimit: 1000,
+  },
   plugins: [
     react(),
     VitePWA({

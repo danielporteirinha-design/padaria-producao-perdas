@@ -50,6 +50,25 @@ export interface SessaoProducao {
  * Cronograma -> Resumo -> Confirmar. Enquanto status = "rascunho",
  * o operador ainda está na tela de Resumo e pode voltar e editar.
  */
+/**
+ * O que REALMENTE saiu do forno, registrado no fim do expediente (decisão
+ * do dono do negócio, ago/2026 — ver src/lib/producaoRealizada.ts).
+ *
+ * Fica separado das sessões de propósito: o plano continua registrando a
+ * INTENÇÃO, sem ser reescrito, e isto registra o RESULTADO. Assim dá para
+ * comparar planejado × realizado depois, em vez de perder a informação de
+ * que algo foi planejado e não saiu.
+ */
+export interface ConfirmacaoProducao {
+  confirmadoPor: string;
+  confirmadoEm: string; // ISO 8601 datetime
+  /**
+   * Códigos PDV que estavam na lista e NÃO saíram. Vazio significa
+   * "produzi tudo conforme a lista" — que é o caso da maioria dos dias.
+   */
+  codigosNaoProduzidos: number[];
+}
+
 export interface PlanoDeProducaoDiario {
   id: string;
   data: string; // ISO 8601 (YYYY-MM-DD) — a data em que a produção efetivamente ocorre
@@ -59,4 +78,6 @@ export interface PlanoDeProducaoDiario {
   criadoPor: string;
   criadoEm: string; // ISO 8601 datetime
   confirmadoEm?: string;
+  /** Ausente enquanto ninguém confirmou o que saiu — nesse caso tudo conta como produzido. */
+  producaoRealizada?: ConfirmacaoProducao;
 }

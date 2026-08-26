@@ -9,16 +9,19 @@ roadmap): ver `arquitetura.html` ou o link do Artifact enviado na conversa
 (desatualizado em relação às decisões abaixo — este README é a referência
 corrente).
 
-## Status: app em produção (MVP local)
+## Status: app em produção, três lojas
 
 **Publicado em:** https://padaria-producao-perdas.vercel.app
 Deploy automático a cada `git push` na branch `main` (GitHub → Vercel).
 
 As 4 telas (Cronograma, Cadastro de Produtos, Perdas, Análises) estão
 implementadas, tipadas em modo `strict` e com build de produção limpo
-(`tsc --noEmit` + `vite build`). Persistência hoje é `localStorage`
-(um dispositivo só) — ver "Camada de dados" abaixo para o que muda ao
-plugar um backend real.
+(`tsc --noEmit` + `vite build`).
+
+Persistência é **Cloud Firestore** desde ago/2026 (antes era `localStorage`,
+um aparelho só) — ver "Camada de dados na nuvem" abaixo. A mudança veio da
+expansão para três lojas: matriz + Filial Arthur Bernardes + Filial
+Benjamin Constant.
 
 ## Decisões operacionais
 
@@ -40,6 +43,7 @@ inicial do documento de arquitetura:
 | Limpar sessão | Botão "limpar esta sessão" por acordeão, com confirmação em dois toques. **Nunca existe um "limpar tudo" global** — um toque errado apagaria o cronograma inteiro montado no fim do expediente, sem desfazer |
 | Assinatura da fita | "Montado por" sai no rodapé de **cada sessão**, não uma vez só no fim: a fita é cortada e cada pedaço vai para o quadro de um setor — pedaço sem nome é pedaço sem responsável |
 | Perda no mesmo dia | Fornada queimada ou fora do padrão deve ser pesada e lançada no dia, nunca no dia seguinte. O app sempre aceitou isso; o que faltava era chamar o operador — ver "Perda no mesmo dia" abaixo |
+| Produção realizada | No fim do expediente, junto com as perdas, confirma-se o que REALMENTE saiu do forno. Marcação binária ("não saiu"), porque é assim que acontece na prática — não sai em quantidade menor. O plano nunca é reescrito |
 | Quem pode receber perda | Qualquer produto que já tenha sido produzido em **alguma** ocasião. Produto nunca produzido não entra (não existe fornada da qual pudesse ter vindo) |
 | Instalação | App instalável (PWA): ícone próprio na tela de início do celular e na área de trabalho do PC — ver seção "Instalar como app" abaixo |
 | Insights de catálogo | Botão "✨ Gerar insights com IA" em Análises (Gemini) — aponta produtos sobrando (perda por sobra alta), produtos ativos parados há muito tempo, ou outros padrões úteis; sempre informativo, nunca altera nada sozinho |
@@ -222,6 +226,42 @@ fita incompleta). Em vez disso aparece um botão "Baixar imagem N de M"
 por imagem — cada download exige um clique de verdade do operador,
 garantido de funcionar em qualquer navegador.
 
+### Planejado × realizado (ago/2026)
+
+Gargalo levantado pela padaria: na rotina diária acontece de um ou outro
+item da lista simplesmente não sair. Até então o app tratava plano como
+realidade, e isso contamina justamente a métrica que ele existe para medir:
+
+| O que quebra | Por quê |
+|---|---|
+| Taxa de perda | O denominador é `perdido ÷ produzido`. Perda sobre produção que não aconteceu não significa nada |
+| Distribuição para filiais | Promete uma quantidade que não existe |
+| Sugestão por IA | Aprende com produção que nunca ocorreu |
+
+`src/lib/producaoRealizada.ts` separa intenção de resultado. O plano
+**nunca é reescrito** — as sessões continuam registrando o que foi
+planejado, e o que saiu entra à parte, em
+`PlanoDeProducaoDiario.producaoRealizada`, para dar para comparar
+planejado × realizado depois.
+
+- **Formato binário de propósito.** O dono do negócio descreveu o caso
+  real: quando um item não é produzido, "simplesmente não sai, e pronto" —
+  não sai em quantidade menor. Por isso a confirmação guarda uma lista de
+  códigos que não saíram, e não uma quantidade real por item. Se um dia
+  passar a haver produção parcial, é neste módulo que o modelo muda.
+- **Momento:** fim do expediente, junto com as perdas (escolha do dono do
+  negócio — uma parada só no fechamento em vez de mais uma interrupção de
+  manhã). O componente é `ConfirmarProducao.tsx`, no topo de `TelaPerdas`.
+- **Desenhado para o dia normal:** todos os itens já vêm marcados como
+  produzidos; o operador só desmarca a exceção. Um toque resolve o dia em
+  que saiu tudo.
+- **Plano sem confirmação conta tudo como produzido** — é o palpite menos
+  errado enquanto ninguém informou nada, e preserva o comportamento
+  anterior para os planos já existentes.
+- **Não se perde o que não foi produzido:** `calcularCandidatosPerda`
+  também respeita a confirmação, então um item que não saiu do forno some
+  da lista de Perdas. `metricas.ts` e `insightsCatalogo.ts` idem.
+
 ### Perda não é vencimento (ago/2026)
 
 Correção conceitual pedida pelo dono do negócio depois de topar com a
@@ -337,10 +377,116 @@ exigida pelo Android para o ícone preencher a máscara do sistema, e o
 `apple-touch-icon.png`, única via de ícone no iPhone (o iOS ignora o
 manifest para isso).
 
+## Camada de dados na nuvem (ago/2026)
+
+### Por que Firestore
+
+O requisito decisivo não foi preço nem modelo de dados, foi **persistência
+offline**: o wifi da cozinha cai, e o app precisa continuar aceitando
+lançamento, sincronizando sozinho quando a conexão volta. O Firestore
+resolve isso nativamente (`persistentLocalCache`); no Supabase seria
+trabalho extra ou uma ferramenta de terceiros (PowerSync).
+
+Volume da operação contra a franquia gratuita (plano Spark), conferido em
+ago/2026:
+
+| | Incluído/dia | Uso estimado |
+|---|---|---|
+| Escritas | 20.000 | ~200 |
+| Leituras | 50.000 | poucos milhares |
+| Armazenamento | 1 GB | alguns MB/ano |
+
+### Modelo das lojas
+
+`src/lib/lojas.ts` é a fonte da verdade. As filiais **não produzem, pedem**:
+informam a quantidade de que vão precisar no dia seguinte, a matriz produz
+tudo e distribui. Por isso só a matriz monta cronograma e mantém o catálogo.
+
+A identificação da loja vem do e-mail da conta autenticada, resolvido em
+memória — são três contas fixas, e uma leitura extra por abertura de app não
+se justificaria. **`firestore.rules` usa o mesmo mapeamento**: se entrar uma
+quarta loja, os dois arquivos mudam juntos.
+
+Loja e operador são coisas separadas de propósito:
+
+| | O que responde | Onde é verificado |
+|---|---|---|
+| Loja (login) | De ONDE o dado vem | Regras do Firestore |
+| Operador (nome) | QUEM digitou | Só rastreabilidade interna |
+
+### Segurança
+
+`firestore.rules`, na raiz do projeto, é a **única coisa que protege os
+dados**. A configuração em `src/lib/firebase.ts` é pública por desenho — o
+navegador de qualquer usuário precisa dela, então esconder em variável de
+ambiente daria falsa sensação de segurança sem esconder de ninguém.
+
+Resumo das regras:
+
+| Coleção | Leitura | Escrita |
+|---|---|---|
+| `produtos` | qualquer loja | só matriz |
+| `planos` | qualquer loja | só matriz |
+| `perdas` | qualquer loja | cada loja só cria perda carimbada com o próprio id; **nunca** atualiza nem apaga |
+
+Perda não se reescreve nem se apaga: é registro de desperdício, e correção
+se faz com lançamento novo. Coleção não listada fica fechada por padrão,
+para nenhuma coleção nova nascer aberta por esquecimento.
+
+**Como publicar as regras:** console do Firebase → Firestore → aba **Regras**
+→ colar o conteúdo de `firestore.rules` → **Publicar**. Sem esse passo o app
+não lê nem grava nada (o modo de produção começa negando tudo, que é o
+comportamento correto).
+
+### Migração de localStorage
+
+`ImportarDadosLocais.tsx` roda uma vez, e só quando as duas condições valem
+juntas: o catálogo na nuvem está vazio E existe dado neste aparelho. Some
+sozinho depois e nunca aparece nas filiais. Nada é apagado do celular —
+rodar duas vezes sobrescreve os mesmos documentos (ids preservados) em vez
+de duplicar.
+
+### Tamanho do bundle
+
+O Firebase custa ~186KB (gzip) — o bundle saiu de 62KB para 250KB. Como o
+app é PWA com precache, isso é um download único por aparelho, não por
+abertura. `vite.config.ts` separa Firebase e React em pedaços próprios: sem
+isso, **qualquer** alteração de tela invalidaria os 186KB do Firebase no
+cache e todo celular baixaria tudo de novo a cada `git push`. Com a
+separação, uma correção de tela faz o aparelho baixar ~20KB.
+
+### O que NÃO foi testado aqui
+
+O emulador do Firestore não roda no ambiente onde este código foi
+construído (o download do emulador é bloqueado pela rede), então a camada
+Firestore e as regras de segurança **não têm teste automatizado**. O que foi
+verificado: tipagem estrita, build, as 59 asserções de lógica de negócio e o
+fluxo de login em navegador real (incluindo o comportamento sem conexão).
+A primeira execução contra o projeto real precisa de conferência manual —
+ver "Conferência pós-migração" abaixo.
+
+### Conferência pós-migração
+
+Na primeira vez que o app rodar contra o Firestore real, conferir nesta ordem:
+
+1. **Login em cada uma das três lojas** — se der "Sem conexão" com internet
+   funcionando, o provedor E-mail/senha não foi ativado no console.
+2. **Matriz: enviar os dados do aparelho** quando o cartão de migração
+   aparecer, e conferir no console do Firebase (Firestore → Dados) que as
+   coleções `produtos`, `planos` e `perdas` foram criadas.
+3. **Filial: abrir o catálogo** — deve ler os produtos. Se falhar, as regras
+   não foram publicadas.
+4. **Filial: tentar alterar um produto** — deve ser negado. Se conseguir, as
+   regras publicadas não são as deste arquivo.
+5. **Modo avião no celular** — o app deve continuar abrindo e aceitando
+   lançamento; ao voltar a conexão, o dado aparece nas outras lojas.
+
 ## Estrutura
 
 ```
 producao-perdas/
+  firestore.rules                 # REGRAS DE ACESSO — a única coisa que protege os dados
+  firebase.json                   # Aponta onde ficam as regras (uso opcional pela CLI)
   api/
     sugestao-producao.ts       # Função serverless — sugestão de quantidades de produção
     insights-catalogo.ts        # Função serverless — insights de catálogo (sobra, produto parado, etc.)
@@ -350,19 +496,25 @@ producao-perdas/
       producao.ts                 # Sessão de Produção (por categoria), Plano Diário — quantidade em unidades
       perda.ts                     # Registro de Perda — peso em kg + peso unitário informado + unidades estimadas
     lib/
+      lojas.ts                      # As 3 lojas (matriz + 2 filiais) e o mapeamento conta -> loja
+      firebase.ts                    # Inicialização do Firestore (com cache offline) e do Auth
       categorias.ts                 # As 5 categorias fixas de produção + "Encomendas e Especiais" + validade sugerida por categoria
       conversao.ts                   # Deriva unidades perdidas a partir do peso pesado na balança
       numeros.ts                      # Sanitização de entrada numérica (textbox à prova de erro)
       metricas.ts                      # Taxa de perda, volume por dia, picos de perda (tudo em unidades)
       data.ts                           # Datas: hoje, amanhã, dia da semana, formatação BR, diferença em dias
       janelaValidade.ts                  # Quais fornadas confirmadas ainda estão dentro do prazo de validade do produto
+      producaoRealizada.ts                # Separa o que foi planejado do que realmente saiu do forno
       gerarImagemLista.ts                # Gera a(s) fita(s) PNG de impressão (canvas, 576px, linhas de corte, assinatura por sessão) — divide em mais de uma imagem se passar do limite seguro de altura
       sugestaoProducao.ts                 # Cliente da sugestão de produção por IA — monta histórico, chama /api
       insightsCatalogo.ts                  # Cliente dos insights de catálogo por IA — monta resumo, chama /api
       importarProdutos.ts                  # Mapeamento planilha -> Produto (uso no navegador), já filtra fora de escopo
     components/
+      TelaLogin.tsx            # Entrada por LOJA (não por funcionário) — escolhe a loja e digita a senha
+      ImportarDadosLocais.tsx   # Migração única de localStorage para a nuvem
       BannerInstalar.tsx       # Convite para instalar o app (botão no Chrome/Android, instruções no iPhone)
       AvisoPerdaPendente.tsx    # Atalho "Lançar perda agora" enquanto houver fornada de hoje sem perda lançada
+      ConfirmarProducao.tsx      # Fim do expediente: confirma o que realmente saiu do forno
       TelaCronograma.tsx       # Montagem do cronograma: acordeão -> resumo -> exportar (+ sugestão IA)
       TelaCadastroProdutos.tsx  # Catálogo (com edição inline), categorização, validade, peso médio, limpeza de escopo
       TelaPerdas.tsx             # Lançamento de perda de fim de expediente (considera a janela de validade)
@@ -387,7 +539,7 @@ producao-perdas/
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (47 asserções)
+npm run verificar   # roda scripts/verificar_logica.ts (59 asserções)
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```
@@ -417,13 +569,13 @@ git push
 O Vercel detecta o push, builda e publica em `https://padaria-producao-perdas.vercel.app`
 em cerca de 1 minuto — sem passo manual adicional.
 
-## Camada de dados (a decidir)
+## Camada de dados — histórico
 
-O código em `src/lib` e `src/types` é agnóstico de backend. `src/data/repositorioLocalStorage.ts`
-é a implementação atual (MVP, um dispositivo). `src/data/repositorioFirestore.ts` é um
-stub pronto para receber a implementação real quando o app precisar ser
-multiusuário/multi-dispositivo (mesma interface `Repositorio` — trocar backend
-é trocar uma linha em `src/App.tsx`).
+O código em `src/lib` e `src/types` é agnóstico de backend, e essa disciplina
+se pagou: a virada de `localStorage` para Firestore não exigiu mudança em
+nenhuma tela, só a troca de qual `Repositorio` é instanciado em
+`src/App.tsx`. `src/data/repositorioLocalStorage.ts` continua no projeto
+como referência e como origem da migração.
 
 ## Convenções
 

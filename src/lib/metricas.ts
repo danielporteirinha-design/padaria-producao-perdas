@@ -11,9 +11,15 @@
  * perdido/produzido nunca mistura quilo com contagem de unidades.
  * totalPerdidoQuilos fica disponível à parte, só para controle de
  * desperdício em peso — não entra no cálculo de perdaPercentual.
+ *
+ * IMPORTANTE: "produzido" aqui é o que REALMENTE saiu do forno, não o que
+ * estava na lista. Itens planejados e não produzidos são descontados via
+ * src/lib/producaoRealizada.ts — sem isso a taxa de perda usaria um
+ * denominador que nunca existiu (ago/2026).
  */
 
 import type { DiaDaSemana, PlanoDeProducaoDiario } from "../types/producao";
+import { itensProduzidos } from "./producaoRealizada";
 import type { RegistroPerda } from "../types/perda";
 import type { Produto } from "../types/produto";
 
@@ -39,13 +45,11 @@ export function calcularTaxaPerdaPorProduto(
 ): TaxaPerdaProduto[] {
   const produzidoPorProduto = new Map<number, number>();
   for (const plano of planos) {
-    for (const sessao of plano.sessoes) {
-      for (const item of sessao.itens) {
-        produzidoPorProduto.set(
-          item.codigoPdv,
-          (produzidoPorProduto.get(item.codigoPdv) ?? 0) + item.quantidadeUnidades
-        );
-      }
+    for (const item of itensProduzidos(plano)) {
+      produzidoPorProduto.set(
+        item.codigoPdv,
+        (produzidoPorProduto.get(item.codigoPdv) ?? 0) + item.quantidadeUnidades
+      );
     }
   }
 
@@ -100,9 +104,7 @@ export function calcularVolumeProducaoPorDiaDaSemana(
 
   for (const plano of planos) {
     const atual = acumulado.get(plano.diaDaSemana) ?? { total: 0, qtdPlanos: 0 };
-    const totalDoPlano = plano.sessoes
-      .flatMap((s) => s.itens)
-      .reduce((soma, item) => soma + item.quantidadeUnidades, 0);
+    const totalDoPlano = itensProduzidos(plano).reduce((soma, item) => soma + item.quantidadeUnidades, 0);
     acumulado.set(plano.diaDaSemana, {
       total: atual.total + totalDoPlano,
       qtdPlanos: atual.qtdPlanos + 1,
@@ -142,12 +144,10 @@ export function identificarPicosDePerda(
     porCategoria ? `${dia}::${categoria ?? "SEM_CATEGORIA"}` : dia;
 
   for (const plano of planos) {
-    for (const sessao of plano.sessoes) {
-      for (const item of sessao.itens) {
-        const produto = produtoPorCodigo.get(item.codigoPdv);
-        const chave = chaveDe(plano.diaDaSemana, produto?.categoria);
-        produzido.set(chave, (produzido.get(chave) ?? 0) + item.quantidadeUnidades);
-      }
+    for (const item of itensProduzidos(plano)) {
+      const produto = produtoPorCodigo.get(item.codigoPdv);
+      const chave = chaveDe(plano.diaDaSemana, produto?.categoria);
+      produzido.set(chave, (produzido.get(chave) ?? 0) + item.quantidadeUnidades);
     }
   }
 

@@ -19,6 +19,7 @@ import type { RegistroPerda } from "../types/perda";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import { TelaRegistroPerda } from "./TelaRegistroPerda";
 import { calcularCandidatosPerda } from "../lib/janelaValidade";
+import { ConfirmarProducao } from "./ConfirmarProducao";
 import { dataDeHojeIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 
 interface TelaPerdasProps {
@@ -26,6 +27,8 @@ interface TelaPerdasProps {
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   operador: string;
+  /** Confirma o que realmente saiu do forno no plano de hoje (ver ConfirmarProducao.tsx). */
+  onConfirmarProducao: (planoId: string, codigosNaoProduzidos: number[]) => Promise<void>;
   onRegistrarPerda: (payload: {
     codigoPdv: number;
     planoDeProducaoId: string;
@@ -38,13 +41,35 @@ interface TelaPerdasProps {
   }) => Promise<void>;
 }
 
-export function TelaPerdas({ produtos, planos, perdas, operador, onRegistrarPerda }: TelaPerdasProps) {
+export function TelaPerdas({
+  produtos,
+  planos,
+  perdas,
+  operador,
+  onConfirmarProducao,
+  onRegistrarPerda,
+}: TelaPerdasProps) {
   const [codigoSelecionado, setCodigoSelecionado] = useState<number | "">("");
 
   const hoje = dataDeHojeIso();
   const diaDaSemana = diaDaSemanaDeData(hoje);
 
   const candidatos = useMemo(() => calcularCandidatosPerda(hoje, produtos, planos), [hoje, produtos, planos]);
+
+  // Plano de HOJE já confirmado — é o que pode ter a produção real conferida.
+  const planoDeHoje = useMemo(
+    () => planos.find((p) => p.data === hoje && p.status === "confirmado"),
+    [planos, hoje]
+  );
+
+  const blocoConfirmacao = planoDeHoje ? (
+    <ConfirmarProducao
+      plano={planoDeHoje}
+      produtos={produtos}
+      operador={operador}
+      onConfirmar={(codigos) => onConfirmarProducao(planoDeHoje.id, codigos)}
+    />
+  ) : null;
 
   const perdasDeHoje = useMemo(() => perdas.filter((p) => p.data === hoje), [perdas, hoje]);
 
@@ -54,6 +79,7 @@ export function TelaPerdas({ produtos, planos, perdas, operador, onRegistrarPerd
     return (
       <div className="tela">
         <h2>Registro de Perdas</h2>
+        {blocoConfirmacao}
         <p className="callout-inline">
           Ainda não há nenhuma fornada confirmada no app, então não existe produção à qual atribuir
           uma perda. Isso não tem relação com prazo de validade — assim que existir um cronograma
@@ -73,6 +99,8 @@ export function TelaPerdas({ produtos, planos, perdas, operador, onRegistrarPerd
     <div className="tela">
       <h2>Registro de Perdas</h2>
       <p className="subtitulo">{rotuloDoDia(diaDaSemana)}, {hoje}</p>
+
+      {blocoConfirmacao}
 
       {!candidatoSelecionado ? (
         <div>

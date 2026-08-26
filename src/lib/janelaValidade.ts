@@ -38,6 +38,7 @@
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { Produto } from "../types/produto";
 import { diasEntreDatas } from "./data";
+import { itensProduzidos } from "./producaoRealizada";
 
 export interface OrigemCandidata {
   planoDeProducaoId: string;
@@ -74,27 +75,27 @@ export function calcularCandidatosPerda(
     const diasDesdeProducao = diasEntreDatas(plano.data, dataReferencia);
     if (diasDesdeProducao < 0) continue; // plano com data no futuro em relação à referência — ignora
 
-    for (const sessao of plano.sessoes) {
-      for (const item of sessao.itens) {
-        const produto = produtoPorCodigo.get(item.codigoPdv);
-        if (!produto) continue;
+    // Item planejado que não saiu do forno não pode receber perda — não
+    // existe fornada dele (ver src/lib/producaoRealizada.ts).
+    for (const item of itensProduzidos(plano)) {
+      const produto = produtoPorCodigo.get(item.codigoPdv);
+      if (!produto) continue;
 
-        const anterior = ultimaProducaoPorProduto.get(item.codigoPdv);
-        if (!anterior || plano.data > anterior) {
-          ultimaProducaoPorProduto.set(item.codigoPdv, plano.data);
-        }
-
-        const prazo = produto.prazoValidadeDias;
-        const dentroDoPrazo = prazo && prazo > 0 ? diasDesdeProducao < prazo : diasDesdeProducao === 0;
-        if (!dentroDoPrazo) continue;
-
-        const lista = origensPorProduto.get(item.codigoPdv) ?? [];
-        // Evita duplicar a mesma origem se o produto aparecer em mais de uma sessão do mesmo plano.
-        if (!lista.some((o) => o.planoDeProducaoId === plano.id)) {
-          lista.push({ planoDeProducaoId: plano.id, data: plano.data, diasDesdeProducao });
-        }
-        origensPorProduto.set(item.codigoPdv, lista);
+      const anterior = ultimaProducaoPorProduto.get(item.codigoPdv);
+      if (!anterior || plano.data > anterior) {
+        ultimaProducaoPorProduto.set(item.codigoPdv, plano.data);
       }
+
+      const prazo = produto.prazoValidadeDias;
+      const dentroDoPrazo = prazo && prazo > 0 ? diasDesdeProducao < prazo : diasDesdeProducao === 0;
+      if (!dentroDoPrazo) continue;
+
+      const lista = origensPorProduto.get(item.codigoPdv) ?? [];
+      // Evita duplicar a mesma origem se o produto aparecer em mais de uma sessão do mesmo plano.
+      if (!lista.some((o) => o.planoDeProducaoId === plano.id)) {
+        lista.push({ planoDeProducaoId: plano.id, data: plano.data, diasDesdeProducao });
+      }
+      origensPorProduto.set(item.codigoPdv, lista);
     }
   }
 

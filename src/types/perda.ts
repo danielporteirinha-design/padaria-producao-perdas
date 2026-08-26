@@ -48,6 +48,16 @@ export interface RegistroPerda {
 
   registradoPor: string;
   registradoEm: string; // ISO 8601 datetime
+
+  /**
+   * Loja onde a perda aconteceu (ver src/lib/lojas.ts). A filial descarta
+   * o que sobrou na loja dela, não na matriz, então a origem precisa ficar
+   * registrada para a análise por loja fazer sentido.
+   *
+   * Opcional porque registros anteriores a ago/2026 são de quando existia
+   * uma loja só — a migração carimba MATRIZ neles.
+   */
+  lojaId?: string;
 }
 
 /** Payload de entrada da tela de Registro de Perdas (antes do cálculo de unidades). */

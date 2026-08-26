@@ -18,6 +18,7 @@
 
 import type { Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
+import { itensProduzidos } from "./producaoRealizada";
 import type { RegistroPerda } from "../types/perda";
 import { CATEGORIAS_PRODUCAO } from "./categorias";
 import { diasEntreDatas } from "./data";
@@ -72,18 +73,21 @@ export function construirResumoParaInsights(
 
   for (const plano of planosConfirmados) {
     const dias = diasEntreDatas(plano.data, dataReferencia);
-    for (const sessao of plano.sessoes) {
-      for (const item of sessao.itens) {
-        if (!codigosRelevantes.has(item.codigoPdv)) continue;
-        if (!ultimaProducaoPorCodigo.has(item.codigoPdv)) {
-          ultimaProducaoPorCodigo.set(item.codigoPdv, plano.data);
-        }
-        if (dias <= janelaDias) {
-          produzidoNaJanelaPorCodigo.set(
-            item.codigoPdv,
-            (produzidoNaJanelaPorCodigo.get(item.codigoPdv) ?? 0) + item.quantidadeUnidades
-          );
-        }
+    // Só o que realmente saiu do forno conta como produção — item
+    // planejado e não produzido não pode virar "última produção" nem
+    // engordar o total da janela (ver src/lib/producaoRealizada.ts).
+    for (const item of itensProduzidos(plano)) {
+      if (!codigosRelevantes.has(item.codigoPdv)) continue;
+      // planosConfirmados vem ordenado do mais recente para o mais antigo,
+      // então o primeiro que aparece É a última produção do produto.
+      if (!ultimaProducaoPorCodigo.has(item.codigoPdv)) {
+        ultimaProducaoPorCodigo.set(item.codigoPdv, plano.data);
+      }
+      if (dias <= janelaDias) {
+        produzidoNaJanelaPorCodigo.set(
+          item.codigoPdv,
+          (produzidoNaJanelaPorCodigo.get(item.codigoPdv) ?? 0) + item.quantidadeUnidades
+        );
       }
     }
   }
