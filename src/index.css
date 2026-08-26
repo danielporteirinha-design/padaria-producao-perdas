@@ -132,6 +132,7 @@ button.link {
 }
 
 .acoes { display: flex; gap: 10px; justify-content: flex-end; }
+.acoes-download-multiplo { display: flex; flex-direction: column; gap: 8px; }
 
 .tabela-simples { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tabela-simples th {
@@ -385,3 +386,25 @@ button.link {
   .editor-quantidade { flex-wrap: wrap; }
   .editor-quantidade button { flex: 1; }
 }
+
+/* ---------------------------------------------------------------
+   Convite para instalar o app (ver src/components/BannerInstalar.tsx).
+   Fica logo abaixo do cabeçalho e some sozinho depois de instalado.
+   --------------------------------------------------------------- */
+
+.banner-instalar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 12px 12px;
+  padding: 12px 14px;
+  background: var(--cor-alerta-fundo);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+}
+
+.texto-banner-instalar { display: flex; flex-direction: column; gap: 2px; min-width: 200px; flex: 1; }
+.texto-banner-instalar span { font-size: 14px; color: var(--cor-texto-suave); }
+.acoes-banner-instalar { display: flex; align-items: center; gap: 10px; }

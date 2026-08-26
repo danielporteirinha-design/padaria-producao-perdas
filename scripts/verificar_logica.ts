@@ -17,6 +17,13 @@ import {
 import { calcularCandidatosPerda } from "../src/lib/janelaValidade";
 import { construirResumoParaInsights } from "../src/lib/insightsCatalogo";
 import { diasEntreDatas } from "../src/lib/data";
+import {
+  ALTURA_FAIXA_CORTE,
+  ALTURA_MAXIMA_SEGURA_PX,
+  ALTURA_RODAPE_FINAL_COM_ASSINATURA,
+  agruparBlocosEmImagens,
+  computarBlocos,
+} from "../src/lib/gerarImagemLista";
 import type { Produto } from "../src/types/produto";
 import type { PlanoDeProducaoDiario } from "../src/types/producao";
 import type { RegistroPerda } from "../src/types/perda";
@@ -436,6 +443,117 @@ const perdas: RegistroPerda[] = [
   afirmar(resumo[0].totalPerdidoUnidades === 30, `perda total soma todos os motivos (obtido: ${resumo[0].totalPerdidoUnidades})`);
   afirmar(resumo[0].perdaPorSobraUnidades === 25, `perda por sobra isola só o motivo sobra_nao_vendida (obtido: ${resumo[0].perdaPorSobraUnidades})`);
   afirmar(resumo[0].taxaPerdaPercentual === 30, `taxa de perda = 30/100 = 30% (obtido: ${resumo[0].taxaPerdaPercentual})`);
+}
+
+// ---------------------------------------------------------------
+// Caso 15: agruparBlocosEmImagens — cronograma pequeno cabe numa imagem só
+// (comportamento comum, não deve mudar pro dia a dia normal da padaria).
+// ---------------------------------------------------------------
+{
+  const produtosFita: Produto[] = Array.from({ length: 5 }, (_, i) => ({
+    codigoPdv: 900 + i,
+    nome: `PRODUTO ${i}`,
+    categoria: "PÃES E ROSCAS",
+    unidadeProducao: "un",
+    precoCusto: 1,
+    precoVenda: 2,
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+  }));
+  const sessoesPequenas = [
+    {
+      rotuloSessao: "Pães e Roscas",
+      itens: produtosFita.map((p) => ({ codigoPdv: p.codigoPdv, quantidadeUnidades: 10 })),
+    },
+  ];
+  const blocos = computarBlocos(sessoesPequenas, produtosFita);
+  const grupos = agruparBlocosEmImagens(blocos, true);
+  afirmar(grupos.length === 1, `cronograma pequeno gera 1 imagem só (obtido: ${grupos.length})`);
+}
+
+// ---------------------------------------------------------------
+// Caso 16: agruparBlocosEmImagens — o bug real que motivou este teste: um
+// cronograma grande (muitas sessões/itens) gerava um canvas único gigante e
+// canvas.toBlob() falhava em silêncio em navegadores móveis, aparecendo
+// pro operador como "Não foi possível gerar a imagem" mesmo tentando de
+// novo. Agora precisa dividir em mais de uma imagem, cada uma dentro do
+// limite seguro, sem duplicar nem cortar nenhuma sessão ao meio.
+// ---------------------------------------------------------------
+{
+  const produtosGrandes: Produto[] = Array.from({ length: 30 }, (_, i) => ({
+    codigoPdv: 1000 + i,
+    nome: `PRODUTO GRANDE ${i}`,
+    categoria: "CONFEITARIA",
+    unidadeProducao: "un",
+    precoCusto: 1,
+    precoVenda: 2,
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+  }));
+  // 6 sessões de 20 itens cada — acima do que a montagem gera hoje (5
+  // acima da média, mas foi exatamente esse tipo de cronograma grande que
+  // estourou o limite de canvas em produção (ago/2026).
+  const sessoesGrandes = Array.from({ length: 6 }, (_, s) => ({
+    rotuloSessao: `Sessão ${s}`,
+    itens: produtosGrandes.slice(0, 20).map((p) => ({ codigoPdv: p.codigoPdv, quantidadeUnidades: 5 })),
+  }));
+
+  const blocos = computarBlocos(sessoesGrandes, produtosGrandes);
+  const grupos = agruparBlocosEmImagens(blocos, true);
+
+  afirmar(grupos.length > 1, `cronograma grande é dividido em mais de 1 imagem (obtido: ${grupos.length})`);
+
+  const totalSessoesNosGrupos = grupos.reduce((soma, g) => soma + g.length, 0);
+  afirmar(
+    totalSessoesNosGrupos === sessoesGrandes.length,
+    `nenhuma sessão duplicada nem perdida ao dividir (esperado ${sessoesGrandes.length}, obtido ${totalSessoesNosGrupos})`
+  );
+
+  const todasDentroDoLimite = grupos.every((grupo) => {
+    const alturaBlocos = grupo.reduce((soma, b) => soma + b.altura, 0);
+    const alturaCortes = Math.max(grupo.length - 1, 0) * ALTURA_FAIXA_CORTE;
+    const alturaTotal = alturaBlocos + alturaCortes + ALTURA_RODAPE_FINAL_COM_ASSINATURA;
+    return alturaTotal <= ALTURA_MAXIMA_SEGURA_PX || grupo.length === 1;
+  });
+  afirmar(
+    todasDentroDoLimite,
+    "cada imagem gerada fica dentro do limite seguro (ou é uma sessão sozinha que já excede sozinha)"
+  );
+}
+
+// ---------------------------------------------------------------
+// Caso 17: agruparBlocosEmImagens — uma única sessão gigantesca que sozinha
+// já ultrapassa o limite não trava nem é descartada: vira uma imagem própria
+// (não dá pra dividir uma sessão ao meio sem quebrar a lista de produção).
+// ---------------------------------------------------------------
+{
+  const produtoUnico: Produto = {
+    codigoPdv: 2000,
+    nome: "PRODUTO ÚNICO",
+    categoria: "BOLOS",
+    unidadeProducao: "un",
+    precoCusto: 1,
+    precoVenda: 2,
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+  };
+  const sessaoGigante = [
+    {
+      rotuloSessao: "Sessão gigante",
+      itens: Array.from({ length: 200 }, () => ({ codigoPdv: produtoUnico.codigoPdv, quantidadeUnidades: 1 })),
+    },
+  ];
+  const blocos = computarBlocos(sessaoGigante, [produtoUnico]);
+  afirmar(
+    blocos[0].altura > ALTURA_MAXIMA_SEGURA_PX,
+    "sessão de teste realmente ultrapassa o limite sozinha (pré-condição do teste)"
+  );
+
+  const grupos = agruparBlocosEmImagens(blocos, false);
+  afirmar(
+    grupos.length === 1 && grupos[0].length === 1,
+    "sessão gigante sozinha vira 1 imagem própria, sem travar nem duplicar"
+  );
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

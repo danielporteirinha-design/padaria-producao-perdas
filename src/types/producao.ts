@@ -35,13 +35,13 @@ export interface ItemPlanoProducao {
 
 /**
  * Uma Sessão de Produção agrupa itens por categoria de produção (ver
- * src/lib/categorias.ts) — as 5 fixas mais "Encomendas e Especiais".
+ * src/lib/categorias.ts) — as 5 categorias fixas de produção.
  * Cada sessão confirmada é impressa/exportada separadamente (um papel
  * por categoria, fixado separadamente no quadro de avisos).
  */
 export interface SessaoProducao {
   id: string;
-  categoria: string; // chave de CategoriaProducaoInfo, ou CHAVE_ESPECIAL
+  categoria: string; // chave de CategoriaProducaoInfo (CHAVE_ESPECIAL só em planos antigos)
   itens: ItemPlanoProducao[];
 }
 

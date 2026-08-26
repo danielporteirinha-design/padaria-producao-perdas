@@ -26,10 +26,16 @@ export const CATEGORIAS_PRODUCAO: CategoriaProducaoInfo[] = [
 ];
 
 /**
- * Sessão extra (sugestão nossa, não pedida explicitamente) para cobrir o
- * caso original de "Sessões Especiais" — encomendas e testes que não
- * pertencem a nenhuma das 5 categorias fixas. Usa busca livre em todo o
- * catálogo em vez de uma lista fixa de produtos.
+ * RETIRADA da montagem do cronograma (decisão do dono do negócio,
+ * ago/2026): encomenda/pedido especial não entra na programação diária de
+ * produção. A sessão livre "Encomendas e Especiais" não é mais oferecida
+ * em TelaCronograma.
+ *
+ * As duas constantes continuam aqui de propósito, e não devem ser
+ * removidas: se algum plano gravado antes dessa mudança carregar esta
+ * chave, rotuloDaCategoria() ainda a traduz para um rótulo legível na
+ * reimpressão e nas análises, em vez de exibir "ENCOMENDAS_E_ESPECIAIS"
+ * cru na tela.
  */
 export const CHAVE_ESPECIAL = "ENCOMENDAS_E_ESPECIAIS";
 export const ROTULO_ESPECIAL = "Encomendas e Especiais";

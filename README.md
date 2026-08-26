@@ -27,16 +27,17 @@ inicial do documento de arquitetura:
 
 | Decisão | Regra |
 |---|---|
-| Categorias de produção | Fixas: Pães e Roscas, Biscoitos, Bolos, Salgados, Confeitaria, + "Encomendas e Especiais" (busca livre no catálogo) |
+| Categorias de produção | Fixas: Pães e Roscas, Biscoitos, Bolos, Salgados, Confeitaria. A sessão livre "Encomendas e Especiais" foi retirada da montagem (ago/2026) — encomenda não entra na programação diária |
 | Quando o cronograma é montado | Sempre no fim do expediente do dia anterior, para o dia seguinte (`dataDeAmanhaIso()`) |
 | Unidade de produção | **Sempre unidades** — os ~89 produtos das 5 categorias já são vendidos por unidade no PDV, formato nativo da operação |
 | Unidade de perda | **Sempre pesada em quilos** (balança) — o operador também informa o peso de 1 unidade daquela fornada, e o app deriva quantas unidades a perda representa |
 | Peso unitário do produto | Sugerido automaticamente a partir do último lançamento de perda daquele produto — cadastro se autoatualiza, sem passo manual |
-| Impressão | UMA fita PNG com todas as sessões confirmadas, separadas por linha de corte (pontilhado + tesoura) — corta-se fisicamente após imprimir, um pedaço por quadro de aviso de cada setor |
+| Impressão | Normalmente UMA fita PNG com todas as sessões confirmadas, separadas por linha de corte (pontilhado + tesoura) — corta-se fisicamente após imprimir, um pedaço por quadro de aviso de cada setor. Se o cronograma do dia for grande demais para uma imagem só, divide automaticamente em mais de uma (ver seção "Fita de impressão" abaixo) |
 | Sugestão de produção | Botão "✨ Sugerir com IA" por categoria (Gemini) — sempre assistido: pré-preenche quantidades vazias com base no histórico, operador revisa/ajusta antes de confirmar |
 | Escopo do catálogo | Só as 5 categorias de produção — o catálogo importado do PDV tem ~19 categorias, a maioria revenda (mercearia, refrigerante, laticínio...), fora do escopo deste app (ago/2026: limpeza feita em Cadastro de Produtos → aba "Fora de escopo") |
 | Prazo de validade | Por produto (`Produto.prazoValidadeDias`, editável, sugerido por categoria) — uma perda lançada hoje nem sempre vem da produção de ontem (a etiqueta não traz data de fabricação isolada), então a tela de Perdas considera qualquer fornada confirmada ainda dentro do prazo do produto, não só a de hoje |
 | Edição de cadastro | Nome, categoria, unidade, peso médio e prazo de validade são editáveis direto na tabela do Catálogo (edição inline por linha) — corrige erro de cadastro ou de importação sem precisar excluir e recriar o produto |
+| Instalação | App instalável (PWA): ícone próprio na tela de início do celular e na área de trabalho do PC — ver seção "Instalar como app" abaixo |
 | Insights de catálogo | Botão "✨ Gerar insights com IA" em Análises (Gemini) — aponta produtos sobrando (perda por sobra alta), produtos ativos parados há muito tempo, ou outros padrões úteis; sempre informativo, nunca altera nada sozinho |
 
 Produção (unidades) e perda (derivada em unidades a partir do peso pesado
@@ -182,6 +183,71 @@ Hobby), e cada chamada ao Gemini já pode levar alguns segundos — retries
 demais arriscam estourar esse limite, o que seria um erro pior (sem
 mensagem nenhuma) do que simplesmente informar que está sobrecarregado.
 
+## Fita de impressão (divisão automática) — set/2026
+
+Erro relatado: "não foi possível gerar a imagem para impressão", sem
+melhorar ao tentar de novo (sinal de falha determinística, não
+instabilidade passageira).
+
+**Causa:** a fita é desenhada num canvas único, com a altura crescendo
+conforme o número de sessões/itens do dia. Alguns navegadores (histórico
+conhecido no Safari/iOS, mas não só) falham em silêncio ao converter um
+canvas acima de ~4096px de altura em imagem (`canvas.toBlob()` retorna
+`null`, sem lançar exceção) — daí a mensagem genérica e o motivo de
+tentar de novo nunca resolver: o cronograma daquele dia é sempre grande
+demais, não é uma falha aleatória.
+
+**Correção:** `gerarCanvasesFita` (`src/lib/gerarImagemLista.ts`) agora
+calcula a altura de cada sessão antes de desenhar (`computarBlocos`) e
+agrupa as sessões em uma ou mais imagens, cada uma ficando abaixo de
+`ALTURA_MAXIMA_SEGURA_PX` (4000px, com margem de segurança sobre o limite
+real dos navegadores) — sem nunca dividir os itens de uma mesma sessão
+entre duas imagens. Na grande maioria dos dias (cronograma cabe em uma
+imagem só) nada muda para o operador. Só nos dias excepcionalmente
+grandes é que vira mais de uma imagem, cada uma já rotulada "imagem X de
+Y" no rodapé.
+
+**Baixar várias imagens:** quando o resultado é mais de um arquivo e o
+navegador não suporta compartilhar vários arquivos de uma vez
+(`navigator.share`), o app **não** tenta baixar tudo sozinho em
+sequência — um teste automatizado confirmou que navegadores descartam
+downloads disparados em série por código, entregando só o primeiro e
+sem avisar nada (o operador acharia que baixou tudo, mas só teria uma
+fita incompleta). Em vez disso aparece um botão "Baixar imagem N de M"
+por imagem — cada download exige um clique de verdade do operador,
+garantido de funcionar em qualquer navegador.
+
+## Instalar como app (PWA) — ago/2026
+
+O app é instalável: em vez de procurar o link no navegador, o operador abre
+por um ícone próprio, em tela cheia, sem barra de endereço.
+
+- **Android / Chrome / Edge (celular e PC):** o navegador dispara
+  `beforeinstallprompt` e o app mostra o cartão "Deixe o app na tela de
+  início" com um botão **Instalar** — instalação em um toque.
+- **iPhone / iPad (Safari):** a Apple não implementa instalação
+  programática. Nesse caso o mesmo cartão mostra as instruções manuais
+  (Compartilhar → Adicionar à Tela de Início) em vez de um botão que não
+  funcionaria. A detecção está em `src/components/BannerInstalar.tsx`.
+- O cartão some sozinho quando o app já está rodando instalado
+  (`display-mode: standalone`, ou `navigator.standalone` no iOS) e o
+  "agora não" fica gravado no `localStorage`.
+
+**Service worker e versão nova:** `vite.config.ts` usa
+`registerType: "autoUpdate"`. A cada `git push`, o Vercel publica e o
+service worker baixa a versão nova em segundo plano, assumindo no
+carregamento seguinte — sem o operador precisar limpar cache. Esse é o
+erro clássico de PWA (app instalado preso numa versão velha) e está
+tratado de propósito. As rotas `/api/*` ficam fora do cache
+(`navigateFallbackDenylist`): as chamadas ao Gemini precisam sempre ir à
+rede, nunca podem ser respondidas por uma resposta guardada de outro dia.
+
+Os ícones em `public/` foram gerados por script (pão com três cortes,
+sobre o marrom `--cor-acento` do app), incluindo a variante `maskable`
+exigida pelo Android para o ícone preencher a máscara do sistema, e o
+`apple-touch-icon.png`, única via de ícone no iPhone (o iOS ignora o
+manifest para isso).
+
 ## Estrutura
 
 ```
@@ -201,29 +267,37 @@ producao-perdas/
       metricas.ts                      # Taxa de perda, volume por dia, picos de perda (tudo em unidades)
       data.ts                           # Datas: hoje, amanhã, dia da semana, formatação BR, diferença em dias
       janelaValidade.ts                  # Quais fornadas confirmadas ainda estão dentro do prazo de validade do produto
-      gerarImagemLista.ts                # Gera a fita PNG única de impressão (canvas, 576px, com linhas de corte)
+      gerarImagemLista.ts                # Gera a(s) fita(s) PNG de impressão (canvas, 576px, linhas de corte) — divide em mais de uma imagem se o cronograma passar do limite seguro de altura
       sugestaoProducao.ts                 # Cliente da sugestão de produção por IA — monta histórico, chama /api
       insightsCatalogo.ts                  # Cliente dos insights de catálogo por IA — monta resumo, chama /api
       importarProdutos.ts                  # Mapeamento planilha -> Produto (uso no navegador), já filtra fora de escopo
     components/
+      BannerInstalar.tsx       # Convite para instalar o app (botão no Chrome/Android, instruções no iPhone)
       TelaCronograma.tsx       # Montagem do cronograma: acordeão -> resumo -> exportar (+ sugestão IA)
       TelaCadastroProdutos.tsx  # Catálogo (com edição inline), categorização, validade, peso médio, limpeza de escopo
       TelaPerdas.tsx             # Lançamento de perda de fim de expediente (considera a janela de validade)
       TelaRegistroPerda.tsx       # Peso perdido (kg) + peso unitário informado + fornada de origem, com preview ao vivo
       TelaAnalises.tsx              # Taxa de perda, volume por dia, picos de perda + insights de catálogo por IA
-      ExportarFita.tsx             # Preview + Compartilhar/Baixar da fita única de impressão
+      ExportarFita.tsx             # Preview + Compartilhar/Baixar da(s) fita(s) de impressão (botão manual por imagem quando divide em mais de uma)
   scripts/
     importar_produtos.py         # Import em lote (rodado contra Produtos_881.xlsx), já filtra fora de escopo
     verificar_logica.ts           # Verificações de conversão/agregação/janela de validade/resumo de insights
   data/
     produtos.seed.json            # 89 produtos das 5 categorias de produção, já convertidos para o schema do app
+  public/
+    pwa-192x192.png               # Ícones do app instalado (gerados por script — ver "Instalar como app")
+    pwa-512x512.png
+    pwa-maskable-512x512.png      # Variante maskable exigida pelo Android
+    apple-touch-icon.png          # Única via de ícone no iPhone (iOS ignora o manifest)
+    favicon-32x32.png
+  vite.config.ts                  # React + configuração do PWA (manifest, service worker, autoUpdate)
   tsconfig.json
 ```
 
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (32 asserções)
+npm run verificar   # roda scripts/verificar_logica.ts (40 asserções)
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```

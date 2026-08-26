@@ -1,7 +1,7 @@
 /**
  * src/components/TelaCronograma.tsx
  * ---------------------------------------------------------------
- * Fluxo: 5 categorias fixas + "Encomendas e Especiais", exibidas
+ * Fluxo: as 5 categorias fixas de produção, exibidas
  * recolhidas (acordeão) -> tocar num produto abre uma textbox de
  * quantidade (sempre em UNIDADES, protegida contra erro de digitação) ->
  * Confirmar adiciona à lista -> Resumo (conferência final) -> Confirmar
@@ -24,7 +24,7 @@ import type { ItemPlanoProducao, PlanoDeProducaoDiario, SessaoProducao } from ".
 import type { RegistroPerda } from "../types/perda";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 import { gerarId } from "../lib/id";
-import { CATEGORIAS_PRODUCAO, CHAVE_ESPECIAL, ROTULO_ESPECIAL, rotuloDaCategoria } from "../lib/categorias";
+import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProducao } from "../lib/sugestaoProducao";
 import { ExportarFita } from "./ExportarFita";
@@ -40,7 +40,15 @@ interface TelaCronogramaProps {
 type Fase = "montar" | "resumo" | "exportar";
 type StatusSugestao = "" | "carregando" | "erro";
 
-const GRUPOS = [...CATEGORIAS_PRODUCAO.map((c) => c.chave), CHAVE_ESPECIAL];
+/**
+ * A montagem do cronograma cobre SÓ as 5 categorias fixas de produção.
+ * A sessão livre "Encomendas e Especiais" foi retirada daqui (decisão do
+ * dono do negócio, ago/2026): encomenda não entra na programação diária.
+ * CHAVE_ESPECIAL continua existindo em src/lib/categorias.ts só para que
+ * rotuloDaCategoria() saiba traduzir a chave caso algum plano antigo a
+ * tenha gravado — nunca é oferecida como sessão nova.
+ */
+const GRUPOS = CATEGORIAS_PRODUCAO.map((c) => c.chave);
 
 export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPlano }: TelaCronogramaProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
@@ -54,7 +62,6 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
   const [expandido, setExpandido] = useState<Record<string, boolean>>({});
   const [produtoAtivo, setProdutoAtivo] = useState<number | null>(null);
   const [valorEditando, setValorEditando] = useState("");
-  const [buscaEspecial, setBuscaEspecial] = useState("");
   const [fase, setFase] = useState<Fase>("montar");
   const [salvando, setSalvando] = useState(false);
   const [planoConfirmado, setPlanoConfirmado] = useState<PlanoDeProducaoDiario | null>(null);
@@ -82,14 +89,6 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
       .filter((p) => p.categoria === chave && p.ativoNaProducao)
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   }
-
-  const produtosEspecial = useMemo(() => {
-    const termo = buscaEspecial.trim().toUpperCase();
-    if (!termo) return [];
-    return produtos
-      .filter((p) => p.ativoNaProducao && p.nome.toUpperCase().includes(termo))
-      .slice(0, 25);
-  }, [produtos, buscaEspecial]);
 
   function abrirEdicao(codigoPdv: number, chaveGrupo: string) {
     if (produtoAtivo === codigoPdv) {
@@ -194,9 +193,8 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
       <div className="tela">
         <h2>Lista pronta para impressão</h2>
         <p className="mensagem-sucesso">
-          Produção de {dataFormatada} confirmada. A imagem abaixo é UMA fita só, com todas as sessões
-          separadas por linha de corte — imprima, corte em cada tesourinha e fixe cada pedaço no quadro do
-          respectivo setor.
+          Produção de {dataFormatada} confirmada. A fita abaixo traz todas as sessões separadas por linha
+          de corte — imprima, corte em cada tesourinha e fixe cada pedaço no quadro do respectivo setor.
         </p>
         <ExportarFita
           sessoes={planoConfirmado.sessoes}
@@ -306,10 +304,10 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
       )}
 
       {GRUPOS.map((chave) => {
-        const rotulo = chave === CHAVE_ESPECIAL ? ROTULO_ESPECIAL : rotuloDaCategoria(chave);
+        const rotulo = rotuloDaCategoria(chave);
         const itensDoGrupo = itensPorGrupo[chave] ?? [];
         const aberto = !!expandido[chave];
-        const listaProdutos = chave === CHAVE_ESPECIAL ? produtosEspecial : produtosDaCategoria(chave);
+        const listaProdutos = produtosDaCategoria(chave);
         const statusIA = statusSugestao[chave] ?? "";
         const mensagemIA = mensagemSugestao[chave] ?? "";
 
@@ -329,35 +327,21 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
 
             {aberto && (
               <div className="corpo-sessao">
-                {chave !== CHAVE_ESPECIAL && (
-                  <div className="linha-sugestao-ia">
-                    <button
-                      type="button"
-                      className="secundario"
-                      disabled={statusIA === "carregando"}
-                      onClick={() => gerarSugestaoIA(chave)}
-                    >
-                      {statusIA === "carregando" ? "Gerando sugestão..." : "✨ Sugerir quantidades com IA"}
-                    </button>
-                  </div>
-                )}
+                <div className="linha-sugestao-ia">
+                  <button
+                    type="button"
+                    className="secundario"
+                    disabled={statusIA === "carregando"}
+                    onClick={() => gerarSugestaoIA(chave)}
+                  >
+                    {statusIA === "carregando" ? "Gerando sugestão..." : "✨ Sugerir quantidades com IA"}
+                  </button>
+                </div>
                 {mensagemIA && (
                   <p className={statusIA === "erro" ? "erro-conversao" : "nota-rodape"}>{mensagemIA}</p>
                 )}
 
-                {chave === CHAVE_ESPECIAL && (
-                  <input
-                    className="campo-busca"
-                    placeholder="Buscar produto no catálogo completo..."
-                    value={buscaEspecial}
-                    onChange={(e) => setBuscaEspecial(e.target.value)}
-                  />
-                )}
-                {chave === CHAVE_ESPECIAL && buscaEspecial.trim() === "" && (
-                  <p className="nota-rodape">Digite para buscar qualquer produto do catálogo.</p>
-                )}
-
-                {listaProdutos.length === 0 && chave !== CHAVE_ESPECIAL && (
+                {listaProdutos.length === 0 && (
                   <p className="nota-rodape">Nenhum produto ativo nesta categoria ainda.</p>
                 )}
 

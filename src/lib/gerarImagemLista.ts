@@ -28,7 +28,24 @@ const MARGEM = 24;
 const ALTURA_LINHA = 56;
 const ALTURA_CABECALHO_BLOCO = 210;
 const ALTURA_RODAPE_BLOCO = 30;
-const ALTURA_FAIXA_CORTE = 90;
+export const ALTURA_FAIXA_CORTE = 90;
+export const ALTURA_RODAPE_FINAL_COM_ASSINATURA = 56;
+export const ALTURA_RODAPE_FINAL_SEM_ASSINATURA = 36;
+
+// Limite de altura por imagem, deliberadamente conservador (set/2026):
+// alguns navegadores móveis (histórico do Safari no iPhone, entre outros)
+// recusam ou falham SILENCIOSAMENTE ao gerar um canvas com mais de ~4096px
+// numa única dimensão — canvas.toBlob() simplesmente retorna null, sem
+// lançar exceção nenhuma, o que aparecia pro operador como "Não foi possível
+// gerar a imagem" mesmo tentando de novo (falha determinística, ligada ao
+// tamanho do cronograma daquele dia, não passageira). Quando a fita
+// completa ultrapassaria esse limite, ela é dividida em mais de uma imagem —
+// sempre por sessão inteira, nunca cortando uma sessão ao meio — a mesma
+// lógica de "cada pedaço é autossuficiente" já usada entre sessões.
+export const ALTURA_MAXIMA_SEGURA_PX = 4000;
+
+/** Erro de domínio — sempre com mensagem apresentável ao operador. */
+export class ErroGeracaoImagem extends Error {}
 
 export interface BlocoSessaoImpressao {
   rotuloSessao: string;
@@ -48,35 +65,84 @@ interface LinhaItem {
   unidades: number;
 }
 
-/** Gera a fita completa (todas as sessões + faixas de corte) num único canvas. */
-export function gerarCanvasFitaCompleta(dados: DadosImpressaoFita): HTMLCanvasElement {
-  const blocos = dados.sessoes.map((sessao) => ({
-    rotuloSessao: sessao.rotuloSessao,
-    linhas: linhasDoBloco(sessao.itens, dados.produtos),
-  }));
+export interface BlocoComputado {
+  rotuloSessao: string;
+  linhas: LinhaItem[];
+  /** Altura que este bloco ocupa sozinho (cabeçalho + linhas + rodapé), sem faixa de corte. */
+  altura: number;
+}
 
-  const alturaBlocos = blocos.reduce(
-    (soma, b) => soma + ALTURA_CABECALHO_BLOCO + Math.max(b.linhas.length, 1) * ALTURA_LINHA + ALTURA_RODAPE_BLOCO,
-    0
-  );
-  const alturaCortes = Math.max(blocos.length - 1, 0) * ALTURA_FAIXA_CORTE;
-  const alturaRodapeFinal = dados.montadoPor ? 56 : 36;
+/** Exportado só para teste (ver scripts/verificar_logica.ts) — puro, sem depender de canvas/DOM. */
+export function computarBlocos(sessoes: BlocoSessaoImpressao[], produtos: Produto[]): BlocoComputado[] {
+  return sessoes.map((sessao) => {
+    const linhas = linhasDoBloco(sessao.itens, produtos);
+    const altura = ALTURA_CABECALHO_BLOCO + Math.max(linhas.length, 1) * ALTURA_LINHA + ALTURA_RODAPE_BLOCO;
+    return { rotuloSessao: sessao.rotuloSessao, linhas, altura };
+  });
+}
+
+/**
+ * Agrupa os blocos (sessões já com altura calculada) em grupos que cabem sob
+ * ALTURA_MAXIMA_SEGURA_PX — cada grupo vira uma imagem. Nunca separa os itens
+ * de uma sessão entre duas imagens (só a fronteira entre sessões é um ponto
+ * de corte válido). No caso raro de uma única sessão sozinha já ultrapassar
+ * o limite, ela fica em um grupo próprio mesmo assim — não tem como dividir
+ * uma sessão ao meio sem quebrar a lógica de "cada pedaço é autossuficiente".
+ *
+ * Exportado só para teste (ver scripts/verificar_logica.ts) — puro, sem
+ * depender de canvas/DOM, o que permite cobrir a lógica de divisão que
+ * causou o bug original ("Não foi possível gerar a imagem") sem precisar
+ * de um navegador de verdade.
+ */
+export function agruparBlocosEmImagens(blocos: BlocoComputado[], temAssinatura: boolean): BlocoComputado[][] {
+  const alturaRodapeFinal = temAssinatura ? ALTURA_RODAPE_FINAL_COM_ASSINATURA : ALTURA_RODAPE_FINAL_SEM_ASSINATURA;
+  const grupos: BlocoComputado[][] = [];
+  let grupoAtual: BlocoComputado[] = [];
+  let alturaGrupoAtual = 0;
+
+  for (const bloco of blocos) {
+    const alturaFaixaCorte = grupoAtual.length > 0 ? ALTURA_FAIXA_CORTE : 0;
+    const alturaSeAdicionar = alturaGrupoAtual + alturaFaixaCorte + bloco.altura + alturaRodapeFinal;
+
+    if (grupoAtual.length > 0 && alturaSeAdicionar > ALTURA_MAXIMA_SEGURA_PX) {
+      grupos.push(grupoAtual);
+      grupoAtual = [bloco];
+      alturaGrupoAtual = bloco.altura;
+    } else {
+      grupoAtual.push(bloco);
+      alturaGrupoAtual += alturaFaixaCorte + bloco.altura;
+    }
+  }
+  if (grupoAtual.length > 0) grupos.push(grupoAtual);
+  return grupos;
+}
+
+function desenharCanvasParaGrupo(
+  grupo: BlocoComputado[],
+  dataFormatada: string,
+  montadoPor: string | undefined,
+  numeroImagem: number,
+  totalImagens: number
+): HTMLCanvasElement {
+  const alturaBlocos = grupo.reduce((soma, b) => soma + b.altura, 0);
+  const alturaCortes = Math.max(grupo.length - 1, 0) * ALTURA_FAIXA_CORTE;
+  const alturaRodapeFinal = montadoPor ? ALTURA_RODAPE_FINAL_COM_ASSINATURA : ALTURA_RODAPE_FINAL_SEM_ASSINATURA;
   const altura = alturaBlocos + alturaCortes + alturaRodapeFinal;
 
   const canvas = document.createElement("canvas");
   canvas.width = LARGURA_PX;
   canvas.height = Math.max(altura, 200);
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Este navegador não suporta geração de imagem (canvas 2D indisponível).");
+  if (!ctx) throw new ErroGeracaoImagem("Este navegador não suporta geração de imagem (canvas 2D indisponível).");
 
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.textBaseline = "top";
 
   let y = 0;
-  blocos.forEach((bloco, indice) => {
-    y = desenharBloco(ctx, y, bloco.rotuloSessao, bloco.linhas, dados.dataFormatada);
-    if (indice < blocos.length - 1) {
+  grupo.forEach((bloco, indice) => {
+    y = desenharBloco(ctx, y, bloco.rotuloSessao, bloco.linhas, dataFormatada);
+    if (indice < grupo.length - 1) {
       y = desenharFaixaDeCorte(ctx, y);
     }
   });
@@ -84,16 +150,35 @@ export function gerarCanvasFitaCompleta(dados: DadosImpressaoFita): HTMLCanvasEl
   ctx.textAlign = "center";
   ctx.font = "13px system-ui, -apple-system, sans-serif";
   ctx.fillStyle = "#555555";
-  const totalItens = blocos.reduce((s, b) => s + b.linhas.length, 0);
-  ctx.fillText(`${blocos.length} sessão(ões) · ${totalItens} itens · app Produção & Perdas`, LARGURA_PX / 2, y + 10);
+  const totalItens = grupo.reduce((s, b) => s + b.linhas.length, 0);
+  const rotuloContagem =
+    totalImagens > 1
+      ? `${grupo.length} sessão(ões) · ${totalItens} itens · imagem ${numeroImagem}/${totalImagens} · app Produção & Perdas`
+      : `${grupo.length} sessão(ões) · ${totalItens} itens · app Produção & Perdas`;
+  ctx.fillText(rotuloContagem, LARGURA_PX / 2, y + 10);
 
-  if (dados.montadoPor) {
+  if (montadoPor) {
     ctx.font = "bold 14px system-ui, -apple-system, sans-serif";
     ctx.fillStyle = "#000000";
-    ctx.fillText(`Montado por: ${dados.montadoPor}`, LARGURA_PX / 2, y + 30);
+    ctx.fillText(`Montado por: ${montadoPor}`, LARGURA_PX / 2, y + 30);
   }
 
   return canvas;
+}
+
+/**
+ * Gera a fita de produção como uma OU MAIS imagens, conforme necessário para
+ * ficar dentro do limite seguro de altura de canvas (ver ALTURA_MAXIMA_SEGURA_PX
+ * acima). No caso comum (cronograma do dia dentro do limite) retorna um único
+ * canvas, igual ao comportamento anterior — a divisão só entra em ação quando
+ * o total de sessões/itens do dia realmente exigir.
+ */
+export function gerarCanvasesFita(dados: DadosImpressaoFita): HTMLCanvasElement[] {
+  const blocos = computarBlocos(dados.sessoes, dados.produtos);
+  const grupos = agruparBlocosEmImagens(blocos, Boolean(dados.montadoPor));
+  return grupos.map((grupo, indice) =>
+    desenharCanvasParaGrupo(grupo, dados.dataFormatada, dados.montadoPor, indice + 1, grupos.length)
+  );
 }
 
 function linhasDoBloco(itens: ItemPlanoProducao[], produtos: Produto[]): LinhaItem[] {
@@ -219,7 +304,11 @@ export function canvasParaArquivo(canvas: HTMLCanvasElement, nomeArquivo: string
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {
-        reject(new Error("Não foi possível gerar a imagem."));
+        reject(
+          new ErroGeracaoImagem(
+            `Não foi possível gerar a imagem "${nomeArquivo}" — o navegador recusou converter o desenho em arquivo.`
+          )
+        );
         return;
       }
       resolve(new File([blob], nomeArquivo, { type: "image/png" }));
@@ -227,28 +316,63 @@ export function canvasParaArquivo(canvas: HTMLCanvasElement, nomeArquivo: string
   });
 }
 
-export type ResultadoCompartilhamento = "compartilhado" | "baixado";
+/** Converte cada canvas gerado por gerarCanvasesFita() num arquivo PNG, numerando o nome quando há mais de um. */
+export async function canvasesParaArquivos(canvases: HTMLCanvasElement[], nomeArquivoBase: string): Promise<File[]> {
+  return Promise.all(
+    canvases.map((canvas, indice) =>
+      canvasParaArquivo(
+        canvas,
+        canvases.length > 1 ? `${nomeArquivoBase}-parte${indice + 1}de${canvases.length}.png` : `${nomeArquivoBase}.png`
+      )
+    )
+  );
+}
+
+export type ResultadoCompartilhamento = "compartilhado" | "baixado" | "baixar_manualmente";
 
 /**
- * Compartilha o arquivo via Web Share API (abre o seletor do sistema,
- * incluindo WhatsApp, em navegadores Android/iOS que suportam arquivos)
- * ou, se indisponível, baixa a imagem para envio manual.
+ * Tenta compartilhar um ou mais arquivos via Web Share API (abre o seletor
+ * do sistema, incluindo WhatsApp, em navegadores Android/iOS que suportam
+ * arquivos). Se disponível, um único arquivo é baixado automaticamente como
+ * alternativa (ação de um clique só, sempre segura); se forem VÁRIOS
+ * arquivos e o compartilhamento não estiver disponível, retorna
+ * "baixar_manualmente" em vez de tentar baixar tudo sozinho — ver o
+ * comentário abaixo sobre por que o download automático de vários arquivos
+ * não é confiável.
+ *
+ * Não existe uma forma confiável de baixar VÁRIOS arquivos automaticamente
+ * disparando vários cliques programáticos em sequência: testado e
+ * confirmado que navegadores (a partir de alguns segundos de intervalo
+ * inclusive) descartam ou mesclam downloads automáticos além do primeiro —
+ * o operador via só 1 das N imagens baixada, sem erro nenhum na tela. Por
+ * isso, quando o compartilhamento não é uma opção, a interface (ver
+ * ExportarFita.tsx) mostra um botão "Baixar imagem N" por imagem — cada
+ * download então é o resultado direto de um clique de verdade do operador,
+ * o único jeito garantido de funcionar em qualquer navegador.
  */
-export async function compartilharOuBaixar(arquivo: File): Promise<ResultadoCompartilhamento> {
+export async function compartilharOuBaixar(arquivos: File[]): Promise<ResultadoCompartilhamento> {
   const nav = navigator as Navigator & {
     canShare?: (data?: ShareData) => boolean;
     share?: (data: ShareData) => Promise<void>;
   };
 
-  if (nav.share && nav.canShare?.({ files: [arquivo] })) {
+  if (nav.share && nav.canShare?.({ files: arquivos })) {
     try {
-      await nav.share({ files: [arquivo], title: arquivo.name });
+      await nav.share({ files: arquivos, title: arquivos[0]?.name });
       return "compartilhado";
     } catch {
       // Usuário cancelou o seletor de compartilhamento — cai para download.
     }
   }
 
+  if (arquivos.length > 1) return "baixar_manualmente";
+
+  baixarArquivo(arquivos[0]);
+  return "baixado";
+}
+
+/** Baixa UM arquivo — seguro para chamar tanto automaticamente (caso de 1 arquivo só) quanto a partir de um clique direto do operador. */
+export function baixarArquivo(arquivo: File): void {
   const url = URL.createObjectURL(arquivo);
   const link = document.createElement("a");
   link.href = url;
@@ -257,5 +381,4 @@ export async function compartilharOuBaixar(arquivo: File): Promise<ResultadoComp
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
-  return "baixado";
 }
