@@ -93,12 +93,13 @@ export default async function handler(requisicao: Request): Promise<Response> {
   try {
     await confirmarQueEhAMatriz(requisicao.headers.get("authorization") ?? undefined);
 
-    const { nomeProduto, codigoPdv, vezesHoje } = (await requisicao.json()) as {
+    const { nomeProduto, codigoPdv, vezesHoje, teste } = (await requisicao.json()) as {
       nomeProduto?: string;
       codigoPdv?: number;
       vezesHoje?: number;
+      teste?: boolean;
     };
-    if (!nomeProduto || typeof codigoPdv !== "number") {
+    if (!teste && (!nomeProduto || typeof codigoPdv !== "number")) {
       throw new ErroNotificacao("Faltou o produto no pedido de aviso.", 400);
     }
 
@@ -116,11 +117,16 @@ export default async function handler(requisicao: Request): Promise<Response> {
       .filter((token): token is string => Boolean(token));
 
     if (tokens.length === 0) {
-      return Response.json({ enviados: 0, aviso: "Nenhuma filial ativou os avisos ainda." });
+      return Response.json({
+        enviados: 0,
+        registrados: 0,
+        aviso: "Nenhuma filial ativou os avisos ainda.",
+      });
     }
 
-    const corpo =
-      vezesHoje && vezesHoje > 1
+    const corpo = teste
+      ? "Teste de aviso. Se você está vendo isto, as notificações estão funcionando."
+      : vezesHoje && vezesHoje > 1
         ? `${vezesHoje}ª fornada de hoje. Está sem no balcão? Peça reposição.`
         : "Acabou de sair do forno. Está sem no balcão? Peça reposição.";
 
@@ -134,13 +140,20 @@ export default async function handler(requisicao: Request): Promise<Response> {
     const resultado = await getMessaging(app).sendEachForMulticast({
       tokens,
       data: {
-        titulo: nomeProduto,
+        titulo: teste ? "Padaria Pão de Mel" : nomeProduto!,
         corpo,
-        tag: `fornada-${codigoPdv}`,
+        tag: teste ? "teste-aviso" : `fornada-${codigoPdv}`,
       },
+      /**
+       * Sem `fcmOptions.link` de propósito. O FCM exige que esse campo,
+       * quando presente, seja uma URL HTTPS COMPLETA — um caminho relativo
+       * como "/" é recusado na validação e derruba o envio inteiro, com
+       * token válido e tudo. E ele seria redundante aqui: quem decide o que
+       * abrir ao tocar no aviso é o `notificationclick` do service worker,
+       * que já foca a janela existente em vez de abrir outra aba.
+       */
       webpush: {
         headers: { Urgency: "high" },
-        fcmOptions: { link: "/" },
       },
     });
 
@@ -159,10 +172,26 @@ export default async function handler(requisicao: Request): Promise<Response> {
       await getFirestore(app).collection("dispositivos").doc(token).delete();
     }
 
+    /**
+     * Os códigos de erro do FCM voltam para a tela. Sem isso, "marquei e
+     * não chegou nada" é indistinguível de "chegou e o celular não tocou",
+     * e a investigação vira tentativa e erro. Só os códigos, sem token
+     * nenhum: identificam a causa e não expõem aparelho.
+     */
+    const motivos = [
+      ...new Set(
+        resultado.responses
+          .filter((resposta) => resposta.error)
+          .map((resposta) => resposta.error?.code ?? "desconhecido")
+      ),
+    ];
+
     return Response.json({
       enviados: resultado.successCount,
       falharam: resultado.failureCount,
       removidos: invalidos.length,
+      registrados: tokens.length,
+      motivos,
     });
   } catch (erro) {
     if (erro instanceof ErroNotificacao) {

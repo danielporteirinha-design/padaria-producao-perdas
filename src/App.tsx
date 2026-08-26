@@ -21,7 +21,7 @@ import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
 import type { PedidoFilial } from "./types/pedido";
 import { base64DoDataUrl, type TrabalhoImpressao } from "./types/impressao";
 import { idDaFornada, type FornadaPronta } from "./types/fornada";
-import { avisarFiliais, ErroAviso } from "./lib/avisarFiliais";
+import { avisarFiliais, ErroAviso, explicarFalhaDeEnvio } from "./lib/avisarFiliais";
 import { ouvirAvisosEmPrimeiroPlano } from "./lib/notificacoes";
 
 type Aba = "cronograma" | "cadastro" | "perdas" | "analises" | "pedido";
@@ -403,9 +403,12 @@ export default function App() {
        * deixa de ser lida.
        */
       if (resultado.enviados === 0) {
+        const causa = (resultado.motivos ?? []).map(explicarFalhaDeEnvio).join("; ");
         setAviso({
           tipo: "sucesso",
-          texto: `${nome} saiu do forno. Nenhum aparelho de filial está recebendo avisos ainda — cada filial precisa tocar em "Ativar" uma vez, no celular dela.`,
+          texto: resultado.registrados
+            ? `${nome} saiu do forno. O aviso não chegou às filiais${causa ? `: ${causa}` : "."}`
+            : `${nome} saiu do forno. Nenhum aparelho de filial está recebendo avisos ainda — cada filial precisa tocar em "Ativar" uma vez, no celular dela.`,
         });
       }
     } catch (erro) {

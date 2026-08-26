@@ -1053,3 +1053,14 @@ button.perigo:hover { background: #822525; }
   font-size: 14px;
   color: var(--cor-texto-suave);
 }
+
+/* Rodapé de diagnóstico do painel de forno — discreto, separado das ações. */
+.rodape-forno {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--cor-borda);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}

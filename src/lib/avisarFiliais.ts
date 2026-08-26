@@ -27,7 +27,30 @@ export interface ResultadoAviso {
   enviados: number;
   falharam?: number;
   removidos?: number;
+  /** Quantos aparelhos de filial estavam registrados na hora do envio. */
+  registrados?: number;
+  /** Códigos de erro do FCM, sem repetição — a causa real da falha. */
+  motivos?: string[];
   aviso?: string;
+}
+
+/**
+ * Traduz o código do FCM para o que fazer a respeito. O código cru
+ * ("messaging/third-party-auth-error") não diz nada para quem está com o
+ * celular na mão às 6h; o que resolve é a frase seguinte.
+ */
+export function explicarFalhaDeEnvio(codigo: string): string {
+  if (codigo.includes("registration-token-not-registered"))
+    return "o aparelho da filial desinstalou o app ou limpou os dados — precisa ativar de novo";
+  if (codigo.includes("invalid-registration-token") || codigo.includes("invalid-argument"))
+    return "o registro do aparelho está inválido — a filial precisa ativar de novo";
+  if (codigo.includes("third-party-auth-error"))
+    return "a chave VAPID do projeto não confere com a que o app está usando";
+  if (codigo.includes("sender-id-mismatch"))
+    return "o aparelho foi registrado em outro projeto do Firebase";
+  if (codigo.includes("quota-exceeded") || codigo.includes("unavailable"))
+    return "o serviço do Google recusou o envio agora — dá para tentar de novo";
+  return codigo;
 }
 
 export async function avisarFiliais(
@@ -35,6 +58,20 @@ export async function avisarFiliais(
   codigoPdv: number,
   vezesHoje: number
 ): Promise<ResultadoAviso> {
+  return enviar({ nomeProduto, codigoPdv, vezesHoje });
+}
+
+/**
+ * Dispara um aviso de teste para os aparelhos das filiais, sem marcar
+ * fornada nenhuma. Existe porque a alternativa para conferir se o push
+ * funciona é marcar uma fornada de mentira — que entra no histórico do dia
+ * e suja o número que o app existe para medir.
+ */
+export async function testarAvisos(): Promise<ResultadoAviso> {
+  return enviar({ teste: true });
+}
+
+async function enviar(corpo: Record<string, unknown>): Promise<ResultadoAviso> {
   const usuario = auth.currentUser;
   if (!usuario) throw new ErroAviso("Sessão não encontrada para avisar as filiais.");
 
@@ -45,7 +82,7 @@ export async function avisarFiliais(
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ nomeProduto, codigoPdv, vezesHoje }),
+    body: JSON.stringify(corpo),
   });
 
   if (!resposta.ok) {

@@ -27,6 +27,7 @@ import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import { rotuloDaCategoria } from "../lib/categorias";
+import { ErroAviso, explicarFalhaDeEnvio, testarAvisos } from "../lib/avisarFiliais";
 import { IconeForno, IconeSeta } from "./Icones";
 
 interface PainelFornoDeHojeProps {
@@ -47,6 +48,42 @@ export function PainelFornoDeHoje({
 }: PainelFornoDeHojeProps) {
   const [aberto, setAberto] = useState(true);
   const [marcando, setMarcando] = useState<number | null>(null);
+  const [testando, setTestando] = useState(false);
+  const [resultadoTeste, setResultadoTeste] = useState("");
+
+  /**
+   * Conferir o push sem marcar fornada. A alternativa era marcar uma
+   * fornada de mentira só para ver se o celular da filial toca — e isso
+   * entra no histórico do dia, sujando justamente o número que o app
+   * existe para medir. Aqui o teste não grava nada.
+   */
+  async function conferirAvisos() {
+    setTestando(true);
+    setResultadoTeste("");
+    try {
+      const r = await testarAvisos();
+      if (r.enviados > 0) {
+        setResultadoTeste(
+          `Enviado para ${r.enviados} aparelho${r.enviados > 1 ? "s" : ""} de filial. Se não apareceu na tela de lá, o bloqueio é nas notificações do próprio celular.`
+        );
+      } else if (!r.registrados) {
+        setResultadoTeste(
+          'Nenhum aparelho de filial está registrado. Em cada filial: abrir o app e tocar em "Ativar" no cartão de avisos.'
+        );
+      } else {
+        const causa = (r.motivos ?? []).map(explicarFalhaDeEnvio).join("; ");
+        setResultadoTeste(
+          `${r.registrados} aparelho(s) registrado(s), nenhum recebeu${causa ? ` — ${causa}` : "."}`
+        );
+      }
+    } catch (erro) {
+      setResultadoTeste(
+        erro instanceof ErroAviso ? erro.message : "Não foi possível falar com o servidor de avisos."
+      );
+    } finally {
+      setTestando(false);
+    }
+  }
 
   const nomeDoProduto = (codigo: number) =>
     produtos.find((p) => p.codigoPdv === codigo)?.nome ?? `#${codigo}`;
@@ -115,6 +152,15 @@ export function PainelFornoDeHoje({
               })}
             </div>
           ))}
+
+          {/* Diagnóstico, não operação: fica no rodapé, discreto, e só
+              aparece o resultado quando alguém pergunta. */}
+          <div className="rodape-forno">
+            <button type="button" className="link" disabled={testando} onClick={conferirAvisos}>
+              {testando ? "testando..." : "testar aviso nas filiais"}
+            </button>
+            {resultadoTeste && <p className="nota-rodape">{resultadoTeste}</p>}
+          </div>
         </div>
       )}
     </div>

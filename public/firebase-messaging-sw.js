@@ -43,6 +43,13 @@ messaging.onBackgroundMessage((payload) => {
      */
     tag: dados.tag || "fornada",
     renotify: true,
+    /**
+     * Explícito de propósito. A Web Notifications API não deixa escolher o
+     * som — quem toca é o canal padrão do sistema —, mas `silent: true`
+     * herdado de alguma configuração deixaria o aviso mudo sem erro
+     * nenhum. Declarar false tira essa dúvida da investigação.
+     */
+    silent: false,
     data: { url: "/" },
   });
 });
