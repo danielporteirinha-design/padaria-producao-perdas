@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "verificar": "tsx scripts/verificar_logica.ts"
+    "verificar": "tsx scripts/verificar_logica.ts && node --no-experimental-require-module scripts/verificar_carga_api.cjs"
   },
   "dependencies": {
     "firebase": "^12.18.0",

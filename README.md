@@ -1082,7 +1082,7 @@ producao-perdas/
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (149 asserções)
+npm run verificar   # 149 asserções de lógica + carga das funções de /api no runtime do Vercel
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```
@@ -1098,6 +1098,31 @@ Para reimportar a planilha (ou uma versão atualizada dela):
 pip install openpyxl
 python3 scripts/importar_produtos.py caminho/planilha.xlsx data/produtos.seed.json
 ```
+
+### As funções de /api precisam carregar como CommonJS
+
+`npm run verificar` termina rodando `scripts/verificar_carga_api.cjs` com
+`--no-experimental-require-module`. Isso existe por causa de um defeito real
+que tirou os avisos do ar (ago/2026):
+
+`api/notificar-fornada.ts` importava `firebase-admin/auth`, que carrega
+`jwks-rsa`, que faz `require('jose')` — e o `jose` virou pacote só-ESM. O
+runtime do Vercel não faz `require()` de ESM, então a função morria com
+`ERR_REQUIRE_ESM` **antes de executar uma linha**, devolvendo um 500 sem
+corpo JSON. Na tela isso aparecia como "HTTP 500" pelado, indistinguível de
+chave de serviço errada — e mandou a investigação para o lado errado
+(regras do Firestore, chave VAPID, token do aparelho) por horas.
+
+O Node local não reproduzia o problema: da versão 22.12 em diante ele aceita
+`require()` de ESM. A flag desliga essa tolerância e faz a máquina de
+desenvolvimento se comportar como o servidor. Sem isso, `tsc` limpo e build
+limpo continuavam dizendo que estava tudo bem.
+
+A correção foi trocar `verifyIdToken` pelo endpoint REST do Identity
+Toolkit (`accounts:lookup`): a verificação continua sendo do Google e do
+lado do servidor — token adulterado, expirado ou de outro projeto é
+recusado —, mas sem arrastar `jwks-rsa` junto. Firestore e Messaging do
+`firebase-admin` carregam sem problema e seguem em uso.
 
 ## Atualizar o app publicado
 
