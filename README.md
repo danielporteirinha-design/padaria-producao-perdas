@@ -951,6 +951,43 @@ Enquanto a `CHAVE_VAPID` estiver vazia, o app não quebra: a tela da filial
 mostra "avisos ainda não configurados" e as fornadas continuam aparecendo
 ao abrir o app.
 
+## "Nova fornada" é uma aba (ago/2026)
+
+Era um painel dentro de outra tela — no Cronograma da matriz e na tela de
+Pedido da filial. Nos dois casos, dois assuntos disputavam a mesma tela: a
+lista de amanhã e o forno de hoje. Virou aba própria:
+
+| Perfil | Ordem das abas |
+|---|---|
+| Matriz | Cronograma · **Nova fornada** · Produtos · Perdas · Análises |
+| Filial | **Nova fornada** · Pedido · Perdas |
+
+Na filial vem antes de Pedido porque é o que é perecível: dá para agir
+sobre a fornada ainda hoje, enquanto o pedido é para amanhã.
+
+O contador de não vistos saiu de dentro do painel e foi para o **nome do
+botão da aba**, como pastilha sólida. É o ponto do recurso: avisar que há
+novidade sem nada precisar estar aberto na tela. Ele pulsa duas vezes ao
+aparecer e para — chamar atenção uma vez é aviso; piscar para sempre faz
+o operador desviar o olhar da tela inteira (e a animação respeita
+`prefers-reduced-motion`). Na aba ativa a pastilha inverte as cores, senão
+sumiria dentro do próprio botão.
+
+Como a aba passou a ser a divisão, a sanfona interna dos dois painéis foi
+removida — era uma segunda porta para o mesmo cômodo — e o título interno
+também: repetir "Nova fornada" logo abaixo de uma aba chamada "Nova
+fornada" é a definição de ruído. Na matriz, o que sobrou de útil no lugar
+do título é o progresso do dia ("3 de 12 itens já saíram hoje").
+
+### Estado do pedido junto do título
+
+Na tela de Pedido da filial, "Pedido enviado · 12 produtos" era um cartão
+próprio abaixo do bloco da data. Solto, virava um segundo balão
+competindo por atenção e empurrando a lista para baixo. Agora mora dentro
+do mesmo bloco: "Pedido para quinta-feira, 27/08/2026" com o estado logo
+abaixo, verde quando enviado e âmbar quando não — uma frase só, que é como
+a informação existe na cabeça de quem opera.
+
 ## Tempo real, foguinho e resposta à reposição (ago/2026)
 
 Três mudanças que vieram do uso real, no mesmo dia.

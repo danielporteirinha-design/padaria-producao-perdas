@@ -24,8 +24,6 @@ import type { Produto } from "../types/produto";
 import type { ItemPlanoProducao } from "../types/producao";
 import type { PedidoFilial } from "../types/pedido";
 import { ehPedidoDiario, idDoPedido } from "../types/pedido";
-import type { FornadaPronta } from "../types/fornada";
-import { PainelFornadasFilial } from "./PainelFornadasFilial";
 import { AtivarAvisos } from "./AtivarAvisos";
 import type { Loja } from "../lib/lojas";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
@@ -39,7 +37,6 @@ interface TelaPedidoFilialProps {
   pedidos: PedidoFilial[];
   operador: string;
   /** Fornadas prontas hoje na matriz — base do pedido de reposição. */
-  fornadas: FornadaPronta[];
   onSalvarPedido: (pedido: PedidoFilial) => Promise<void>;
 }
 
@@ -48,7 +45,6 @@ export function TelaPedidoFilial({
   produtos,
   pedidos,
   operador,
-  fornadas,
   onSalvarPedido,
 }: TelaPedidoFilialProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
@@ -151,37 +147,31 @@ export function TelaPedidoFilial({
     <div className="tela">
       <AtivarAvisos loja={loja} operador={operador} />
 
-      {/* O que já saiu do forno hoje vem PRIMEIRO: é a informação
-          perecível da tela — dá para agir sobre ela ainda hoje, ao
-          contrário do pedido de amanhã. */}
-      <PainelFornadasFilial
-        loja={loja}
-        produtos={produtos}
-        fornadas={fornadas}
-        pedidos={pedidos}
-        operador={operador}
-        onSalvarPedido={onSalvarPedido}
-      />
-
-      <p className="destaque-data">
+      {/*
+        O estado do pedido mora DENTRO do bloco do título, e não num cartão
+        próprio embaixo (ago/2026). Solto, ele virava um segundo balão
+        competindo com a data por atenção e empurrando a lista para baixo;
+        colado ao título, "Pedido para quinta, 27/08" e "enviado" se leem
+        como uma frase só — que é como a informação existe na cabeça de
+        quem opera.
+      */}
+      <div className={`destaque-data bloco-pedido ${jaEnviado ? "enviado" : ""}`}>
         <IconeCalendario tamanho={20} />
-        <span>
-          Pedido para {rotuloDoDia(diaDaSemana)}, {formatarDataBr(dataAlvo)}
-        </span>
-      </p>
-
-      {jaEnviado ? (
-        <p className="cartao-producao-confirmada">
+        <div className="texto-bloco-pedido">
           <span>
-            <IconeConfere tamanho={16} /> <strong>Pedido enviado</strong> ·{" "}
-            {pedidoExistente?.itens.length ?? 0} produtos
+            Pedido para {rotuloDoDia(diaDaSemana)}, {formatarDataBr(dataAlvo)}
           </span>
-        </p>
-      ) : (
-        <p className="callout-inline">
-          Enquanto não enviar, a matriz vê "aguardando" e a quantidade não entra na produção.
-        </p>
-      )}
+          <span className="estado-pedido">
+            {jaEnviado ? (
+              <>
+                <IconeConfere tamanho={14} /> enviado · {pedidoExistente?.itens.length ?? 0} produtos
+              </>
+            ) : (
+              "não enviado — a quantidade ainda não entra na produção"
+            )}
+          </span>
+        </div>
+      </div>
 
       <button type="button" className="link" onClick={() => setMostrarSeletorData((v) => !v)}>
         {mostrarSeletorData ? "usar amanhã (padrão)" : "pedir para outra data"}

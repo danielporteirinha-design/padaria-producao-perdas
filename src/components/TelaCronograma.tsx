@@ -30,7 +30,6 @@ import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProduc
 import { ExportarFita } from "./ExportarFita";
 import { PainelPedidosFiliais } from "./PainelPedidosFiliais";
 import { ConfirmarProducao } from "./ConfirmarProducao";
-import { PainelFornoDeHoje } from "./PainelFornoDeHoje";
 import type { PedidoFilial } from "../types/pedido";
 import type { FornadaPronta } from "../types/fornada";
 import { codigosComFornadaNoDia } from "../types/fornada";
@@ -48,7 +47,6 @@ interface TelaCronogramaProps {
   onImprimirNoCaixa: (canvases: HTMLCanvasElement[], documento: string, nomeBase: string) => Promise<void>;
   /** Fornadas já marcadas hoje (ver types/fornada.ts). */
   fornadas: FornadaPronta[];
-  onMarcarFornada: (codigoPdv: number) => Promise<void>;
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   operador: string;
@@ -80,7 +78,6 @@ export function TelaCronograma({
   onConfirmarProducao,
   onImprimirNoCaixa,
   fornadas,
-  onMarcarFornada,
   planos,
   perdas,
   operador,
@@ -488,19 +485,6 @@ export function TelaCronograma({
         <IconeCalendario tamanho={20} />
         <span>Produção de {dataFormatada}</span>
       </p>
-
-      {/* Marcar fornada é sobre HOJE; a lista de baixo planeja AMANHÃ.
-          Por isso o painel fica aqui em cima, independente da data que o
-          operador estiver planejando — ver PainelFornoDeHoje.tsx. */}
-      {planoDeHoje && (
-        <PainelFornoDeHoje
-          plano={planoDeHoje}
-          produtos={produtos}
-          fornadas={fornadas}
-          dataHoje={hojeIso}
-          onMarcarFornada={onMarcarFornada}
-        />
-      )}
 
       {planoDeHoje && (
         <ConfirmarProducao

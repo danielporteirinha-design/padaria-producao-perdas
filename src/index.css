@@ -823,7 +823,7 @@ button.perigo:hover { background: #822525; }
 .cabecalho-fornadas > svg:first-child { color: var(--cor-acento); flex-shrink: 0; }
 .titulo-fornadas { flex: 1; font-size: 16px; font-weight: 700; }
 .painel-fornadas.aberto .seta-sessao { transform: rotate(180deg); }
-.corpo-fornadas { padding: 0 14px 14px; }
+.corpo-fornadas { padding: 14px; }
 .painel-fornadas h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; }
 .painel-fornadas h3 svg { color: var(--cor-acento); }
 .painel-fornadas.vazio {
@@ -893,7 +893,7 @@ button.perigo:hover { background: #822525; }
 .cabecalho-forno > svg:first-child { color: var(--cor-acento); flex-shrink: 0; }
 .titulo-forno { flex: 1; font-size: 16px; font-weight: 700; }
 .painel-forno.aberto .seta-sessao { transform: rotate(180deg); }
-.corpo-forno { padding: 0 14px 14px; }
+.corpo-forno { padding: 14px; }
 .grupo-forno h4 {
   margin: 14px 0 6px;
   font-size: 13px;
@@ -1183,3 +1183,72 @@ button.perigo:hover { background: #822525; }
   color: var(--cor-alerta);
   font-size: 13px;
 }
+
+/* ---------------------------------------------------------------
+   Aba "Nova fornada" (ago/2026)
+   O painel virou aba, então a divulgação do que há de novo passou a ser
+   o próprio botão da aba — e o número precisa ser visto de longe, sem o
+   painel estar aberto. Por isso pastilha sólida, e não texto colorido.
+   --------------------------------------------------------------- */
+.abas-principais button { display: inline-flex; align-items: center; gap: 7px; }
+.selo-aba {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  /* Pulsa duas vezes ao aparecer e para. Chamar atenção uma vez é aviso;
+     piscar para sempre é o tipo de coisa que faz o operador desviar o
+     olhar da tela inteira. */
+  animation: pulso-selo 1s ease-in-out 2;
+}
+/* Na aba ativa o fundo já é acento: a pastilha inverte para continuar
+   legível em vez de sumir dentro do próprio botão. */
+.abas-principais button.ativa .selo-aba {
+  background: var(--cor-acento-texto);
+  color: var(--cor-acento);
+}
+@keyframes pulso-selo {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .selo-aba { animation: none; }
+}
+
+/* Cabeçalho dos painéis quando já não são sanfona: a aba é a divisão,
+   e um botão de abrir/fechar aqui dentro seria uma segunda porta para o
+   mesmo cômodo. */
+.progresso-forno {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--cor-texto-suave);
+}
+.progresso-forno svg { color: var(--cor-acento); flex-shrink: 0; }
+
+/* ---------------------------------------------------------------
+   Cabeçalho do pedido da filial: data e estado numa coisa só
+   --------------------------------------------------------------- */
+/* Um corpo abaixo do resto dos destaques: aqui a linha carrega dia da
+   semana E data completa, e a 19px do padrão ela quebrava em duas,
+   ocupando mais espaço vertical que a lista que vem em seguida. */
+.bloco-pedido { align-items: flex-start; font-size: 16px; }
+.texto-bloco-pedido { display: flex; flex-direction: column; gap: 2px; }
+.estado-pedido {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cor-alerta);
+}
+.bloco-pedido.enviado .estado-pedido { color: var(--cor-sucesso); }

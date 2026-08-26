@@ -17,7 +17,7 @@
  * é o que ainda está quente e o que a filial tem chance de receber hoje.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
@@ -25,9 +25,8 @@ import type { PedidoFilial } from "../types/pedido";
 import { desfechoDaReposicao, ehReposicao, idDaReposicao } from "../types/pedido";
 import type { Loja } from "../lib/lojas";
 import { dataDeHojeIso } from "../lib/data";
-import { fornadasNaoVistas, marcarFornadasComoVistas } from "../lib/fornadasVistas";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
-import { IconeChama, IconeConfere, IconeSeta } from "./Icones";
+import { IconeChama, IconeConfere } from "./Icones";
 
 interface PainelFornadasFilialProps {
   loja: Loja;
@@ -47,8 +46,6 @@ export function PainelFornadasFilial({
   onSalvarPedido,
 }: PainelFornadasFilialProps) {
   const hoje = dataDeHojeIso();
-  const [aberto, setAberto] = useState(false);
-  const [naoVistas, setNaoVistas] = useState(0);
   const [codigoPedindo, setCodigoPedindo] = useState<number | null>(null);
   const [quantidade, setQuantidade] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -96,27 +93,6 @@ export function PainelFornadasFilial({
     return mapa;
   }, [pedidos, hoje, loja.id]);
 
-  /**
-   * Recalcula o contador sempre que chegar fornada nova. Com a escuta em
-   * tempo real, isso acontece durante o expediente sem ninguém recarregar
-   * nada — que é o ponto do foguinho.
-   */
-  useEffect(() => {
-    setNaoVistas(fornadasNaoVistas(loja.id, hoje, fornadas));
-  }, [fornadas, loja.id, hoje]);
-
-  function alternar() {
-    const abrindo = !aberto;
-    setAberto(abrindo);
-    // Abrir É o ato de ver. Zera na hora, sem esperar rolar a lista: se o
-    // número sobrevivesse à abertura, voltaria a ser o contador que nunca
-    // zera e que ninguém olha.
-    if (abrindo) {
-      marcarFornadasComoVistas(loja.id, hoje, fornadas);
-      setNaoVistas(0);
-    }
-  }
-
   async function enviarReposicao(codigoPdv: number) {
     if (!ehNumeroValidoPositivo(quantidade)) return;
     setEnviando(true);
@@ -161,32 +137,14 @@ export function PainelFornadasFilial({
    * exatamente o que a filial veio ver.
    */
   return (
-    <div className={`painel-fornadas ${aberto ? "aberto" : ""}`}>
-      <button
-        type="button"
-        className="cabecalho-fornadas"
-        aria-expanded={aberto}
-        aria-label={
-          naoVistas > 0
-            ? `Saiu do forno hoje — ${naoVistas} fornada(s) nova(s)`
-            : "Saiu do forno hoje"
-        }
-        onClick={alternar}
-      >
-        <span className="marca-chama">
-          <IconeChama tamanho={20} />
-          {naoVistas > 0 && <span className="contador-chama">{naoVistas}</span>}
-        </span>
-        <span className="titulo-fornadas">Saiu do forno hoje</span>
-        <span className="contagem-itens">{prontosHoje.length}</span>
-        <IconeSeta className="seta-sessao" />
-      </button>
-
-      {!aberto ? null : (
-        <div className="corpo-fornadas">
-      <p className="nota-rodape">
-        Está sem no balcão? Peça reposição — a matriz recebe na hora e separa na próxima entrega.
-      </p>
+    <div className="painel-fornadas">
+      {/* Sem título aqui dentro: a aba já se chama "Nova fornada", e
+          repetir o nome logo abaixo dela é a definição de ruído. */}
+      <div className="corpo-fornadas">
+      {/* Uma linha, não um parágrafo. O texto longo ensinava na primeira
+          semana; agora a filial já sabe para que serve o botão, e o que
+          sobra é altura ocupada acima da lista. */}
+      <p className="nota-rodape">Está sem no balcão? Peça reposição.</p>
 
       {prontosHoje.map(({ produto, doDia }) => {
         const pedindo = codigoPedindo === produto.codigoPdv;
@@ -262,8 +220,7 @@ export function PainelFornadasFilial({
           </div>
         );
       })}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

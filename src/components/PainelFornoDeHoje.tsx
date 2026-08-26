@@ -21,15 +21,14 @@
  * quanto ela quer, ela informa no pedido de reposição.
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import { rotuloDaCategoria } from "../lib/categorias";
-import { fornadasNaoVistas, marcarFornadasComoVistas } from "../lib/fornadasVistas";
 import { ErroAviso, explicarFalhaDeEnvio, testarAvisos } from "../lib/avisarFiliais";
-import { IconeChama, IconeSeta } from "./Icones";
+import { IconeChama } from "./Icones";
 
 interface PainelFornoDeHojeProps {
   /** Plano confirmado de HOJE. Sem ele não há o que marcar. */
@@ -47,24 +46,9 @@ export function PainelFornoDeHoje({
   dataHoje,
   onMarcarFornada,
 }: PainelFornoDeHojeProps) {
-  const [aberto, setAberto] = useState(false);
-  const [naoVistas, setNaoVistas] = useState(0);
   const [marcando, setMarcando] = useState<number | null>(null);
   const [testando, setTestando] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState("");
-
-  useEffect(() => {
-    setNaoVistas(fornadasNaoVistas("MATRIZ", dataHoje, fornadas));
-  }, [fornadas, dataHoje]);
-
-  function alternar() {
-    const abrindo = !aberto;
-    setAberto(abrindo);
-    if (abrindo) {
-      marcarFornadasComoVistas("MATRIZ", dataHoje, fornadas);
-      setNaoVistas(0);
-    }
-  }
 
   /**
    * Conferir o push sem marcar fornada. A alternativa era marcar uma
@@ -109,29 +93,14 @@ export function PainelFornoDeHoje({
   const totalItens = plano.sessoes.flatMap((s) => s.itens).length;
 
   return (
-    <div className={`painel-forno ${aberto ? "aberto" : ""}`}>
-      <button
-        type="button"
-        className="cabecalho-forno"
-        aria-expanded={aberto}
-        aria-label={
-          naoVistas > 0 ? `Forno de hoje — ${naoVistas} fornada(s) nova(s)` : "Forno de hoje"
-        }
-        onClick={alternar}
-      >
-        <span className="marca-chama">
-          <IconeChama tamanho={20} />
-          {naoVistas > 0 && <span className="contador-chama">{naoVistas}</span>}
-        </span>
-        <span className="titulo-forno">Forno de hoje</span>
-        <span className="contagem-itens">
-          {totalMarcado} de {totalItens}
-        </span>
-        <IconeSeta className="seta-sessao" />
-      </button>
-
-      {aberto && (
-        <div className="corpo-forno">
+    <div className="painel-forno">
+      {/* A aba já diz o assunto. O que sobra de útil aqui é o progresso
+          do dia — quanto da lista já saiu do forno. */}
+      <div className="corpo-forno">
+        <p className="progresso-forno">
+          <IconeChama tamanho={16} />
+          {totalMarcado} de {totalItens} itens já saíram hoje
+        </p>
           <p className="nota-rodape">
             Toque no item quando a fornada sair. As filiais veem na hora e podem pedir reposição
             enquanto ainda dá tempo de entregar hoje.
@@ -182,8 +151,7 @@ export function PainelFornoDeHoje({
             </button>
             {resultadoTeste && <p className="nota-rodape">{resultadoTeste}</p>}
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

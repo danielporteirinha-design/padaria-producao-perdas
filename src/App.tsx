@@ -30,8 +30,11 @@ import {
 } from "./lib/avisarFiliais";
 import { ouvirAvisosEmPrimeiroPlano } from "./lib/notificacoes";
 import { AtivarAvisos } from "./components/AtivarAvisos";
+import { PainelFornoDeHoje } from "./components/PainelFornoDeHoje";
+import { PainelFornadasFilial } from "./components/PainelFornadasFilial";
+import { fornadasNaoVistas, marcarFornadasComoVistas } from "./lib/fornadasVistas";
 
-type Aba = "cronograma" | "cadastro" | "perdas" | "analises" | "pedido";
+type Aba = "cronograma" | "fornada" | "cadastro" | "perdas" | "analises" | "pedido";
 
 interface DefinicaoAba {
   chave: Aba;
@@ -50,14 +53,28 @@ interface DefinicaoAba {
  * seria recusado pelo banco. O lugar da filial nesse fluxo é a tela de
  * Pedido, que entra na Parte B — até lá a filial trabalha só em Perdas.
  */
+/**
+ * "Nova fornada" virou ABA, e não mais um painel dentro de outra tela
+ * (ago/2026). Como painel ele disputava espaço com o cronograma na
+ * matriz e com o pedido na filial, e a tela ficava com dois assuntos
+ * competindo. Como aba, o assunto aparece quando é o assunto — e o
+ * contador no próprio nome do botão avisa que há novidade sem precisar
+ * de nada aberto na tela.
+ *
+ * Na matriz fica logo depois de Cronograma; na filial, antes de Pedido —
+ * é o que é perecível: dá para agir sobre a fornada ainda hoje, enquanto
+ * o pedido é para amanhã.
+ */
 const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
   matriz: [
     { chave: "cronograma", rotulo: "Cronograma" },
+    { chave: "fornada", rotulo: "Nova fornada" },
     { chave: "cadastro", rotulo: "Produtos" },
     { chave: "perdas", rotulo: "Perdas" },
     { chave: "analises", rotulo: "Análises" },
   ],
   filial: [
+    { chave: "fornada", rotulo: "Nova fornada" },
     { chave: "pedido", rotulo: "Pedido" },
     { chave: "perdas", rotulo: "Perdas" },
   ],
@@ -311,6 +328,30 @@ export default function App() {
       desligarFornadas();
     };
   }, [repositorio, loja, carregando]);
+
+  /**
+   * Fornadas que chegaram desde a última vez que esta pessoa abriu a aba.
+   * Fica aqui no App, e não dentro do painel, porque quem mostra o número
+   * agora é a ABA — o painel pode nem estar montado quando a fornada sai.
+   */
+  const [fornadasNovas, setFornadasNovas] = useState(0);
+  useEffect(() => {
+    if (!loja) return;
+    setFornadasNovas(fornadasNaoVistas(loja.id, dataDeHojeIso(), fornadas));
+  }, [fornadas, loja]);
+
+  /**
+   * Abrir a aba É o ato de ver: o contador zera na entrada. Se
+   * sobrevivesse à abertura voltaria a ser o número que nunca zera, que é
+   * exatamente o que ninguém olha.
+   */
+  function irParaAba(destino: Aba) {
+    if (destino === "fornada" && loja) {
+      marcarFornadasComoVistas(loja.id, dataDeHojeIso(), fornadas);
+      setFornadasNovas(0);
+    }
+    setAba(destino);
+  }
 
   function chaveOperador(lojaId: string): string {
     return `padaria:operador:${lojaId}`;
@@ -669,6 +710,11 @@ export default function App() {
   // disponível em vez de renderizar tela em branco.
   const abaAtual = abasVisiveis.some((a) => a.chave === aba) ? aba : abasVisiveis[0].chave;
 
+  /** Cronograma confirmado de HOJE — é dele que sai a lista do forno. */
+  const planoDeHojeParaFornada = planos.find(
+    (p) => p.data === dataDeHojeIso() && p.status === "confirmado"
+  );
+
   return (
     <div className="app">
       <header className="cabecalho-app">
@@ -703,7 +749,7 @@ export default function App() {
         planos={planos}
         perdas={perdas}
         visivel={aba !== "perdas"}
-        onIrParaPerdas={() => setAba("perdas")}
+        onIrParaPerdas={() => irParaAba("perdas")}
       />
 
       {/* A matriz também precisa registrar o aparelho: é ela quem recebe o
@@ -718,9 +764,14 @@ export default function App() {
             key={a.chave}
             type="button"
             className={abaAtual === a.chave ? "ativa" : ""}
-            onClick={() => setAba(a.chave)}
+            onClick={() => irParaAba(a.chave)}
           >
             {a.rotulo}
+            {a.chave === "fornada" && fornadasNovas > 0 && (
+              <span className="selo-aba" aria-label={`${fornadasNovas} fornadas novas`}>
+                {fornadasNovas}
+              </span>
+            )}
           </button>
         ))}
       </nav>
@@ -733,7 +784,6 @@ export default function App() {
             onConfirmarProducao={handleConfirmarProducao}
             onImprimirNoCaixa={handleImprimirNoCaixa}
             fornadas={fornadas}
-            onMarcarFornada={handleMarcarFornada}
             onDecidirReposicao={loja.papel === "matriz" ? handleDecidirReposicao : undefined}
             planos={planos}
             perdas={perdas}
@@ -741,13 +791,41 @@ export default function App() {
             onSalvarPlano={handleSalvarPlano}
           />
         )}
+        {/* Aba própria: na matriz é onde se MARCA a fornada; na filial é
+            onde se vê o que saiu e se pede reposição. Duas telas para o
+            mesmo assunto, cada uma no papel de quem está olhando. */}
+        {abaAtual === "fornada" &&
+          (loja.papel === "matriz" ? (
+            planoDeHojeParaFornada ? (
+              <PainelFornoDeHoje
+                plano={planoDeHojeParaFornada}
+                produtos={produtos}
+                fornadas={fornadas}
+                dataHoje={dataDeHojeIso()}
+                onMarcarFornada={handleMarcarFornada}
+              />
+            ) : (
+              <p className="callout-inline">
+                Nenhum cronograma confirmado para hoje — sem lista, não há fornada a marcar.
+              </p>
+            )
+          ) : (
+            <PainelFornadasFilial
+              loja={loja}
+              produtos={produtos}
+              fornadas={fornadas}
+              pedidos={pedidos}
+              operador={operador}
+              onSalvarPedido={handleSalvarPedido}
+            />
+          ))}
+
         {abaAtual === "pedido" && (
           <TelaPedidoFilial
             loja={loja}
             produtos={produtos}
             pedidos={pedidos}
             operador={operador}
-            fornadas={fornadas}
             onSalvarPedido={handleSalvarPedido}
           />
         )}
