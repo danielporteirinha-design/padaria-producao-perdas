@@ -40,6 +40,13 @@ interface PainelPedidosFiliaisProps {
   /** Reposições pedidas HOJE — urgentes, aparecem em destaque à parte. */
   reposicoesDeHoje?: PedidoFilial[];
   nomeDoProduto?: (codigoPdv: number) => string;
+  /**
+   * Esconde os cartões de "enviou / aguardando" e deixa só as
+   * reposições. Desde ago/2026 esse status vive na linha do título do
+   * Cronograma — mostrá-lo aqui de novo seria dizer duas vezes a mesma
+   * coisa em telas de altura contada.
+   */
+  somenteReposicoes?: boolean;
   /** Ausente para quem não é matriz — só ela decide. */
   onDecidirReposicao?: (
     pedido: PedidoFilial,
@@ -54,6 +61,7 @@ export function PainelPedidosFiliais({
   reposicoesDeHoje = [],
   nomeDoProduto,
   onDecidirReposicao,
+  somenteReposicoes = false,
 }: PainelPedidosFiliaisProps) {
   /**
    * Qual reposição está com o campo de motivo aberto. Cancelar é o único
@@ -91,9 +99,13 @@ export function PainelPedidosFiliais({
 
   const faltando = situacao.filter((s) => !s.enviado);
 
+  // Sem cartões de status e sem reposição não sobra nada para mostrar —
+  // e um painel vazio ainda ocuparia margem e borda na tela.
+  if (somenteReposicoes && reposicoesDeHoje.length === 0) return null;
+
   return (
     <div className="painel-pedidos">
-      {situacao.map(({ filial, pedido, enviado }) => (
+      {!somenteReposicoes && situacao.map(({ filial, pedido, enviado }) => (
         <div key={filial.id} className={`cartao-filial ${enviado ? "enviado" : "aguardando"}`}>
           <span className="icone-status">
             {enviado ? <IconeConfere tamanho={22} /> : <IconeAtencao tamanho={22} />}
@@ -106,7 +118,7 @@ export function PainelPedidosFiliais({
           </span>
         </div>
       ))}
-      {faltando.length > 0 && (
+      {!somenteReposicoes && faltando.length > 0 && (
         <p className="nota-rodape">
           Confirmando agora, o que falta não entra na produção.
         </p>

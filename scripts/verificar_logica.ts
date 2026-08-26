@@ -46,6 +46,7 @@ import {
   type PedidoFilial,
 } from "../src/types/pedido";
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "../src/lib/fornadasVistas";
+import { comoLiberarNotificacao, plataformaAtual } from "../src/lib/plataforma";
 import {
   codigosComFornadaNoDia,
   fornadasDoProduto,
@@ -1613,6 +1614,99 @@ const perdas: RegistroPerda[] = [
     fornadasNaoVistas("MATRIZ", HOJE, [...comNova, ...ontem]) === 1,
     "fornada de outro dia fica fora do contador do dia"
   );
+}
+
+// ---------------------------------------------------------------
+// Caso 20: instruções de permissão por aparelho (ago/2026)
+//
+// Nenhuma API da web abre a tela de configurações do sistema. Quando o
+// usuário já negou, o texto do passo a passo é a ÚNICA coisa que
+// resolve — então ele não pode sair vazio, genérico ou com o caminho do
+// aparelho errado em nenhum cenário.
+// ---------------------------------------------------------------
+{
+  // `globalThis.navigator` no Node é só-leitura; defineProperty é o
+  // único caminho para trocá-lo durante o teste.
+  function definir(nome: string, valor: unknown) {
+    Object.defineProperty(globalThis, nome, {
+      value: valor,
+      configurable: true,
+      writable: true,
+    });
+  }
+
+  function simular(userAgent: string, instalado: boolean, toques = 0) {
+    definir("navigator", { userAgent, maxTouchPoints: toques, standalone: instalado });
+    definir("window", { matchMedia: () => ({ matches: instalado }) });
+  }
+
+  const ANDROID = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/151";
+  const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4) AppleWebKit/605.1 Safari/604.1";
+  const IPAD = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1 Safari/604.1";
+  const WINDOWS = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151";
+
+  simular(ANDROID, false);
+  afirmar(plataformaAtual() === "android", "Android é reconhecido");
+
+  simular(IPHONE, false);
+  afirmar(plataformaAtual() === "ios", "iPhone é reconhecido");
+
+  // iPad moderno se anuncia como Mac — só o toque o denuncia.
+  simular(IPAD, false, 5);
+  afirmar(plataformaAtual() === "ios", "iPad disfarçado de Mac é reconhecido como iOS");
+  simular(WINDOWS, false);
+  afirmar(plataformaAtual() === "desktop", "Windows é reconhecido como computador");
+
+  // Mac de verdade (sem toque) não pode virar iOS, senão o dono do
+  // negócio receberia instrução de iPhone no computador do caixa.
+  definir("navigator", { userAgent: IPAD, maxTouchPoints: 0 });
+  definir("window", { matchMedia: () => ({ matches: false }) });
+  afirmar(plataformaAtual() === "desktop", "Mac sem toque continua sendo computador");
+
+  const cenarios: [string, string, boolean][] = [
+    ["Android instalado", ANDROID, true],
+    ["Android no navegador", ANDROID, false],
+    ["iPhone instalado", IPHONE, true],
+    ["iPhone no navegador", IPHONE, false],
+    ["computador", WINDOWS, false],
+  ];
+  for (const [nome, ua, instalado] of cenarios) {
+    simular(ua, instalado, /iPhone|Macintosh/.test(ua) ? 5 : 0);
+    const caminho = comoLiberarNotificacao();
+    afirmar(
+      caminho.passos.length >= 3 && caminho.passos.every((p) => p.trim().length > 0),
+      `${nome}: passo a passo tem conteúdo em todos os passos`
+    );
+    afirmar(
+      caminho.titulo.trim().length > 0,
+      `${nome}: o passo a passo diz de qual aparelho está falando`
+    );
+  }
+
+  // Instalado e não instalado têm caminhos DIFERENTES: mandar quem
+  // instalou para as configurações do navegador não resolve nada.
+  simular(ANDROID, true);
+  const androidApp = comoLiberarNotificacao();
+  simular(ANDROID, false);
+  const androidNavegador = comoLiberarNotificacao();
+  afirmar(
+    androidApp.titulo !== androidNavegador.titulo,
+    "Android instalado e no navegador recebem instruções distintas"
+  );
+
+  // Só o computador oferece atalho colável; num celular não existe
+  // endereço equivalente, e oferecer um seria falso.
+  simular(WINDOWS, false);
+  afirmar(Boolean(comoLiberarNotificacao().atalho), "no computador há atalho para copiar");
+  simular(IPHONE, true);
+  afirmar(
+    comoLiberarNotificacao().atalho === undefined,
+    "no iPhone não se promete um atalho que não existe"
+  );
+
+  // Não restaura: este é o último bloco do script e o processo encerra
+  // em seguida. Deixar navigator falso vivo para casos futuros seria a
+  // armadilha clássica de teste que contamina o vizinho.
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

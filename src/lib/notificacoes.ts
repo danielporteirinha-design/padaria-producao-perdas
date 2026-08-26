@@ -26,6 +26,7 @@
 import { getMessaging, getToken, isSupported, onMessage } from "firebase/messaging";
 import { doc, setDoc } from "firebase/firestore";
 import { app, db } from "./firebase";
+import { estaInstalado, plataformaAtual } from "./plataforma";
 
 /**
  * Chave pública do Web Push, gerada no console do Firebase em
@@ -46,21 +47,17 @@ export type EstadoAviso =
 
 export class ErroNotificacao extends Error {}
 
-function ehIos(): boolean {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent);
-}
-
-/** True quando o app está rodando instalado na tela de início. */
-export function estaInstalado(): boolean {
-  if (window.matchMedia("(display-mode: standalone)").matches) return true;
-  return Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
-}
+/**
+ * Detecção de aparelho vive em src/lib/plataforma.ts — mesma fonte usada
+ * pelo cartão de avisos para montar as instruções. Duas cópias da mesma
+ * regra acabariam discordando no dia em que uma delas mudasse.
+ */
 
 export async function estadoDosAvisos(): Promise<EstadoAviso> {
   if (!(await isSupported().catch(() => false))) return "nao-suportado";
   // No iPhone o push exige o app na tela de início — instalado pelo
   // navegador, a API existe mas nunca entrega nada.
-  if (ehIos() && !estaInstalado()) return "nao-suportado";
+  if (plataformaAtual() === "ios" && !estaInstalado()) return "nao-suportado";
   if (!CHAVE_VAPID) return "nao-configurado";
   if (Notification.permission === "denied") return "negado";
   if (Notification.permission === "granted") return "ligado";

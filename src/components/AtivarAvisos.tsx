@@ -3,16 +3,33 @@
  * ---------------------------------------------------------------
  * Liga os avisos de fornada pronta neste aparelho (ago/2026).
  *
- * É um BOTÃO, e não um pedido automático ao abrir o app, por dois
- * motivos: alguns navegadores exigem um toque do usuário para conceder a
- * permissão, e pedir de saída cria o reflexo de negar sem ler — e negar
- * notificação só se reverte nas configurações do aparelho, um caminho
- * que ninguém vai percorrer.
+ * O CARTÃO INTEIRO É O BOTÃO
+ * ---------------------------
+ * Não há um "Ativar" pequeno num canto: tocar em qualquer ponto do
+ * cartão executa a ação. O alvo é o dedo de quem está com farinha na mão
+ * às 6h da manhã, e um cartão que parece clicável mas só responde num
+ * pedaço é a pior combinação possível.
  *
- * Cada estado tem um texto próprio de propósito. "Não deu certo" não
- * ajuda quem está com o celular na mão às 6h da manhã: o operador precisa
- * saber se falta instalar o app, se o navegador não suporta, ou se ele
- * mesmo negou antes.
+ * É um toque, e não um pedido automático ao abrir o app, por dois
+ * motivos: alguns navegadores exigem gesto do usuário para conceder a
+ * permissão, e pedir de saída cria o reflexo de negar sem ler.
+ *
+ * O QUE ACONTECE AO TOCAR — E O QUE NÃO DÁ PARA FAZER
+ * ---------------------------------------------------
+ * Se o aparelho ainda não decidiu, o toque abre DIRETO a caixa de
+ * permissão do navegador. É o mais próximo de "ir para a tela de
+ * permissão" que existe na web.
+ *
+ * Se o usuário já negou uma vez, acabou: o navegador não pergunta de
+ * novo, e NENHUMA API da web abre a tela de configurações do sistema —
+ * nem no Android, nem no iPhone, nem no desktop. Essa porta é fechada de
+ * propósito pelos sistemas, para uma página não conseguir jogar o
+ * usuário dentro dos ajustes do aparelho.
+ *
+ * Então o cartão faz o máximo que sobra: detecta o aparelho e mostra os
+ * toques exatos, na ordem, com os nomes que aparecem na tela dele (ver
+ * src/lib/plataforma.ts). "Libere nas configurações" é uma instrução que
+ * ninguém completa; "toque e segure o ícone na tela inicial" é.
  */
 
 import { useEffect, useState } from "react";
@@ -23,7 +40,8 @@ import {
   ErroNotificacao,
   type EstadoAviso,
 } from "../lib/notificacoes";
-import { IconeAtencao, IconeForno } from "./Icones";
+import { comoLiberarNotificacao } from "../lib/plataforma";
+import { IconeAtencao, IconeChama, IconeSeta } from "./Icones";
 
 interface AtivarAvisosProps {
   loja: Loja;
@@ -34,6 +52,8 @@ export function AtivarAvisos({ loja, operador }: AtivarAvisosProps) {
   const [estado, setEstado] = useState<EstadoAviso | null>(null);
   const [ativando, setAtivando] = useState(false);
   const [erro, setErro] = useState("");
+  const [mostrarCaminho, setMostrarCaminho] = useState(false);
+  const [copiado, setCopiado] = useState(false);
   const [dispensado, setDispensado] = useState(
     () => localStorage.getItem(`padaria:avisos-dispensados:${loja.id}`) === "1"
   );
@@ -56,14 +76,39 @@ export function AtivarAvisos({ loja, operador }: AtivarAvisosProps) {
       setEstado("ligado");
     } catch (e) {
       console.error("Falha ao ativar os avisos:", e);
-      setErro(
-        e instanceof ErroNotificacao
-          ? e.message
-          : "Não foi possível ativar os avisos neste aparelho."
-      );
-      setEstado(await estadoDosAvisos());
+      const novoEstado = await estadoDosAvisos();
+      setEstado(novoEstado);
+      // Se o motivo foi recusa, o caminho das configurações abre sozinho:
+      // é exatamente o momento em que ele é útil, e cobrar mais um toque
+      // aqui só adiaria a única coisa que resolve.
+      if (novoEstado === "negado") setMostrarCaminho(true);
+      else
+        setErro(
+          e instanceof ErroNotificacao
+            ? e.message
+            : "Não foi possível ativar os avisos neste aparelho."
+        );
     } finally {
       setAtivando(false);
+    }
+  }
+
+  function dispensar(evento: React.MouseEvent) {
+    // Sem isto o clique subiria para o cartão e dispararia a ativação —
+    // "agora não" acabaria pedindo a permissão.
+    evento.stopPropagation();
+    localStorage.setItem(`padaria:avisos-dispensados:${loja.id}`, "1");
+    setDispensado(true);
+  }
+
+  async function copiarAtalho(evento: React.MouseEvent, endereco: string) {
+    evento.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(endereco);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } catch {
+      setErro("Não foi possível copiar. O endereço é: " + endereco);
     }
   }
 
@@ -72,28 +117,28 @@ export function AtivarAvisos({ loja, operador }: AtivarAvisosProps) {
   if (estado === null || estado === "ligado") return null;
   if (dispensado && estado !== "negado") return null;
 
-  function dispensar() {
-    localStorage.setItem(`padaria:avisos-dispensados:${loja.id}`, "1");
-    setDispensado(true);
-  }
+  const caminho = comoLiberarNotificacao();
 
-  if (estado === "nao-suportado") {
-    return (
-      <div className="cartao-avisos alerta">
-        <IconeAtencao tamanho={20} />
-        <div className="texto-avisos">
-          <strong>Avisos indisponíveis neste aparelho</strong>
-          <span>
-            No iPhone, o aviso de fornada pronta só funciona com o app instalado na tela de início.
-            Toque em Compartilhar → Adicionar à Tela de Início e abra por lá.
-          </span>
-        </div>
-        <button type="button" className="link" onClick={dispensar}>
-          ok
+  /** Instruções passo a passo, iguais em todos os estados que precisam delas. */
+  const blocoCaminho = mostrarCaminho && (
+    <div className="caminho-permissao" onClick={(e) => e.stopPropagation()}>
+      <strong>{caminho.titulo}</strong>
+      <ol>
+        {caminho.passos.map((passo, i) => (
+          <li key={i}>{passo}</li>
+        ))}
+      </ol>
+      {caminho.atalho && (
+        <button
+          type="button"
+          className="secundario"
+          onClick={(e) => copiarAtalho(e, caminho.atalho!)}
+        >
+          {copiado ? "copiado — cole na barra de endereço" : "copiar atalho das configurações"}
         </button>
-      </div>
-    );
-  }
+      )}
+    </div>
+  );
 
   if (estado === "nao-configurado") {
     return (
@@ -110,40 +155,61 @@ export function AtivarAvisos({ loja, operador }: AtivarAvisosProps) {
     );
   }
 
-  if (estado === "negado") {
+  /**
+   * Recusado ou indisponível: aqui o toque não pede permissão nenhuma —
+   * pedir seria mentir, porque o navegador não vai perguntar. O que o
+   * cartão faz é abrir e fechar o passo a passo.
+   */
+  if (estado === "negado" || estado === "nao-suportado") {
+    const bloqueado = estado === "negado";
     return (
-      <div className="cartao-avisos alerta">
+      <div
+        className="cartao-avisos alerta clicavel"
+        role="button"
+        tabIndex={0}
+        aria-expanded={mostrarCaminho}
+        onClick={() => setMostrarCaminho((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") setMostrarCaminho((v) => !v);
+        }}
+      >
         <IconeAtencao tamanho={20} />
         <div className="texto-avisos">
-          <strong>Avisos bloqueados</strong>
+          <strong>{bloqueado ? "Avisos bloqueados neste aparelho" : "Avisos indisponíveis aqui"}</strong>
           <span>
-            Este aparelho recusou as notificações. Para reverter, libere nas configurações do
-            celular — o navegador não pergunta de novo.
+            {mostrarCaminho ? "Siga os passos abaixo." : "Toque para ver como liberar, passo a passo."}
           </span>
+          {blocoCaminho}
         </div>
+        <IconeSeta className={`seta-sessao ${mostrarCaminho ? "aberta" : ""}`} />
       </div>
     );
   }
 
   return (
-    <div className="cartao-avisos">
-      <IconeForno tamanho={20} />
+    <div
+      className="cartao-avisos clicavel"
+      role="button"
+      tabIndex={0}
+      aria-label="Ativar avisos de fornada neste aparelho"
+      onClick={() => !ativando && ligar()}
+      onKeyDown={(e) => {
+        if ((e.key === "Enter" || e.key === " ") && !ativando) ligar();
+      }}
+    >
+      <IconeChama tamanho={20} />
       <div className="texto-avisos">
-        <strong>Receber aviso de fornada pronta</strong>
+        <strong>{ativando ? "Abrindo a permissão..." : "Receber aviso de fornada pronta"}</strong>
         <span>
-          A matriz marca quando o item sai do forno e você fica sabendo na hora, sem precisar abrir
-          o app.
+          Toque aqui e confirme na caixa que o {loja.papel === "matriz" ? "computador" : "celular"} vai
+          mostrar.
         </span>
         {erro && <span className="erro-conversao">{erro}</span>}
+        {blocoCaminho}
       </div>
-      <div className="acoes-avisos">
-        <button type="button" className="primario" disabled={ativando} onClick={ligar}>
-          {ativando ? "Ativando..." : "Ativar"}
-        </button>
-        <button type="button" className="link" onClick={dispensar}>
-          agora não
-        </button>
-      </div>
+      <button type="button" className="link" onClick={dispensar}>
+        agora não
+      </button>
     </div>
   );
 }

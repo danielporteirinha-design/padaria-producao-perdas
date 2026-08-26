@@ -30,7 +30,7 @@ import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProduc
 import { ExportarFita } from "./ExportarFita";
 import { PainelPedidosFiliais } from "./PainelPedidosFiliais";
 import { ConfirmarProducao } from "./ConfirmarProducao";
-import type { PedidoFilial } from "../types/pedido";
+import { ehPedidoDiario, type PedidoFilial } from "../types/pedido";
 import type { FornadaPronta } from "../types/fornada";
 import { codigosComFornadaNoDia } from "../types/fornada";
 import { FILIAIS, LOJA_MATRIZ, nomeDaLoja } from "../lib/lojas";
@@ -86,6 +86,13 @@ export function TelaCronograma({
 }: TelaCronogramaProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
   const [mostrarSeletorData, setMostrarSeletorData] = useState(false);
+  /**
+   * A sanfona do planejamento nasce FECHADA. Quem abre a aba na maior
+   * parte do dia só quer conferir se a produção de amanhã já está
+   * montada — e essa resposta agora está no próprio balão do título.
+   * Quem vai montar toca uma vez e entra.
+   */
+  const [planejamentoAberto, setPlanejamentoAberto] = useState(false);
 
   const planoExistente = useMemo(() => planos.find((p) => p.data === dataAlvo), [planos, dataAlvo]);
 
@@ -133,8 +140,17 @@ export function TelaCronograma({
     return new Map(consolidado.map((c) => [c.codigoPdv, c.totalUnidades]));
   }, [planoDeHoje, pedidos, hojeIso]);
 
+  /**
+   * `ehPedidoDiario` é obrigatório aqui: uma REPOSIÇÃO da loja tem a
+   * mesma data e status "enviado", e sem o filtro ela faria a filial
+   * parecer que já mandou o pedido do dia. A matriz confirmaria a
+   * produção achando que estava completa.
+   */
   const filiaisQueEnviaram = useMemo(
-    () => FILIAIS.filter((f) => pedidosDoDia.some((p) => p.lojaId === f.id && p.status === "enviado")),
+    () =>
+      FILIAIS.filter((f) =>
+        pedidosDoDia.some((p) => p.lojaId === f.id && p.status === "enviado" && ehPedidoDiario(p))
+      ),
     [pedidosDoDia]
   );
 
@@ -476,15 +492,70 @@ export function TelaCronograma({
   // ------------------------------------------------------------------
   // Fase: Montar (padrão)
   // ------------------------------------------------------------------
+
+  /**
+   * Estado do plano em três palavras, para caber na linha do título.
+   * "confirmado" é o único que encerra o assunto; os outros dois dizem
+   * que ainda falta alguém fazer alguma coisa, e por isso ficam em âmbar.
+   */
+  const estadoDoPlano =
+    planoExistente?.status === "confirmado"
+      ? { texto: "Plano confirmado", tom: "ok" }
+      : planoExistente
+        ? { texto: "Rascunho salvo", tom: "pendente" }
+        : { texto: "Ainda não montado", tom: "pendente" };
+
+  const faltantes = FILIAIS.filter((f) => !filiaisQueEnviaram.some((e) => e.id === f.id));
+  const filiaisFaltando = faltantes.length;
+  /**
+   * Uma frase, não dois cartões. O que a matriz decide com isto é uma
+   * coisa só: dá para confirmar a produção agora, ou ainda falta pedido
+   * de alguém? O nome de quem falta aparece quando é UMA loja — com duas
+   * faltando, o número já basta e o nome só alongaria a linha.
+   */
+  const resumoDasFiliais =
+    filiaisFaltando === 0
+      ? "as duas filiais já pediram"
+      : filiaisFaltando === FILIAIS.length
+        ? "nenhuma filial pediu ainda"
+        : `falta ${faltantes[0].nomeCurto}`;
+
   return (
     <div className="tela">
-      {/* O título "Cronograma de Produção" saiu daqui (ago/2026): a aba já
-          diz onde o operador está, e repetir isso empurrava a informação
-          que importa — a DATA da produção — para baixo. */}
-      <p className="destaque-data">
+      {/*
+        O BALÃO DO TÍTULO CARREGA O ESTADO, E É A PORTA DO PLANEJAMENTO
+        ---------------------------------------------------------------
+        Antes eram três blocos empilhados dizendo coisas sobre o mesmo
+        dia: a data num balão, "Rascunho salvo — carregado abaixo" em
+        outro, e os cartões de "enviou / não enviou" das filiais num
+        terceiro. Três caixas para uma frase só — "a produção de quinta
+        está assim" —, e a lista de produtos começava lá embaixo.
+
+        Agora é um balão só: data, estado do plano e situação das filiais
+        juntos, e ele é o botão que abre a sanfona do planejamento. Quem
+        entra na aba responde de relance "está pronto?"; quem vai montar
+        toca e entra.
+      */}
+      <button
+        type="button"
+        className={`destaque-data cabecalho-planejamento ${planejamentoAberto ? "aberto" : ""}`}
+        aria-expanded={planejamentoAberto}
+        onClick={() => setPlanejamentoAberto((v) => !v)}
+      >
         <IconeCalendario tamanho={20} />
-        <span>Produção de {dataFormatada}</span>
-      </p>
+        <span className="texto-planejamento">
+          <span className="titulo-planejamento">Produção de {dataFormatada}</span>
+          <span className="linha-estado">
+            {/* Sem separador entre os dois: quando a linha quebra, o "·"
+                ficava órfão no fim da primeira metade. O espaço já separa. */}
+            <span className={`estado-plano ${estadoDoPlano.tom}`}>{estadoDoPlano.texto}</span>
+            <span className={`estado-filiais ${filiaisFaltando === 0 ? "ok" : "pendente"}`}>
+              {resumoDasFiliais}
+            </span>
+          </span>
+        </span>
+        <IconeSeta className="seta-sessao" />
+      </button>
 
       {planoDeHoje && (
         <ConfirmarProducao
@@ -497,33 +568,34 @@ export function TelaCronograma({
         />
       )}
 
+      {/* As reposições NÃO entram no balão: elas não são "estado do
+          planejamento de amanhã", são pedido urgente de hoje esperando
+          resposta. Esconder isso atrás de um toque atrasaria justamente
+          o que não pode esperar. */}
       <PainelPedidosFiliais
         pedidos={pedidos}
         data={dataAlvo}
+        somenteReposicoes
         reposicoesDeHoje={pedidos.filter((p) => p.data === hojeIso && p.tipo === "reposicao")}
         onDecidirReposicao={onDecidirReposicao}
         nomeDoProduto={nomeDoProduto}
       />
 
-      {planoExistente && (
+      {!planejamentoAberto ? null : (
+      <>
+      {planoExistente?.status === "confirmado" && (
         <p className="callout-inline">
-          {planoExistente.status === "confirmado" ? "Plano confirmado" : "Rascunho salvo"} — carregado
-          abaixo.
-          {planoExistente.status === "confirmado" && (
-            <>
-              {" "}
-              <button
-                type="button"
-                className="link"
-                onClick={() => {
-                  setPlanoConfirmado(planoExistente);
-                  setFase("exportar");
-                }}
-              >
-                reimprimir
-              </button>
-            </>
-          )}
+          Plano confirmado.{" "}
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              setPlanoConfirmado(planoExistente);
+              setFase("exportar");
+            }}
+          >
+            reimprimir
+          </button>
         </p>
       )}
 
@@ -671,6 +743,8 @@ export function TelaCronograma({
           Ir para o Resumo ({totalItens} itens)
         </button>
       </div>
+      </>
+      )}
     </div>
   );
 }

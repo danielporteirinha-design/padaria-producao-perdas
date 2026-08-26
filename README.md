@@ -963,6 +963,40 @@ da filial, então o computador da matriz nunca chegava a ser registrado. A
 matriz não recebia nada e não havia como perceber por quê — a coleção
 `dispositivos` simplesmente não tinha documento com `lojaId: "MATRIZ"`.
 
+#### O balão inteiro é o botão — e o limite da web (ago/2026)
+
+Tocar em qualquer ponto do cartão executa a ação. O alvo é o dedo de quem
+está com farinha na mão às 6h; um cartão com cara de clicável que só
+responde num pedaço é a pior combinação possível.
+
+O que acontece ao tocar depende do estado, e um dos casos é uma parede da
+plataforma:
+
+| Estado do aparelho | O toque faz |
+|---|---|
+| Ainda não decidiu | Abre **direto** a caixa de permissão do navegador |
+| Já negou antes | Abre o passo a passo das configurações daquele aparelho |
+| iPhone sem o app instalado | Abre as instruções de instalação |
+
+**Nenhuma API da web abre a tela de configurações do sistema** — nem no
+Android, nem no iPhone, nem no desktop. Os sistemas fecham essa porta de
+propósito, para uma página não conseguir jogar o usuário dentro dos
+ajustes do aparelho. E, uma vez negada, a permissão nunca mais é
+perguntada pelo navegador.
+
+Então o cartão faz o máximo que sobra: detecta o aparelho
+(`src/lib/plataforma.ts`) e mostra os toques exatos, na ordem, com os
+nomes que aparecem na tela dele. "Libere nas configurações" é uma
+instrução que ninguém completa; "toque e segure o ícone na tela inicial"
+é. No computador ainda dá para copiar `chrome://settings/content/notifications`
+para colar na barra de endereço — no celular não existe endereço
+equivalente, e o app não promete um atalho que não tem.
+
+Instalado e não instalado recebem caminhos DIFERENTES: quem instalou o app
+no Android resolve nas configurações do Android, não nas do Chrome — e
+mandar para a tela errada não resolve nada. Os casos de verificação
+cobrem os cinco cenários e o iPad que se anuncia como Mac.
+
 #### Restrições de aparelho que moldaram a tela
 
 | Restrição | Consequência no desenho |
@@ -987,6 +1021,45 @@ matriz não recebia nada e não havia como perceber por quê — a coleção
 Enquanto a `CHAVE_VAPID` estiver vazia, o app não quebra: a tela da filial
 mostra "avisos ainda não configurados" e as fornadas continuam aparecendo
 ao abrir o app.
+
+## O balão do título carrega o estado (ago/2026)
+
+No Cronograma da matriz eram três blocos empilhados dizendo coisas sobre
+o mesmo dia: a data num balão, "Rascunho salvo — carregado abaixo" em
+outro, e os cartões de "enviou / não enviou" das filiais num terceiro.
+Três caixas para uma frase só — *a produção de quinta está assim* — e a
+lista de produtos começando lá embaixo.
+
+Agora é um balão só, e ele é o botão que abre a sanfona do planejamento:
+
+```
+📅  Produção de Quinta-feira, 27/08/2026              ⌄
+    Rascunho salvo    falta Benjamin Constant
+```
+
+Verde quando não falta nada, âmbar quando falta. O nome da filial aparece
+quando é **uma** só; com duas faltando o número basta e o nome apenas
+alongaria a linha.
+
+A sanfona nasce fechada. Na maior parte do dia quem abre a aba só quer
+saber se a produção de amanhã já está montada — e essa resposta agora
+está no próprio balão. Quem vai montar toca uma vez e entra.
+
+### O que NÃO entrou no balão
+
+As reposições continuam como painel próprio, visíveis sem nenhum toque.
+Elas não são "estado do planejamento de amanhã": são pedido urgente de
+hoje esperando resposta, e escondê-las atrás de um toque atrasaria
+justamente o que não pode esperar.
+
+### Um defeito encontrado no caminho
+
+O cálculo de "quais filiais já enviaram" não filtrava por tipo de pedido.
+Uma REPOSIÇÃO tem a mesma data e o mesmo status `enviado` do pedido
+diário, então uma filial que pediu reposição aparecia como se já tivesse
+mandado o pedido do dia — e a matriz confirmaria a produção achando que
+estava completa, sem a quantidade daquela loja. Corrigido com
+`ehPedidoDiario` no filtro.
 
 ## "Nova fornada" é uma aba (ago/2026)
 
@@ -1174,6 +1247,7 @@ producao-perdas/
     lib/
       errosFirestore.ts              # Traduz falha de gravação para linguagem de padaria
       notificacoes.ts                 # Avisos de fornada no celular (permissão, token, estados)
+      plataforma.ts                    # Qual aparelho é, e os passos exatos para liberar a notificação nele
       avisarFiliais.ts                 # Cliente do endpoint que dispara o aviso
       consolidacao.ts                # Junta produção da matriz + pedidos das filiais (totais e romaneios)
       lojas.ts                      # As 3 lojas (matriz + 2 filiais) e o mapeamento conta -> loja
