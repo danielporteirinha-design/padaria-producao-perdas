@@ -386,9 +386,14 @@ O halo branco em volta da pílula é removido no script (corte só no branco
 puro, tolerância curta — o "PADARIA" da marca é creme `#FFFFD7`, longe o
 bastante para não ser apagado junto).
 
-`theme_color` passou para o vermelho da marca: vale para a tela de
-abertura e para a barra do sistema com o app instalado. **A paleta interna
-do app não muda** — segue a mesma, calma.
+`theme_color` e `background_color` usam a **cor de fundo do app**
+(`#faf7f2`). O vermelho da marca foi testado nesse lugar e reprovado
+(ago/2026): a barra do sistema em vermelho forte brigava com a paleta
+calma de dentro do app, e a emenda entre as duas ficava visível o tempo
+todo. Igualando a barra ao fundo, a moldura some e sobra o conteúdo.
+
+O vermelho continua onde é dele: dentro da logomarca, no ícone do atalho,
+no favicon e na tela de entrada.
 
 ## Instalar como app (PWA) — ago/2026
 

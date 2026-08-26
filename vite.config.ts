@@ -98,10 +98,10 @@ export default defineConfig({
         scope: "/",
         display: "standalone",
         orientation: "portrait",
-        background_color: "#fffff0",
-        // Cor da logomarca — vale para a tela de abertura e para a barra
-        // do sistema com o app instalado. A paleta interna do app não muda.
-        theme_color: "#c40027",
+        background_color: "#faf7f2",
+        // Mesma cor de fundo do app. Ver o comentário em index.html sobre
+        // por que o vermelho da marca não ficou aqui.
+        theme_color: "#faf7f2",
         icons: [
           { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
           { src: "pwa-512x512.png", sizes: "512x512", type: "image/png" },
