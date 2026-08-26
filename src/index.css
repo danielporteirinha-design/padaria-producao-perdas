@@ -1332,3 +1332,52 @@ button.perigo:hover { background: #822525; }
 .estado-filiais.ok { color: var(--cor-sucesso); }
 .estado-plano.pendente,
 .estado-filiais.pendente { color: var(--cor-alerta); }
+
+/* ---------------------------------------------------------------
+   Reposições agrupadas por filial (ago/2026)
+   Lista corrida virava a maior coisa da tela do Cronograma — e a matriz
+   vem aqui para PLANEJAR. Cada loja é uma sanfona fechada, e o cabeçalho
+   diz quantas esperam resposta: é a única informação necessária para
+   decidir se vale abrir.
+   --------------------------------------------------------------- */
+.grupo-reposicao {
+  background: var(--cor-superficie);
+  border-radius: var(--raio);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.grupo-reposicao:last-child { margin-bottom: 0; }
+
+.cabecalho-reposicao {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--cor-texto);
+  text-align: left;
+  font-family: inherit;
+}
+/* 14px, e não 15: "Benjamin Constant" quebrava em duas linhas ao lado
+   do resumo e da seta, e o cabeçalho fechado dobrava de altura — o
+   contrário do que a sanfona veio resolver. */
+.nome-grupo-reposicao { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; }
+.resumo-reposicao { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.resumo-reposicao.pendente { color: var(--cor-alerta); }
+.resumo-reposicao.ok { color: var(--cor-sucesso); }
+.cabecalho-reposicao .seta-sessao { flex-shrink: 0; transition: transform 0.2s ease; }
+.grupo-reposicao.aberto .seta-sessao { transform: rotate(180deg); }
+
+/* Dentro do grupo as linhas perdem o fundo próprio: elas já estão sobre
+   a superfície clara do grupo, e uma caixa dentro da outra só adiciona
+   borda sem adicionar informação. */
+.corpo-reposicao { padding: 0 12px 10px; }
+.corpo-reposicao .linha-reposicao {
+  background: none;
+  padding: 10px 0;
+  margin-bottom: 0;
+  border-top: 1px solid var(--cor-borda);
+}

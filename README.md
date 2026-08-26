@@ -1083,6 +1083,33 @@ A sanfona nasce fechada. Na maior parte do dia quem abre a aba só quer
 saber se a produção de amanhã já está montada — e essa resposta agora
 está no próprio balão. Quem vai montar toca uma vez e entra.
 
+### Reposições agrupadas por filial (ago/2026)
+
+Continuam fora do balão, mas deixaram de ser uma lista corrida. Cada
+filial virou uma sanfona fechada, com o cabeçalho dizendo o que importa:
+
+```
+Reposições pedidas hoje
+  Arthur Bernardes      2 esperando    ⌄
+  Benjamin Constant     2 respondidas  ⌄
+```
+
+Âmbar quando há pedido sem resposta, verde quando está tudo respondido.
+
+Duas razões, e a segunda é a que pesa:
+
+1. **Espaço.** Com as duas lojas pedindo ao longo do dia, a lista corrida
+   virava a maior coisa da tela do Cronograma — e a matriz vem aqui para
+   PLANEJAR, não para ler pedido por pedido.
+2. **Quem separa a mercadoria separa por loja.** Uma lista misturada
+   obrigava a matriz a fazer esse agrupamento de cabeça toda vez que
+   olhava.
+
+Fechadas por padrão: o número no cabeçalho é a única informação
+necessária para decidir se vale abrir. Dentro do grupo, a linha não
+repete o nome da loja — o cabeçalho já diz de quem é, e repetir em toda
+linha era metade do ruído.
+
 ### O que NÃO entrou no balão
 
 As reposições continuam como painel próprio, visíveis sem nenhum toque.
@@ -1268,7 +1295,9 @@ producao-perdas/
     config.exemplo.ini               # Modelo de configuração (o config.ini real fica fora do Git)
     instalar.bat / iniciar.bat        # Atalhos de dois cliques para quem não usa terminal
     _encontrar-python.bat              # Acha o Python (py ou python) e avisa quando não existe
-    instalar-inicio-automatico.bat     # Põe o agente na inicialização do Windows — sem isso ele depende de alguém abrir
+    instalar-servico.bat               # Instala como tarefa de sistema: sobe no boot, sem janela, reinicia sozinho
+    desinstalar-servico.bat            # Desfaz o acima
+    estado-do-agente.bat               # Responde "está rodando?" agora que não há janela
     listar-impressoras.bat / .py       # Mostra o nome exato da impressora para o config.ini
   firestore.rules                 # REGRAS DE ACESSO — a única coisa que protege os dados
   firebase.json                   # Aponta onde ficam as regras (uso opcional pela CLI)

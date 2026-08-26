@@ -32,7 +32,7 @@ function variedadesDoPedido(pedido: PedidoFilial | undefined): number {
   return pedido?.itens.length ?? 0;
 }
 import { FILIAIS } from "../lib/lojas";
-import { IconeAtencao, IconeConfere } from "./Icones";
+import { IconeAtencao, IconeConfere, IconeSeta } from "./Icones";
 
 interface PainelPedidosFiliaisProps {
   pedidos: PedidoFilial[];
@@ -69,6 +69,16 @@ export function PainelPedidosFiliais({
    * um campo de texto sempre visível ao lado de "Confirmar" sugeriria que
    * cancelar é tão rotineiro quanto confirmar, e não é.
    */
+  /**
+   * Quais filiais estão com a lista de reposições aberta.
+   *
+   * Fechadas por padrão. Com as duas lojas pedindo ao longo do dia, a
+   * lista corrida virava a maior coisa da tela do Cronograma — e a
+   * matriz vinha aqui para PLANEJAR, não para ler pedido por pedido. O
+   * cabeçalho de cada filial já diz quantas estão esperando resposta,
+   * que é a única informação necessária para decidir se vale abrir.
+   */
+  const [filiaisAbertas, setFiliaisAbertas] = useState<Record<string, boolean>>({});
   const [cancelando, setCancelando] = useState<string | null>(null);
   const [motivo, setMotivo] = useState("");
   const [salvando, setSalvando] = useState<string | null>(null);
@@ -125,18 +135,50 @@ export function PainelPedidosFiliais({
       )}
 
       {/* Reposição é de HOJE e não entra no planejamento de amanhã — por
-          isso aparece separada, e não somada ao pedido diário da loja. */}
+          isso aparece separada, e não somada ao pedido diário da loja.
+
+          Agrupada POR FILIAL, e não em lista corrida: quem separa a
+          mercadoria separa por loja, e uma lista misturada obriga a
+          matriz a fazer esse agrupamento de cabeça toda vez. */}
       {reposicoesDeHoje.length > 0 && (
         <div className="cartao-reposicoes">
           <strong>Reposições pedidas hoje</strong>
-          {reposicoesDeHoje.map((pedido) => {
+
+          {FILIAIS.map((filial) => {
+            const daFilial = reposicoesDeHoje.filter((p) => p.lojaId === filial.id);
+            if (daFilial.length === 0) return null;
+
+            const pendentes = daFilial.filter((p) => desfechoDaReposicao(p) === "pendente").length;
+            const aberta = !!filiaisAbertas[filial.id];
+
+            return (
+              <div key={filial.id} className={`grupo-reposicao ${aberta ? "aberto" : ""}`}>
+                <button
+                  type="button"
+                  className="cabecalho-reposicao"
+                  aria-expanded={aberta}
+                  onClick={() =>
+                    setFiliaisAbertas((atual) => ({ ...atual, [filial.id]: !atual[filial.id] }))
+                  }
+                >
+                  <span className="nome-grupo-reposicao">{filial.nomeCurto}</span>
+                  <span className={`resumo-reposicao ${pendentes > 0 ? "pendente" : "ok"}`}>
+                    {pendentes > 0
+                      ? `${pendentes} esperando`
+                      : `${daFilial.length} respondida${daFilial.length > 1 ? "s" : ""}`}
+                  </span>
+                  <IconeSeta className="seta-sessao" />
+                </button>
+
+                {aberta && (
+                  <div className="corpo-reposicao">
+                    {daFilial.map((pedido) => {
             const desfecho = desfechoDaReposicao(pedido);
             const ocupado = salvando === pedido.id;
             return (
               <div key={pedido.id} className={`linha-reposicao ${desfecho}`}>
-                <span className="nome-filial">
-                  {FILIAIS.find((f) => f.id === pedido.lojaId)?.nomeCurto ?? pedido.lojaId}
-                </span>
+                {/* Sem o nome da loja aqui: o cabeçalho do grupo já diz de
+                    quem é, e repetir em toda linha era metade do ruído. */}
                 <span className="status-filial">
                   {pedido.itens
                     .map(
@@ -210,6 +252,11 @@ export function PainelPedidosFiliais({
                       </div>
                     )}
                   </>
+                )}
+              </div>
+            );
+          })}
+                  </div>
                 )}
               </div>
             );

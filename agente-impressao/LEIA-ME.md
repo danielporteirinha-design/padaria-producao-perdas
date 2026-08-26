@@ -107,31 +107,40 @@ Conectado como impressora@paodemel.local
 
 **Deixe essa janela aberta.** Fechou, parou de imprimir.
 
-### 6. Subir junto com o Windows — NÃO é opcional
+### 6. Instalar como serviço — obrigatório
 
-Dois cliques em **`instalar-inicio-automatico.bat`**. Uma vez só.
+Clique com o botão **direito** em **`instalar-servico.bat`** e escolha
+**"Executar como administrador"**. Uma vez só.
 
-Isto deixou de ser "opcional, recomendado" depois do primeiro dia de uso
-(ago/2026): a fila inteira ficou parada porque ninguém tinha aberto o
-programa, e a lista de produção do dia seguinte dependia disso. Depender
-de alguém lembrar de abrir um programa todo dia, num balcão de padaria às
-5 da manhã, não é um plano — é uma falha esperando a hora.
+A partir daí o agente:
 
-O agente **só imprime enquanto a janela dele está aberta**. Fechou, a fila
-para de andar (nada se perde: os trabalhos ficam na nuvem e saem todos
-quando ele voltar).
+- **sobe no boot**, antes de qualquer login
+- roda **sem janela** — não existe o que fechar por engano
+- se travar ou morrer, o Windows **reinicia sozinho** em 1 minuto
+- continua rodando com a tela bloqueada e entre trocas de usuário
 
-Vale a partir do próximo reinício do PC. Hoje, abra o `iniciar.bat` uma
-vez à mão.
+#### Por que não é uma janela aberta
 
-Para desfazer: **Windows + R** → `shell:startup` → apague o atalho
-"Agente de impressao".
+A primeira versão dependia de alguém deixar uma janela de console aberta.
+Num balcão de padaria isso é uma falha esperando a hora: qualquer operador
+fecha sem querer e a impressão para sem ninguém perceber — foi exatamente
+o que aconteceu no primeiro dia.
 
-#### Se preferir fazer à mão
+O `iniciar.bat` continua existindo para teste e diagnóstico. No dia a dia,
+quem trabalha é a tarefa de sistema.
 
-1. Tecla **Windows + R**
-2. Digite `shell:startup` e Enter
-3. Arraste o **`iniciar.bat`** para dentro dessa pasta segurando **Alt**
+### Como saber se está de pé, sem janela nenhuma
+
+Dois cliques em **`estado-do-agente.bat`**. Ele mostra se a tarefa está
+instalada, o estado dela e as últimas linhas do log.
+
+Uma linha `aguardando — nada na fila` nos últimos minutos = tudo certo.
+
+Do celular, o próprio app avisa em 45 segundos quando nada responde.
+
+### Para remover
+
+**`desinstalar-servico.bat`**, também como administrador.
 
 ## Uso no dia a dia
 

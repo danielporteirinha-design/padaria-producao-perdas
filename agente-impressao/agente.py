@@ -76,7 +76,13 @@ CICLOS_ENTRE_SINAIS_DE_VIDA = 20
 def registrar(mensagem):
     """Escreve na tela e no arquivo de log, com hora local."""
     linha = f"[{datetime.now().strftime('%d/%m %H:%M:%S')}] {mensagem}"
-    print(linha, flush=True)
+    # Sob pythonw.exe (modo servico, sem console) nao existe saida padrao:
+    # escrever nela levanta excecao em algumas versoes do Windows e
+    # derrubaria o agente por causa de um log.
+    try:
+        print(linha, flush=True)
+    except Exception:
+        pass
     try:
         with open(CAMINHO_LOG, "a", encoding="utf-8") as arquivo:
             arquivo.write(linha + "\n")
@@ -84,10 +90,23 @@ def registrar(mensagem):
         pass  # Log e' conveniencia; nunca pode derrubar a impressao.
 
 
+def encerrar_com_erro(mensagem):
+    """
+    Erro fatal que TAMBEM vai para o log.
+
+    Rodando como servico do Windows nao existe tela nem console: um
+    `sys.exit("faltou o config.ini")` sumiria no vazio e o agente pareceria
+    simplesmente nao existir. O log e' o unico lugar onde alguem vai
+    procurar depois.
+    """
+    registrar(f"ERRO FATAL: {mensagem}")
+    sys.exit(mensagem)
+
+
 def carregar_config():
     if not os.path.exists(CAMINHO_CONFIG):
-        sys.exit(
-            f"Arquivo de configuracao nao encontrado: {CAMINHO_CONFIG}\n"
+        encerrar_com_erro(
+            f"Arquivo de configuracao nao encontrado: {CAMINHO_CONFIG}. "
             "Copie config.exemplo.ini para config.ini e preencha."
         )
     config = configparser.ConfigParser()
@@ -102,7 +121,7 @@ def carregar_config():
             "largura": int(config["impressora"].get("largura_pontos", "576")),
         }
     except KeyError as erro:
-        sys.exit(f"Falta a chave {erro} no config.ini. Compare com config.exemplo.ini.")
+        encerrar_com_erro(f"Falta a chave {erro} no config.ini. Compare com config.exemplo.ini.")
 
 
 # --------------------------------------------------------------------
