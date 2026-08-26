@@ -37,6 +37,9 @@ inicial do documento de arquitetura:
 | Escopo do catálogo | Só as 5 categorias de produção — o catálogo importado do PDV tem ~19 categorias, a maioria revenda (mercearia, refrigerante, laticínio...), fora do escopo deste app (ago/2026: limpeza feita em Cadastro de Produtos → aba "Fora de escopo") |
 | Prazo de validade | Por produto (`Produto.prazoValidadeDias`, editável, sugerido por categoria) — uma perda lançada hoje nem sempre vem da produção de ontem (a etiqueta não traz data de fabricação isolada), então a tela de Perdas considera qualquer fornada confirmada ainda dentro do prazo do produto, não só a de hoje |
 | Edição de cadastro | Nome, categoria, unidade, peso médio e prazo de validade são editáveis direto na tabela do Catálogo (edição inline por linha) — corrige erro de cadastro ou de importação sem precisar excluir e recriar o produto |
+| Limpar sessão | Botão "limpar esta sessão" por acordeão, com confirmação em dois toques. **Nunca existe um "limpar tudo" global** — um toque errado apagaria o cronograma inteiro montado no fim do expediente, sem desfazer |
+| Assinatura da fita | "Montado por" sai no rodapé de **cada sessão**, não uma vez só no fim: a fita é cortada e cada pedaço vai para o quadro de um setor — pedaço sem nome é pedaço sem responsável |
+| Perda no mesmo dia | Fornada queimada ou fora do padrão deve ser pesada e lançada no dia, nunca no dia seguinte. O app sempre aceitou isso; o que faltava era chamar o operador — ver "Perda no mesmo dia" abaixo |
 | Instalação | App instalável (PWA): ícone próprio na tela de início do celular e na área de trabalho do PC — ver seção "Instalar como app" abaixo |
 | Insights de catálogo | Botão "✨ Gerar insights com IA" em Análises (Gemini) — aponta produtos sobrando (perda por sobra alta), produtos ativos parados há muito tempo, ou outros padrões úteis; sempre informativo, nunca altera nada sozinho |
 
@@ -217,6 +220,57 @@ fita incompleta). Em vez disso aparece um botão "Baixar imagem N de M"
 por imagem — cada download exige um clique de verdade do operador,
 garantido de funcionar em qualquer navegador.
 
+### Perda no mesmo dia (ago/2026)
+
+Gargalo levantado pela padaria: uma fornada queimada ou fora do padrão
+precisa ser lançada no mesmo dia. Deixar para o dia seguinte trava a
+conferência, e o funcionário esquece.
+
+**O app já aceitava isso desde o início** — vale registrar para não
+"corrigir" de novo o que não estava quebrado:
+
+- `calcularCandidatosPerda` (`src/lib/janelaValidade.ts`) inclui a fornada
+  com `diasDesdeProducao === 0`, ou seja, o que foi produzido hoje já
+  aparece na tela de Perdas hoje.
+- `MotivoPerda` (`src/types/perda.ts`) já tinha `queimado` e
+  `erro_producao`.
+
+O que faltava não era capacidade, era chamada: nada avisava o operador, e
+a tela de Perdas estava enquadrada como atividade de fim de expediente.
+`src/components/AvisoPerdaPendente.tsx` resolve isso — enquanto houver
+fornada válida hoje e NENHUMA perda lançada hoje, um aviso aparece em
+qualquer aba com o botão "Lançar perda agora".
+
+O botão "hoje não teve perda" existe de propósito: **zero perda é um
+resultado legítimo, diferente de "esqueci de lançar"**. Sem essa saída, o
+aviso ficaria na tela o dia inteiro num dia bom e o operador aprenderia a
+ignorá-lo — que é exatamente como um alerta perde a função. A dispensa
+grava a data (`padaria:sem-perdas:<AAAA-MM-DD>`), então amanhã o aviso
+volta sozinho.
+
+### Gerar o cronograma inteiro por IA — adiado de propósito
+
+Ideia levantada pelo dono do negócio (ago/2026): um botão que preencha as
+5 sessões de uma vez, em vez de sugerir categoria por categoria.
+Concordamos com a ideia e adiamos a construção, por três motivos:
+
+1. **Sem histórico, a IA inventa.** A sugestão se apoia em produção e
+   perda passadas. O app entrou em uso em ago/2026 — números gerados
+   antes de haver histórico pareceriam confiáveis e seriam fabricados,
+   o que é pior que não ter o botão.
+2. **O botão único remove a fricção que protege.** Sugerir por categoria
+   obriga a abrir cada sessão e olhar. Preencher as 5 de uma vez convida
+   ao "confirmar" sem ler — e erro de planejamento custa dos dois lados
+   (faltou é venda perdida, sobrou é perda registrada).
+3. **Volume de dados.** Para sugerir uma quarta-feira é preciso ter
+   várias quartas-feiras. 4 semanas = 4 amostras por dia da semana, o
+   mínimo defensável.
+
+Quando for construído, duas exigências ficam registradas: cada número
+deve vir acompanhado da base que o gerou (ex.: "4 últimas quartas: 45,
+50, 48, 47") para virar proposta auditável em vez de caixa-preta, e
+**produto sem histórico fica em branco**, nunca chutado.
+
 ## Instalar como app (PWA) — ago/2026
 
 O app é instalável: em vez de procurar o link no navegador, o operador abre
@@ -267,12 +321,13 @@ producao-perdas/
       metricas.ts                      # Taxa de perda, volume por dia, picos de perda (tudo em unidades)
       data.ts                           # Datas: hoje, amanhã, dia da semana, formatação BR, diferença em dias
       janelaValidade.ts                  # Quais fornadas confirmadas ainda estão dentro do prazo de validade do produto
-      gerarImagemLista.ts                # Gera a(s) fita(s) PNG de impressão (canvas, 576px, linhas de corte) — divide em mais de uma imagem se o cronograma passar do limite seguro de altura
+      gerarImagemLista.ts                # Gera a(s) fita(s) PNG de impressão (canvas, 576px, linhas de corte, assinatura por sessão) — divide em mais de uma imagem se passar do limite seguro de altura
       sugestaoProducao.ts                 # Cliente da sugestão de produção por IA — monta histórico, chama /api
       insightsCatalogo.ts                  # Cliente dos insights de catálogo por IA — monta resumo, chama /api
       importarProdutos.ts                  # Mapeamento planilha -> Produto (uso no navegador), já filtra fora de escopo
     components/
       BannerInstalar.tsx       # Convite para instalar o app (botão no Chrome/Android, instruções no iPhone)
+      AvisoPerdaPendente.tsx    # Atalho "Lançar perda agora" enquanto houver fornada de hoje sem perda lançada
       TelaCronograma.tsx       # Montagem do cronograma: acordeão -> resumo -> exportar (+ sugestão IA)
       TelaCadastroProdutos.tsx  # Catálogo (com edição inline), categorização, validade, peso médio, limpeza de escopo
       TelaPerdas.tsx             # Lançamento de perda de fim de expediente (considera a janela de validade)
@@ -297,7 +352,7 @@ producao-perdas/
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (40 asserções)
+npm run verificar   # roda scripts/verificar_logica.ts (43 asserções)
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```

@@ -408,3 +408,45 @@ button.link {
 .texto-banner-instalar { display: flex; flex-direction: column; gap: 2px; min-width: 200px; flex: 1; }
 .texto-banner-instalar span { font-size: 14px; color: var(--cor-texto-suave); }
 .acoes-banner-instalar { display: flex; align-items: center; gap: 10px; }
+
+/* ---------------------------------------------------------------
+   Limpar uma sessão do cronograma (ver TelaCronograma.tsx).
+   Ação destrutiva sem desfazer: o botão vermelho só aparece depois do
+   primeiro toque, junto de um "cancelar".
+   --------------------------------------------------------------- */
+
+.linha-sugestao-ia { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.confirmar-limpeza { display: inline-flex; align-items: center; gap: 10px; }
+
+button.perigo {
+  background: #9b2c2c;
+  color: #ffffff;
+  border: 1px solid #9b2c2c;
+  border-radius: var(--raio);
+  padding: 8px 14px;
+  cursor: pointer;
+}
+button.perigo:hover { background: #822525; }
+
+/* ---------------------------------------------------------------
+   Atalho para lançar perda no mesmo dia (ver AvisoPerdaPendente.tsx).
+   Fica em qualquer aba enquanto houver fornada de hoje sem perda lançada.
+   --------------------------------------------------------------- */
+
+.aviso-perda-pendente {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 12px 12px;
+  padding: 12px 14px;
+  background: var(--cor-alerta-fundo);
+  border: 1px solid var(--cor-alerta);
+  border-left-width: 4px;
+  border-radius: var(--raio);
+}
+
+.texto-aviso-perda { display: flex; flex-direction: column; gap: 2px; min-width: 200px; flex: 1; }
+.texto-aviso-perda span { font-size: 14px; color: var(--cor-texto-suave); }
+.acoes-aviso-perda { display: flex; align-items: center; gap: 10px; }

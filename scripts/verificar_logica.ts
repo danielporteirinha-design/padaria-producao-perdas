@@ -20,7 +20,7 @@ import { diasEntreDatas } from "../src/lib/data";
 import {
   ALTURA_FAIXA_CORTE,
   ALTURA_MAXIMA_SEGURA_PX,
-  ALTURA_RODAPE_FINAL_COM_ASSINATURA,
+  ALTURA_RODAPE_FINAL,
   agruparBlocosEmImagens,
   computarBlocos,
 } from "../src/lib/gerarImagemLista";
@@ -466,8 +466,8 @@ const perdas: RegistroPerda[] = [
       itens: produtosFita.map((p) => ({ codigoPdv: p.codigoPdv, quantidadeUnidades: 10 })),
     },
   ];
-  const blocos = computarBlocos(sessoesPequenas, produtosFita);
-  const grupos = agruparBlocosEmImagens(blocos, true);
+  const blocos = computarBlocos(sessoesPequenas, produtosFita, true);
+  const grupos = agruparBlocosEmImagens(blocos);
   afirmar(grupos.length === 1, `cronograma pequeno gera 1 imagem só (obtido: ${grupos.length})`);
 }
 
@@ -498,8 +498,8 @@ const perdas: RegistroPerda[] = [
     itens: produtosGrandes.slice(0, 20).map((p) => ({ codigoPdv: p.codigoPdv, quantidadeUnidades: 5 })),
   }));
 
-  const blocos = computarBlocos(sessoesGrandes, produtosGrandes);
-  const grupos = agruparBlocosEmImagens(blocos, true);
+  const blocos = computarBlocos(sessoesGrandes, produtosGrandes, true);
+  const grupos = agruparBlocosEmImagens(blocos);
 
   afirmar(grupos.length > 1, `cronograma grande é dividido em mais de 1 imagem (obtido: ${grupos.length})`);
 
@@ -512,7 +512,7 @@ const perdas: RegistroPerda[] = [
   const todasDentroDoLimite = grupos.every((grupo) => {
     const alturaBlocos = grupo.reduce((soma, b) => soma + b.altura, 0);
     const alturaCortes = Math.max(grupo.length - 1, 0) * ALTURA_FAIXA_CORTE;
-    const alturaTotal = alturaBlocos + alturaCortes + ALTURA_RODAPE_FINAL_COM_ASSINATURA;
+    const alturaTotal = alturaBlocos + alturaCortes + ALTURA_RODAPE_FINAL;
     return alturaTotal <= ALTURA_MAXIMA_SEGURA_PX || grupo.length === 1;
   });
   afirmar(
@@ -543,16 +543,74 @@ const perdas: RegistroPerda[] = [
       itens: Array.from({ length: 200 }, () => ({ codigoPdv: produtoUnico.codigoPdv, quantidadeUnidades: 1 })),
     },
   ];
-  const blocos = computarBlocos(sessaoGigante, [produtoUnico]);
+  const blocos = computarBlocos(sessaoGigante, [produtoUnico], true);
   afirmar(
     blocos[0].altura > ALTURA_MAXIMA_SEGURA_PX,
     "sessão de teste realmente ultrapassa o limite sozinha (pré-condição do teste)"
   );
 
-  const grupos = agruparBlocosEmImagens(blocos, false);
+  const grupos = agruparBlocosEmImagens(blocos);
   afirmar(
     grupos.length === 1 && grupos[0].length === 1,
     "sessão gigante sozinha vira 1 imagem própria, sem travar nem duplicar"
+  );
+}
+
+// ---------------------------------------------------------------
+// Caso 18: a assinatura ("Montado por") passou a sair no rodapé de CADA
+// sessão (ago/2026), porque a fita é cortada e cada pedaço vai para o
+// quadro de um setor — antes só o último pedaço saía assinado.
+// Isso torna cada bloco mais alto, e é essa altura que decide se a fita
+// cabe em uma imagem só. Se computarBlocos ignorasse a assinatura, a
+// conta ficaria menor que o desenho real e voltaria o bug do canvas
+// grande demais — por isso o teste cobre a diferença explicitamente.
+// ---------------------------------------------------------------
+{
+  const produto: Produto = {
+    codigoPdv: 9100,
+    nome: "PAO TESTE ASSINATURA",
+    categoria: "PÃES E ROSCAS",
+    unidadeProducao: "un",
+    precoCusto: 1,
+    precoVenda: 2,
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+  };
+  const sessoes = [
+    {
+      rotuloSessao: "Pães e Roscas",
+      itens: [{ codigoPdv: produto.codigoPdv, quantidadeUnidades: 10 }],
+    },
+  ];
+
+  const semAssinatura = computarBlocos(sessoes, [produto], false);
+  const comAssinatura = computarBlocos(sessoes, [produto], true);
+
+  afirmar(
+    comAssinatura[0].altura > semAssinatura[0].altura,
+    `bloco assinado é mais alto que o não assinado (${semAssinatura[0].altura} -> ${comAssinatura[0].altura})`
+  );
+
+  // Com N sessões, a assinatura é somada N vezes — não uma vez só no fim.
+  const cincoSessoes = Array.from({ length: 5 }, (_, i) => ({
+    rotuloSessao: `Sessão ${i}`,
+    itens: [{ codigoPdv: produto.codigoPdv, quantidadeUnidades: 10 }],
+  }));
+  const cincoSem = computarBlocos(cincoSessoes, [produto], false);
+  const cincoCom = computarBlocos(cincoSessoes, [produto], true);
+  const totalSem = cincoSem.reduce((soma, b) => soma + b.altura, 0);
+  const totalCom = cincoCom.reduce((soma, b) => soma + b.altura, 0);
+  const diferencaPorBloco = comAssinatura[0].altura - semAssinatura[0].altura;
+  afirmar(
+    totalCom - totalSem === diferencaPorBloco * 5,
+    `assinatura entra em cada uma das 5 sessões (esperado +${diferencaPorBloco * 5}, obtido +${totalCom - totalSem})`
+  );
+
+  // O rodapé final virou constante (não assina mais) — a divisão em
+  // imagens não depende mais de "tem assinatura ou não" naquele ponto.
+  afirmar(
+    typeof ALTURA_RODAPE_FINAL === "number" && ALTURA_RODAPE_FINAL > 0,
+    "rodapé final tem altura fixa, independente de assinatura"
   );
 }
 

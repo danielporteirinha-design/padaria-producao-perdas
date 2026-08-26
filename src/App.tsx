@@ -9,6 +9,7 @@ import { TelaCadastroProdutos } from "./components/TelaCadastroProdutos";
 import { TelaPerdas } from "./components/TelaPerdas";
 import { TelaAnalises } from "./components/TelaAnalises";
 import { BannerInstalar } from "./components/BannerInstalar";
+import { AvisoPerdaPendente } from "./components/AvisoPerdaPendente";
 
 // Ponto único de troca de backend: substitua por `new RepositorioFirestore()`
 // quando o projeto Firebase estiver configurado (ver src/data/repositorioFirestore.ts).
@@ -123,6 +124,14 @@ export default function App() {
       </header>
 
       <BannerInstalar />
+
+      <AvisoPerdaPendente
+        produtos={produtos}
+        planos={planos}
+        perdas={perdas}
+        visivel={aba !== "perdas"}
+        onIrParaPerdas={() => setAba("perdas")}
+      />
 
       <nav className="abas-principais">
         <button type="button" className={aba === "cronograma" ? "ativa" : ""} onClick={() => setAba("cronograma")}>

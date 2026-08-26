@@ -65,6 +65,9 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
   const [fase, setFase] = useState<Fase>("montar");
   const [salvando, setSalvando] = useState(false);
   const [planoConfirmado, setPlanoConfirmado] = useState<PlanoDeProducaoDiario | null>(null);
+  // Qual sessão está com a limpeza pendente de confirmação (só uma por vez).
+  // Limpar é destrutivo e não tem desfazer, então exige dois toques.
+  const [sessaoAConfirmarLimpeza, setSessaoAConfirmarLimpeza] = useState<string | null>(null);
   const [statusSugestao, setStatusSugestao] = useState<Record<string, StatusSugestao>>({});
   const [mensagemSugestao, setMensagemSugestao] = useState<Record<string, string>>({});
 
@@ -73,6 +76,7 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
 
   function trocarData(novaData: string) {
     setDataAlvo(novaData);
+    setSessaoAConfirmarLimpeza(null);
     const plano = planos.find((p) => p.data === novaData);
     setItensPorGrupo(mapaInicial(plano));
     setFase("montar");
@@ -121,6 +125,18 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
       ...atual,
       [chaveGrupo]: (atual[chaveGrupo] ?? []).filter((i) => i.codigoPdv !== codigoPdv),
     }));
+  }
+
+  /**
+   * Limpa os itens de UMA sessão. Deliberadamente não existe um "limpar
+   * tudo" que zere as 5 sessões de uma vez (decisão do dono do negócio,
+   * ago/2026): um toque errado num botão global apagaria o cronograma
+   * inteiro montado no fim do expediente, sem desfazer.
+   */
+  function limparSessao(chaveGrupo: string) {
+    setItensPorGrupo((atual) => ({ ...atual, [chaveGrupo]: [] }));
+    setSessaoAConfirmarLimpeza(null);
+    setProdutoAtivo(null);
   }
 
   function nomeDoProduto(codigoPdv: number): string {
@@ -336,6 +352,29 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
                   >
                     {statusIA === "carregando" ? "Gerando sugestão..." : "✨ Sugerir quantidades com IA"}
                   </button>
+                  {itensDoGrupo.length > 0 &&
+                    (sessaoAConfirmarLimpeza === chave ? (
+                      <span className="confirmar-limpeza">
+                        <button type="button" className="perigo" onClick={() => limparSessao(chave)}>
+                          Apagar {itensDoGrupo.length} {itensDoGrupo.length === 1 ? "item" : "itens"}?
+                        </button>
+                        <button
+                          type="button"
+                          className="link"
+                          onClick={() => setSessaoAConfirmarLimpeza(null)}
+                        >
+                          cancelar
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => setSessaoAConfirmarLimpeza(chave)}
+                      >
+                        limpar esta sessão
+                      </button>
+                    ))}
                 </div>
                 {mensagemIA && (
                   <p className={statusIA === "erro" ? "erro-conversao" : "nota-rodape"}>{mensagemIA}</p>

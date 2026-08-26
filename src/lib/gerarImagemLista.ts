@@ -27,10 +27,19 @@ const LARGURA_PX = 576;
 const MARGEM = 24;
 const ALTURA_LINHA = 56;
 const ALTURA_CABECALHO_BLOCO = 210;
+/**
+ * Rodapé de CADA sessão. Tem duas alturas porque a assinatura ("Montado
+ * por: fulano") entra dentro de cada bloco, não só no fim da fita
+ * (decisão do dono do negócio, ago/2026): a fita é cortada em pedaços e
+ * cada pedaço vai para o quadro de um setor diferente — um pedaço sem
+ * nome é um pedaço sem responsável. Antes a assinatura saía uma única
+ * vez, no fim, então só o último pedaço cortado ficava assinado.
+ */
 const ALTURA_RODAPE_BLOCO = 30;
+const ALTURA_RODAPE_BLOCO_ASSINADO = 56;
 export const ALTURA_FAIXA_CORTE = 90;
-export const ALTURA_RODAPE_FINAL_COM_ASSINATURA = 56;
-export const ALTURA_RODAPE_FINAL_SEM_ASSINATURA = 36;
+/** Rodapé no fim da imagem inteira (contagem de sessões/itens + nome do app). */
+export const ALTURA_RODAPE_FINAL = 36;
 
 // Limite de altura por imagem, deliberadamente conservador (set/2026):
 // alguns navegadores móveis (histórico do Safari no iPhone, entre outros)
@@ -56,7 +65,7 @@ export interface DadosImpressaoFita {
   dataFormatada: string; // já pronta para exibição, ex.: "Quarta-feira, 26/08/2026"
   sessoes: BlocoSessaoImpressao[];
   produtos: Produto[];
-  /** Quem montou/confirmou o cronograma — exibido no rodapé final para rastreabilidade. */
+  /** Quem montou/confirmou o cronograma — exibido no rodapé de CADA sessão para rastreabilidade. */
   montadoPor?: string;
 }
 
@@ -72,11 +81,23 @@ export interface BlocoComputado {
   altura: number;
 }
 
-/** Exportado só para teste (ver scripts/verificar_logica.ts) — puro, sem depender de canvas/DOM. */
-export function computarBlocos(sessoes: BlocoSessaoImpressao[], produtos: Produto[]): BlocoComputado[] {
+/**
+ * Exportado só para teste (ver scripts/verificar_logica.ts) — puro, sem depender de canvas/DOM.
+ *
+ * `temAssinatura` precisa entrar na conta: com assinatura cada bloco fica
+ * mais alto, e é essa altura que decide se a fita cabe em uma imagem só.
+ * Se a conta aqui divergir do que desenharBloco() realmente desenha, a
+ * divisão em imagens erra e volta o bug do canvas grande demais.
+ */
+export function computarBlocos(
+  sessoes: BlocoSessaoImpressao[],
+  produtos: Produto[],
+  temAssinatura: boolean
+): BlocoComputado[] {
+  const alturaRodape = temAssinatura ? ALTURA_RODAPE_BLOCO_ASSINADO : ALTURA_RODAPE_BLOCO;
   return sessoes.map((sessao) => {
     const linhas = linhasDoBloco(sessao.itens, produtos);
-    const altura = ALTURA_CABECALHO_BLOCO + Math.max(linhas.length, 1) * ALTURA_LINHA + ALTURA_RODAPE_BLOCO;
+    const altura = ALTURA_CABECALHO_BLOCO + Math.max(linhas.length, 1) * ALTURA_LINHA + alturaRodape;
     return { rotuloSessao: sessao.rotuloSessao, linhas, altura };
   });
 }
@@ -94,8 +115,8 @@ export function computarBlocos(sessoes: BlocoSessaoImpressao[], produtos: Produt
  * causou o bug original ("Não foi possível gerar a imagem") sem precisar
  * de um navegador de verdade.
  */
-export function agruparBlocosEmImagens(blocos: BlocoComputado[], temAssinatura: boolean): BlocoComputado[][] {
-  const alturaRodapeFinal = temAssinatura ? ALTURA_RODAPE_FINAL_COM_ASSINATURA : ALTURA_RODAPE_FINAL_SEM_ASSINATURA;
+export function agruparBlocosEmImagens(blocos: BlocoComputado[]): BlocoComputado[][] {
+  const alturaRodapeFinal = ALTURA_RODAPE_FINAL;
   const grupos: BlocoComputado[][] = [];
   let grupoAtual: BlocoComputado[] = [];
   let alturaGrupoAtual = 0;
@@ -126,8 +147,7 @@ function desenharCanvasParaGrupo(
 ): HTMLCanvasElement {
   const alturaBlocos = grupo.reduce((soma, b) => soma + b.altura, 0);
   const alturaCortes = Math.max(grupo.length - 1, 0) * ALTURA_FAIXA_CORTE;
-  const alturaRodapeFinal = montadoPor ? ALTURA_RODAPE_FINAL_COM_ASSINATURA : ALTURA_RODAPE_FINAL_SEM_ASSINATURA;
-  const altura = alturaBlocos + alturaCortes + alturaRodapeFinal;
+  const altura = alturaBlocos + alturaCortes + ALTURA_RODAPE_FINAL;
 
   const canvas = document.createElement("canvas");
   canvas.width = LARGURA_PX;
@@ -141,7 +161,7 @@ function desenharCanvasParaGrupo(
 
   let y = 0;
   grupo.forEach((bloco, indice) => {
-    y = desenharBloco(ctx, y, bloco.rotuloSessao, bloco.linhas, dataFormatada);
+    y = desenharBloco(ctx, y, bloco.rotuloSessao, bloco.linhas, dataFormatada, montadoPor);
     if (indice < grupo.length - 1) {
       y = desenharFaixaDeCorte(ctx, y);
     }
@@ -156,12 +176,9 @@ function desenharCanvasParaGrupo(
       ? `${grupo.length} sessão(ões) · ${totalItens} itens · imagem ${numeroImagem}/${totalImagens} · app Produção & Perdas`
       : `${grupo.length} sessão(ões) · ${totalItens} itens · app Produção & Perdas`;
   ctx.fillText(rotuloContagem, LARGURA_PX / 2, y + 10);
-
-  if (montadoPor) {
-    ctx.font = "bold 14px system-ui, -apple-system, sans-serif";
-    ctx.fillStyle = "#000000";
-    ctx.fillText(`Montado por: ${montadoPor}`, LARGURA_PX / 2, y + 30);
-  }
+  // A assinatura NÃO se repete aqui: ela já sai no rodapé de cada sessão
+  // (ver desenharBloco). Repetir no fim só assinaria de novo o último
+  // pedaço cortado, que é justamente o único que já estava assinado antes.
 
   return canvas;
 }
@@ -174,8 +191,9 @@ function desenharCanvasParaGrupo(
  * o total de sessões/itens do dia realmente exigir.
  */
 export function gerarCanvasesFita(dados: DadosImpressaoFita): HTMLCanvasElement[] {
-  const blocos = computarBlocos(dados.sessoes, dados.produtos);
-  const grupos = agruparBlocosEmImagens(blocos, Boolean(dados.montadoPor));
+  const temAssinatura = Boolean(dados.montadoPor);
+  const blocos = computarBlocos(dados.sessoes, dados.produtos, temAssinatura);
+  const grupos = agruparBlocosEmImagens(blocos);
   return grupos.map((grupo, indice) =>
     desenharCanvasParaGrupo(grupo, dados.dataFormatada, dados.montadoPor, indice + 1, grupos.length)
   );
@@ -196,7 +214,8 @@ function desenharBloco(
   yInicial: number,
   rotuloSessao: string,
   linhas: LinhaItem[],
-  dataFormatada: string
+  dataFormatada: string,
+  montadoPor: string | undefined
 ): number {
   let y = yInicial + MARGEM;
 
@@ -249,7 +268,19 @@ function desenharBloco(
   ctx.font = "14px system-ui, -apple-system, sans-serif";
   ctx.fillStyle = "#555555";
   ctx.fillText(`${linhas.length} ${linhas.length === 1 ? "item" : "itens"} nesta sessão`, LARGURA_PX / 2, y + 6);
-  y += ALTURA_RODAPE_BLOCO;
+
+  // Assinatura por sessão: este pedaço vai ser cortado e fixado sozinho no
+  // quadro de um setor, então precisa sair com responsável identificado.
+  // A altura somada aqui TEM que bater com ALTURA_RODAPE_BLOCO_ASSINADO
+  // usada em computarBlocos() — senão a divisão em imagens erra.
+  if (montadoPor) {
+    ctx.font = "15px system-ui, -apple-system, sans-serif";
+    ctx.fillStyle = "#333333";
+    ctx.fillText(`Montado por: ${montadoPor}`, LARGURA_PX / 2, y + 26);
+    y += ALTURA_RODAPE_BLOCO_ASSINADO;
+  } else {
+    y += ALTURA_RODAPE_BLOCO;
+  }
 
   return y;
 }
