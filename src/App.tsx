@@ -203,24 +203,62 @@ export default function App() {
     if (!repositorio || !migracaoResolvida) return;
     let cancelado = false;
     setCarregando(true);
-    Promise.all([
+    /**
+     * Duas camadas de propósito.
+     *
+     * ESSENCIAL (produtos, planos, perdas): sem isso não há app. Falhou,
+     * mostra a tela de erro.
+     *
+     * COMPLEMENTAR (pedidos, fornadas): o app funciona sem. Falhou, entra
+     * vazio e avisa numa faixa, sem bloquear.
+     *
+     * A separação nasceu de um caso real (ago/2026): uma coleção NOVA foi
+     * ao ar antes de as regras do Firestore serem republicadas, a leitura
+     * dela foi negada, e como tudo estava num Promise.all a rejeição
+     * derrubou o app inteiro — inclusive as telas que não dependiam dela.
+     * Cada coleção nova traria o mesmo risco.
+     */
+    const essencial = Promise.all([
       repositorio.listarProdutos(),
       repositorio.listarPlanos(),
       repositorio.listarPerdas(),
+    ]);
+
+    const complementar = Promise.allSettled([
       // A filial só pode ler os próprios pedidos (ver firestore.rules) —
       // sem o filtro, a consulta dela seria recusada inteira.
       repositorio.listarPedidos(loja?.papel === "filial" ? loja.id : undefined),
       // Só as fornadas de HOJE: elas acumulam rápido (um item que sai 6
       // vezes ao dia, vezes dezenas de itens) e a tela só olha o dia.
       repositorio.listarFornadas(dataDeHojeIso()),
-    ])
-      .then(([p, pl, pe, pd, fo]) => {
+    ]);
+
+    Promise.all([essencial, complementar])
+      .then(([[p, pl, pe], [resPedidos, resFornadas]]) => {
         if (cancelado) return;
         setProdutos(p);
         setPlanos(pl);
         setPerdas(pe);
-        setPedidos(pd);
-        setFornadas(fo);
+
+        const faltando: string[] = [];
+        if (resPedidos.status === "fulfilled") {
+          setPedidos(resPedidos.value);
+        } else {
+          console.error("Pedidos indisponíveis:", resPedidos.reason);
+          faltando.push("pedidos das filiais");
+        }
+        if (resFornadas.status === "fulfilled") {
+          setFornadas(resFornadas.value);
+        } else {
+          console.error("Fornadas indisponíveis:", resFornadas.reason);
+          faltando.push("fornadas de hoje");
+        }
+        if (faltando.length > 0) {
+          setAviso({
+            tipo: "erro",
+            texto: `Não foi possível carregar ${faltando.join(" e ")}. Normalmente é regra de segurança do Firestore não publicada — o resto do app funciona.`,
+          });
+        }
         setCarregando(false);
       })
       .catch((erro) => {
