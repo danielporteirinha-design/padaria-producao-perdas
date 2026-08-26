@@ -87,6 +87,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Pedidos das filiais (Parte B, ago/2026). A filial escreve só o
+    // próprio pedido; a matriz lê todos para consolidar a produção, mas
+    // NÃO escreve — o número tem que ser o que a filial mandou, não o que
+    // a matriz achou que ela queria.
+    match /pedidos/{pedidoId} {
+      allow read: if ehMatriz() || (lojaConhecida() && resource.data.lojaId == lojaDoUsuario());
+      allow create, update: if lojaConhecida()
+                            && request.resource.data.lojaId == lojaDoUsuario();
+      // Pedido enviado não some: se a filial desistir, ela zera os itens.
+      // Assim a matriz nunca fica sem saber se a filial já respondeu.
+      allow delete: if false;
+    }
+
     // Qualquer coleção não listada acima fica fechada. Deixar o padrão
     // fechado é o que impede uma coleção nova nascer aberta por
     // esquecimento — a regra dela tem que ser escrita de propósito.

@@ -12,6 +12,7 @@ import { gerarId } from "../lib/id";
 import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
+import type { PedidoFilial } from "../types/pedido";
 import produtosSeed from "../../data/produtos.seed.json";
 import type { Repositorio } from "./repositorio";
 
@@ -113,6 +114,17 @@ export class RepositorioLocalStorage implements Repositorio {
     const perdas = await this.listarPerdas();
     escrever(CHAVE_PERDAS, [...perdas, registro]);
     return registro;
+  }
+
+  async listarPedidos(lojaId?: string): Promise<PedidoFilial[]> {
+    const todos = ler<PedidoFilial[]>("padaria:pedidos", []);
+    return lojaId ? todos.filter((p) => p.lojaId === lojaId) : todos;
+  }
+
+  async salvarPedido(pedido: PedidoFilial): Promise<PedidoFilial> {
+    const todos = await this.listarPedidos();
+    escrever("padaria:pedidos", [...todos.filter((p) => p.id !== pedido.id), pedido]);
+    return pedido;
   }
 
   async cancelarPerda(perdaId: string, canceladaPor: string, motivo: string): Promise<void> {

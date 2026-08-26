@@ -21,7 +21,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Produto } from "../types/produto";
-import type { SessaoProducao } from "../types/producao";
+import type { ItemPlanoProducao } from "../types/producao";
 import {
   baixarArquivo,
   canvasesParaArquivos,
@@ -29,17 +29,30 @@ import {
   ErroGeracaoImagem,
   gerarCanvasesFita,
 } from "../lib/gerarImagemLista";
-import { rotuloDaCategoria } from "../lib/categorias";
 
 interface ExportarFitaProps {
-  sessoes: SessaoProducao[];
+  /** Blocos já prontos: rótulo do bloco + itens. Serve tanto para a fita
+   *  de produção (por categoria) quanto para o romaneio de uma filial. */
+  blocos: { rotuloSessao: string; itens: ItemPlanoProducao[] }[];
+  /** Ver DadosImpressaoFita.titulo — é o que distingue os dois documentos. */
+  titulo: string;
+  /** Texto acima do preview, explicando o que fazer com este papel. */
+  instrucao: string;
   dataFormatada: string;
   produtos: Produto[];
   nomeArquivoBase: string;
   montadoPor?: string;
 }
 
-export function ExportarFita({ sessoes, dataFormatada, produtos, nomeArquivoBase, montadoPor }: ExportarFitaProps) {
+export function ExportarFita({
+  blocos,
+  titulo,
+  instrucao,
+  dataFormatada,
+  produtos,
+  nomeArquivoBase,
+  montadoPor,
+}: ExportarFitaProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"" | "gerando" | "ok" | "erro">("");
   const [mensagem, setMensagem] = useState("");
@@ -49,12 +62,10 @@ export function ExportarFita({ sessoes, dataFormatada, produtos, nomeArquivoBase
   // um botão próprio, baixado por um clique de verdade do operador.
   const [arquivosParaBaixar, setArquivosParaBaixar] = useState<File[] | null>(null);
 
-  const blocos = sessoes.map((s) => ({ rotuloSessao: rotuloDaCategoria(s.categoria), itens: s.itens }));
-
   useEffect(() => {
     if (!previewRef.current) return;
     try {
-      const canvases = gerarCanvasesFita({ sessoes: blocos, dataFormatada, produtos, montadoPor });
+      const canvases = gerarCanvasesFita({ sessoes: blocos, titulo, dataFormatada, produtos, montadoPor });
       previewRef.current.innerHTML = "";
       canvases.forEach((canvas, indice) => {
         if (canvases.length > 1) {
@@ -72,14 +83,14 @@ export function ExportarFita({ sessoes, dataFormatada, produtos, nomeArquivoBase
       console.error("Falha ao pré-visualizar a fita de produção:", erro);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessoes, dataFormatada, montadoPor]);
+  }, [blocos, titulo, dataFormatada, montadoPor]);
 
   async function handleAcao() {
     setStatus("gerando");
     setMensagem("");
     setArquivosParaBaixar(null);
     try {
-      const canvases = gerarCanvasesFita({ sessoes: blocos, dataFormatada, produtos, montadoPor });
+      const canvases = gerarCanvasesFita({ sessoes: blocos, titulo, dataFormatada, produtos, montadoPor });
       const arquivos = await canvasesParaArquivos(canvases, nomeArquivoBase);
       const resultado = await compartilharOuBaixar(arquivos);
       setStatus("ok");
@@ -107,12 +118,9 @@ export function ExportarFita({ sessoes, dataFormatada, produtos, nomeArquivoBase
   return (
     <div className="cartao-exportar">
       <h3>
-        Fita de produção <span className="contagem-itens">({sessoes.length} sessão(ões))</span>
+        {titulo} <span className="contagem-itens">({blocos.length} bloco(s))</span>
       </h3>
-      <p className="nota-rodape">
-        Imprima em uma tira só, corte em cada linha pontilhada (✂) e fixe cada pedaço no quadro de avisos
-        do respectivo setor.
-      </p>
+      <p className="nota-rodape">{instrucao}</p>
       <div className="preview-lista" ref={previewRef} />
       <button type="button" className="primario" onClick={handleAcao} disabled={status === "gerando"}>
         {status === "gerando" ? "Gerando..." : "Compartilhar / Baixar imagem"}

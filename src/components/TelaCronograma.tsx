@@ -28,10 +28,16 @@ import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProducao } from "../lib/sugestaoProducao";
 import { ExportarFita } from "./ExportarFita";
+import { PainelPedidosFiliais } from "./PainelPedidosFiliais";
+import type { PedidoFilial } from "../types/pedido";
+import { FILIAIS, LOJA_MATRIZ, nomeDaLoja } from "../lib/lojas";
+import { consolidarProducao, itensParaLoja, type ItemConsolidado } from "../lib/consolidacao";
 import { IconeCalendario, IconeLixeira, IconeSeta } from "./Icones";
 
 interface TelaCronogramaProps {
   produtos: Produto[];
+  /** Pedidos das filiais — entram no total a produzir (ver consolidacao.ts). */
+  pedidos: PedidoFilial[];
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   operador: string;
@@ -51,7 +57,14 @@ type StatusSugestao = "" | "carregando" | "erro";
  */
 const GRUPOS = CATEGORIAS_PRODUCAO.map((c) => c.chave);
 
-export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPlano }: TelaCronogramaProps) {
+export function TelaCronograma({
+  produtos,
+  pedidos,
+  planos,
+  perdas,
+  operador,
+  onSalvarPlano,
+}: TelaCronogramaProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
   const [mostrarSeletorData, setMostrarSeletorData] = useState(false);
 
@@ -69,11 +82,39 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
   // Qual sessão está com a limpeza pendente de confirmação (só uma por vez).
   // Limpar é destrutivo e não tem desfazer, então exige dois toques.
   const [sessaoAConfirmarLimpeza, setSessaoAConfirmarLimpeza] = useState<string | null>(null);
+  const [documentoAtivo, setDocumentoAtivo] = useState<string>("producao");
   const [statusSugestao, setStatusSugestao] = useState<Record<string, StatusSugestao>>({});
   const [mensagemSugestao, setMensagemSugestao] = useState<Record<string, string>>({});
 
   const diaDaSemana = diaDaSemanaDeData(dataAlvo);
   const dataFormatada = `${rotuloDoDia(diaDaSemana)}, ${formatarDataBr(dataAlvo)}`;
+
+  const pedidosDoDia = useMemo(() => pedidos.filter((p) => p.data === dataAlvo), [pedidos, dataAlvo]);
+
+  /** Um documento de produção + um romaneio por filial que enviou pedido. */
+  const documentos = useMemo(() => {
+    const lista = [{ id: "producao", rotulo: "Produção" }];
+    for (const filial of FILIAIS) {
+      const enviou = pedidosDoDia.some((p) => p.lojaId === filial.id && p.status === "enviado");
+      if (enviou) lista.push({ id: filial.id, rotulo: filial.nomeCurto });
+    }
+    return lista;
+  }, [pedidosDoDia]);
+
+  function blocosDeSeparacao(consolidado: ItemConsolidado[], lojaId: string) {
+    // Agrupado por categoria também no romaneio: quem separa anda pela
+    // padaria por setor, não por ordem alfabética de produto.
+    const itens = itensParaLoja(consolidado, lojaId);
+    const porCategoria = new Map<string, typeof itens>();
+    for (const item of itens) {
+      const categoria = produtos.find((p) => p.codigoPdv === item.codigoPdv)?.categoria ?? "OUTROS";
+      porCategoria.set(categoria, [...(porCategoria.get(categoria) ?? []), item]);
+    }
+    return [...porCategoria.entries()].map(([categoria, lista]) => ({
+      rotuloSessao: rotuloDaCategoria(categoria),
+      itens: lista,
+    }));
+  }
 
   function trocarData(novaData: string) {
     setDataAlvo(novaData);
@@ -218,20 +259,72 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
   // Fase: Exportar / Imprimir
   // ------------------------------------------------------------------
   if (fase === "exportar" && planoConfirmado) {
+    /**
+     * Saem DOIS tipos de documento da mesma confirmação, porque a
+     * operação faz duas perguntas diferentes (ver src/lib/consolidacao.ts):
+     * o padeiro precisa do TOTAL por item; quem separa de manhã precisa
+     * da divisão por loja.
+     */
+    const consolidado = consolidarProducao(
+      planoConfirmado.sessoes.flatMap((sessao) => sessao.itens),
+      pedidosDoDia,
+      LOJA_MATRIZ.id
+    );
+
+    // Fita de produção: mesmas sessões por categoria, mas com as
+    // quantidades TOTALIZADAS (matriz + filiais que enviaram).
+    const blocosProducao = planoConfirmado.sessoes.map((sessao) => ({
+      rotuloSessao: rotuloDaCategoria(sessao.categoria),
+      itens: sessao.itens.map((item) => ({
+        codigoPdv: item.codigoPdv,
+        quantidadeUnidades:
+          consolidado.find((c) => c.codigoPdv === item.codigoPdv)?.totalUnidades ??
+          item.quantidadeUnidades,
+      })),
+    }));
+
+    const documentoSelecionado = documentos.find((d) => d.id === documentoAtivo) ?? documentos[0];
+
     return (
       <div className="tela">
-        <h2>Lista pronta para impressão</h2>
-        <p className="mensagem-sucesso">
-          Produção de {dataFormatada} confirmada. A fita abaixo traz todas as sessões separadas por linha
-          de corte — imprima, corte em cada tesourinha e fixe cada pedaço no quadro do respectivo setor.
-        </p>
-        <ExportarFita
-          sessoes={planoConfirmado.sessoes}
-          dataFormatada={dataFormatada}
-          produtos={produtos}
-          montadoPor={planoConfirmado.criadoPor}
-          nomeArquivoBase={`producao-${dataAlvo}`}
-        />
+        <h2>Listas prontas para impressão</h2>
+        <p className="mensagem-sucesso">Produção de {dataFormatada} confirmada.</p>
+
+        <div className="seletor-documento">
+          {documentos.map((d) => (
+            <button
+              key={d.id}
+              type="button"
+              className={documentoAtivo === d.id ? "ativa" : ""}
+              onClick={() => setDocumentoAtivo(d.id)}
+            >
+              {d.rotulo}
+            </button>
+          ))}
+        </div>
+
+        {documentoSelecionado.id === "producao" ? (
+          <ExportarFita
+            blocos={blocosProducao}
+            titulo="Lista de Produção"
+            instrucao="Quantidades TOTAIS — matriz mais as filiais que enviaram pedido. Imprima em uma tira só, corte em cada tesourinha e fixe cada pedaço no quadro do respectivo setor."
+            dataFormatada={dataFormatada}
+            produtos={produtos}
+            montadoPor={planoConfirmado.criadoPor}
+            nomeArquivoBase={`producao-${dataAlvo}`}
+          />
+        ) : (
+          <ExportarFita
+            blocos={blocosDeSeparacao(consolidado, documentoSelecionado.id)}
+            titulo={`Separação — ${nomeDaLoja(documentoSelecionado.id)}`}
+            instrucao="O que sai da matriz para esta loja. Use na separação da manhã, conferindo item por item antes de despachar."
+            dataFormatada={dataFormatada}
+            produtos={produtos}
+            montadoPor={planoConfirmado.criadoPor}
+            nomeArquivoBase={`separacao-${documentoSelecionado.id.toLowerCase()}-${dataAlvo}`}
+          />
+        )}
+
         <div className="acoes">
           <button type="button" className="secundario" onClick={() => setFase("montar")}>
             Voltar ao Cronograma
@@ -307,6 +400,8 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
         <IconeCalendario tamanho={20} />
         <span>Produção de {dataFormatada}</span>
       </p>
+
+      <PainelPedidosFiliais pedidos={pedidos} data={dataAlvo} />
 
       {planoExistente && (
         <p className="callout-inline">

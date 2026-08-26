@@ -62,6 +62,18 @@ export interface BlocoSessaoImpressao {
 }
 
 export interface DadosImpressaoFita {
+  /**
+   * Linha logo abaixo do nome da padaria. Distingue os DOIS documentos
+   * que saem da mesma confirmação (ago/2026):
+   *
+   * - "Lista de Produção" — quantidades TOTAIS por item, para o padeiro
+   * - "Separação — Arthur Bernardes" — o que vai para aquela loja, para
+   *   quem separa de manhã
+   *
+   * Um documento só, com o total, deixaria a separação adivinhando; um
+   * documento só, por loja, faria o padeiro somar de cabeça.
+   */
+  titulo: string;
   dataFormatada: string; // já pronta para exibição, ex.: "Quarta-feira, 26/08/2026"
   sessoes: BlocoSessaoImpressao[];
   produtos: Produto[];
@@ -140,6 +152,7 @@ export function agruparBlocosEmImagens(blocos: BlocoComputado[]): BlocoComputado
 
 function desenharCanvasParaGrupo(
   grupo: BlocoComputado[],
+  titulo: string,
   dataFormatada: string,
   montadoPor: string | undefined,
   numeroImagem: number,
@@ -161,7 +174,7 @@ function desenharCanvasParaGrupo(
 
   let y = 0;
   grupo.forEach((bloco, indice) => {
-    y = desenharBloco(ctx, y, bloco.rotuloSessao, bloco.linhas, dataFormatada, montadoPor);
+    y = desenharBloco(ctx, y, bloco.rotuloSessao, bloco.linhas, titulo, dataFormatada, montadoPor);
     if (indice < grupo.length - 1) {
       y = desenharFaixaDeCorte(ctx, y);
     }
@@ -195,7 +208,14 @@ export function gerarCanvasesFita(dados: DadosImpressaoFita): HTMLCanvasElement[
   const blocos = computarBlocos(dados.sessoes, dados.produtos, temAssinatura);
   const grupos = agruparBlocosEmImagens(blocos);
   return grupos.map((grupo, indice) =>
-    desenharCanvasParaGrupo(grupo, dados.dataFormatada, dados.montadoPor, indice + 1, grupos.length)
+    desenharCanvasParaGrupo(
+      grupo,
+      dados.titulo,
+      dados.dataFormatada,
+      dados.montadoPor,
+      indice + 1,
+      grupos.length
+    )
   );
 }
 
@@ -214,6 +234,7 @@ function desenharBloco(
   yInicial: number,
   rotuloSessao: string,
   linhas: LinhaItem[],
+  titulo: string,
   dataFormatada: string,
   montadoPor: string | undefined
 ): number {
@@ -226,7 +247,7 @@ function desenharBloco(
   y += 36;
 
   ctx.font = "20px system-ui, -apple-system, sans-serif";
-  ctx.fillText("Lista de Produção", LARGURA_PX / 2, y);
+  ctx.fillText(titulo, LARGURA_PX / 2, y);
   y += 32;
 
   // Data em destaque — caixa preta, texto branco, bem grande.

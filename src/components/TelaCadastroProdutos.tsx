@@ -11,8 +11,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { NovoProdutoInput, Produto, UnidadeProducao } from "../types/produto";
-import { construirVocabularioPorCategoria, sugerirCategorias } from "../lib/sugestaoCategoria";
 import { ConfirmarComSenha } from "./ConfirmarComSenha";
+import { IconeLixeira } from "./Icones";
 import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 
 interface TelaCadastroProdutosProps {
@@ -22,13 +22,20 @@ interface TelaCadastroProdutosProps {
   onExcluirProdutos: (codigosPdv: number[]) => Promise<void>;
 }
 
+/**
+ * Categoria começa VAZIA de propósito (ago/2026): antes vinha
+ * pré-selecionada em "Pães e Roscas", e um cadastro feito às pressas
+ * arquivava o produto na primeira categoria da lista sem ninguém
+ * perceber. Categoria errada contamina o cronograma (o produto aparece na
+ * sessão errada) e toda análise por categoria.
+ */
 const VALOR_INICIAL: NovoProdutoInput = {
   nome: "",
-  categoria: CATEGORIAS_PRODUCAO[0].chave,
+  categoria: "",
   unidadeProducao: "un",
   ativoNaProducao: true,
   pesoMedioUnitarioGramas: undefined,
-  prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[CATEGORIAS_PRODUCAO[0].chave] ?? null,
+  prazoValidadeDias: null,
 };
 
 export function TelaCadastroProdutos({
@@ -41,7 +48,15 @@ export function TelaCadastroProdutos({
   const [validadeTocada, setValidadeTocada] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
-  const [abaAtiva, setAbaAtiva] = useState<"novo" | "lista" | "revisao" | "limpeza">("novo");
+  /**
+   * As abas "Sem categoria" e "Fora de escopo" foram removidas (ago/2026).
+   * Eram ferramentas da migração inicial do catálogo do PDV (881 -> 89
+   * produtos), já concluída. Hoje nada consegue voltar a entrar sem
+   * categoria ou fora das 5 categorias de produção: o formulário exige a
+   * escolha, a importação de planilha filtra, e o catálogo semente já vem
+   * limpo. Manter as abas era oferecer duas telas que nunca teriam nada.
+   */
+  const [abaAtiva, setAbaAtiva] = useState<"novo" | "lista">("novo");
 
   // Edição inline do catálogo — nome, categoria, unidade, peso médio e
   // validade (decisão do dono do negócio — set/2026: esses 5 campos podem
@@ -57,6 +72,15 @@ export function TelaCadastroProdutos({
   } | null>(null);
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
+  /**
+   * A exclusão passou a viver no próprio Catálogo (ago/2026), depois que a
+   * aba "Fora de escopo" — antigo único caminho para excluir — saiu.
+   * Continua exigindo a senha da loja: apaga catálogo compartilhado pelas
+   * três lojas e não tem como desfazer.
+   */
+  const [produtoAExcluir, setProdutoAExcluir] = useState<Produto | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
+
   // Ao trocar a categoria, sugere o prazo de validade típico dela — só se o
   // operador ainda não tiver ajustado esse campo manualmente (ex.: uma
   // rosca dentro de "Pães e Roscas" precisa de um valor diferente do pão).
@@ -69,7 +93,7 @@ export function TelaCadastroProdutos({
 
   async function handleSalvar(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.nome.trim()) return;
+    if (!form.nome.trim() || !form.categoria) return;
     setSalvando(true);
     try {
       await onCriarProduto(form);
@@ -136,31 +160,11 @@ export function TelaCadastroProdutos({
     );
   }, [produtos, busca]);
 
-  const semCategoria = useMemo(
-    () => produtos.filter((p) => p.categoria === "SEM_CATEGORIA"),
-    [produtos]
-  );
 
-  // Fora de escopo = qualquer produto que não esteja em nenhuma das 5
-  // categorias de produção — inclui "SEM_CATEGORIA" e categorias de
-  // revenda (mercearia, refrigerante...) importadas junto na planilha
-  // original do PDV.
-  const foraDeEscopo = useMemo(
-    () => produtos.filter((p) => !CATEGORIAS_PRODUCAO.some((c) => c.chave === p.categoria)),
-    [produtos]
-  );
 
   // Vocabulário restrito às 5 categorias de produção — sugerir uma categoria de
   // revenda (ex.: "MERCEARIA") não ajudaria em nada, já que essas não aparecem
   // em mais nenhuma tela do app.
-  const produtosDasCategoriasDeProducao = useMemo(
-    () => produtos.filter((p) => CATEGORIAS_PRODUCAO.some((c) => c.chave === p.categoria)),
-    [produtos]
-  );
-  const vocabulario = useMemo(
-    () => construirVocabularioPorCategoria(produtosDasCategoriasDeProducao),
-    [produtosDasCategoriasDeProducao]
-  );
 
   return (
     <div className="tela">
@@ -173,20 +177,6 @@ export function TelaCadastroProdutos({
         <button type="button" className={abaAtiva === "lista" ? "aba ativa" : "aba"} onClick={() => setAbaAtiva("lista")}>
           Catálogo ({produtos.length})
         </button>
-        <button
-          type="button"
-          className={abaAtiva === "revisao" ? "aba ativa" : "aba"}
-          onClick={() => setAbaAtiva("revisao")}
-        >
-          Sem categoria ({semCategoria.length})
-        </button>
-        <button
-          type="button"
-          className={abaAtiva === "limpeza" ? "aba ativa" : "aba"}
-          onClick={() => setAbaAtiva("limpeza")}
-        >
-          Fora de escopo ({foraDeEscopo.length})
-        </button>
       </div>
 
       {abaAtiva === "novo" && (
@@ -197,7 +187,12 @@ export function TelaCadastroProdutos({
           </label>
           <label>
             Categoria
-            <select value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>
+            <select
+              value={form.categoria}
+              required
+              onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+            >
+              <option value="">Escolha a categoria...</option>
               {CATEGORIAS_PRODUCAO.map((c) => (
                 <option key={c.chave} value={c.chave}>
                   {c.rotulo}
@@ -392,6 +387,15 @@ export function TelaCadastroProdutos({
                         <button type="button" className="link" onClick={() => iniciarEdicao(p)}>
                           Editar
                         </button>
+                        <button
+                          type="button"
+                          className="botao-limpar-sessao"
+                          title={`Excluir ${p.nome}`}
+                          aria-label={`Excluir ${p.nome}`}
+                          onClick={() => setProdutoAExcluir(p)}
+                        >
+                          <IconeLixeira tamanho={16} />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -405,217 +409,20 @@ export function TelaCadastroProdutos({
         </div>
       )}
 
-      {abaAtiva === "revisao" && (
-        <RevisaoCategoria
-          produtos={semCategoria}
-          vocabulario={vocabulario}
-          onAtualizarProduto={onAtualizarProduto}
-        />
-      )}
 
-      {abaAtiva === "limpeza" && (
-        <LimpezaCatalogo produtos={foraDeEscopo} onExcluirProdutos={onExcluirProdutos} />
-      )}
-    </div>
-  );
-}
-
-function RevisaoCategoria({
-  produtos,
-  vocabulario,
-  onAtualizarProduto,
-}: {
-  produtos: Produto[];
-  vocabulario: Map<string, Map<string, number>>;
-  onAtualizarProduto: (produto: Produto) => Promise<void>;
-}) {
-  if (produtos.length === 0) {
-    return <p className="mensagem-sucesso">Todos os produtos têm categoria definida.</p>;
-  }
-
-  return (
-    <div>
-      <p className="nota-rodape">
-        Sugestões calculadas por sobreposição de palavras com as categorias já existentes — sempre
-        exigem sua confirmação, nunca são aplicadas sozinhas (produtos ambíguos, ex.: "queijo",
-        aparecem em várias categorias).
-      </p>
-      <div className="tabela-scroll">
-        <table className="tabela-simples">
-          <thead>
-            <tr>
-              <th>Produto</th>
-              <th>Sugestões</th>
-            </tr>
-          </thead>
-          <tbody>
-            {produtos.slice(0, 50).map((p) => {
-              const sugestoes = sugerirCategorias(p, vocabulario);
-              return (
-                <tr key={p.codigoPdv}>
-                  <td>{p.nome}</td>
-                  <td className="sugestoes-linha">
-                    {sugestoes.length === 0 && <span className="nota-rodape">sem sugestão — revisar manualmente</span>}
-                    {sugestoes.map((s) => (
-                      <button
-                        key={s.categoria}
-                        type="button"
-                        className="chip-sugestao"
-                        onClick={() => onAtualizarProduto({ ...p, categoria: s.categoria })}
-                        title={`confiança: ${(s.pontuacao * 100).toFixed(0)}%`}
-                      >
-                        {s.categoria}
-                      </button>
-                    ))}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      {produtos.length > 50 && (
-        <p className="nota-rodape">Mostrando 50 de {produtos.length} pendentes — vá salvando e a lista avança.</p>
-      )}
-    </div>
-  );
-}
-
-/**
- * Exclusão em massa dos produtos fora das 5 categorias de produção
- * (decisão do dono do negócio — ago/2026). Agrupado por categoria
- * original do PDV, com cada grupo selecionável individualmente — um
- * item ambíguo (ex.: "BOLOS DE ANIVERSÁRIO", que é claramente um bolo
- * mas veio com categoria própria da planilha) pode ficar de fora da
- * exclusão só desmarcando o grupo dele, sem precisar revisar item a
- * item. Exige um segundo clique de confirmação — ação irreversível.
- */
-function LimpezaCatalogo({
-  produtos,
-  onExcluirProdutos,
-}: {
-  produtos: Produto[];
-  onExcluirProdutos: (codigosPdv: number[]) => Promise<void>;
-}) {
-  const grupos = useMemo(() => {
-    const mapa = new Map<string, Produto[]>();
-    for (const p of produtos) {
-      const lista = mapa.get(p.categoria) ?? [];
-      lista.push(p);
-      mapa.set(p.categoria, lista);
-    }
-    return Array.from(mapa.entries()).sort((a, b) => b[1].length - a[1].length);
-  }, [produtos]);
-
-  const [selecionados, setSelecionados] = useState<Set<string>>(() => new Set(grupos.map(([categoria]) => categoria)));
-  const [confirmando, setConfirmando] = useState(false);
-  const [excluindo, setExcluindo] = useState(false);
-  const [pedindoSenha, setPedindoSenha] = useState(false);
-
-  if (produtos.length === 0) {
-    return <p className="mensagem-sucesso">O catálogo já contém só produtos das 5 categorias de produção.</p>;
-  }
-
-  function alternar(categoria: string) {
-    setSelecionados((atual) => {
-      const novo = new Set(atual);
-      if (novo.has(categoria)) novo.delete(categoria);
-      else novo.add(categoria);
-      return novo;
-    });
-  }
-
-  const codigosSelecionados = grupos
-    .filter(([categoria]) => selecionados.has(categoria))
-    .flatMap(([, lista]) => lista.map((p) => p.codigoPdv));
-
-  return (
-    <div>
-      <p className="callout-inline">
-        Estes {produtos.length} produtos não pertencem a nenhuma das 5 categorias de produção — não
-        aparecem no Cronograma nem em Perdas. Desmarque qualquer categoria que precise de uma segunda
-        olhada antes de excluir (ex.: um item claramente da padaria que só ficou com o nome de categoria
-        errado na planilha original do PDV).
-      </p>
-      <div className="tabela-scroll">
-        <table className="tabela-simples">
-          <thead>
-            <tr>
-              <th></th>
-              <th>Categoria original (PDV)</th>
-              <th>Itens</th>
-            </tr>
-          </thead>
-          <tbody>
-            {grupos.map(([categoria, lista]) => (
-              <tr key={categoria}>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={selecionados.has(categoria)}
-                    onChange={() => alternar(categoria)}
-                    aria-label={`Selecionar categoria ${categoria}`}
-                  />
-                </td>
-                <td>{categoria === "SEM_CATEGORIA" ? <span className="tag-pendente">sem categoria</span> : categoria}</td>
-                <td>{lista.length}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <p className="total-linha">
-        <strong>{codigosSelecionados.length}</strong> de {produtos.length} produtos serão excluídos permanentemente.
-      </p>
-
-      {!confirmando ? (
-        <div className="acoes">
-          <button
-            type="button"
-            className="secundario"
-            disabled={codigosSelecionados.length === 0}
-            onClick={() => setConfirmando(true)}
-          >
-            Excluir selecionados
-          </button>
-        </div>
-      ) : (
-        <div className="acoes">
-          <button type="button" className="secundario" onClick={() => setConfirmando(false)}>
-            Cancelar
-          </button>
-          <button
-            type="button"
-            className="perigo"
-            disabled={excluindo}
-            onClick={() => setPedindoSenha(true)}
-          >
-            {excluindo ? "Excluindo..." : `Excluir ${codigosSelecionados.length} produtos`}
-          </button>
-        </div>
-      )}
-
-      {/* Exclusão de produto é irreversível e apaga catálogo compartilhado
-          pelas três lojas — exige a senha da loja, não só um segundo
-          clique (pedido do dono do negócio, ago/2026). */}
-      {pedindoSenha && (
+      {produtoAExcluir && (
         <ConfirmarComSenha
-          titulo="Confirmar exclusão"
-          descricao={`${codigosSelecionados.length} ${
-            codigosSelecionados.length === 1 ? "produto será removido" : "produtos serão removidos"
-          } do catálogo das três lojas. Não há como desfazer.`}
-          rotuloConfirmar="Excluir definitivamente"
-          onCancelar={() => setPedindoSenha(false)}
+          titulo="Excluir produto"
+          descricao={`"${produtoAExcluir.nome}" sai do catálogo das três lojas. Cronogramas e perdas já lançados continuam no histórico, mas o produto não poderá mais ser escolhido. Não há como desfazer.`}
+          rotuloConfirmar={excluindo ? "Excluindo..." : "Excluir definitivamente"}
+          onCancelar={() => setProdutoAExcluir(null)}
           onConfirmado={async () => {
-            setPedindoSenha(false);
             setExcluindo(true);
             try {
-              await onExcluirProdutos(codigosSelecionados);
-              setConfirmando(false);
+              await onExcluirProdutos([produtoAExcluir.codigoPdv]);
+              setProdutoAExcluir(null);
             } catch {
-              // Mensagem vem do aviso global (ver App.tsx); a seleção fica
-              // intacta para o operador tentar de novo.
+              // Mensagem vem do aviso global (ver App.tsx).
             } finally {
               setExcluindo(false);
             }

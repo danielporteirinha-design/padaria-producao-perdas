@@ -44,11 +44,13 @@ import { gerarId } from "../lib/id";
 import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
+import type { PedidoFilial } from "../types/pedido";
 import type { Repositorio } from "./repositorio";
 
 const COL_PRODUTOS = "produtos";
 const COL_PLANOS = "planos";
 const COL_PERDAS = "perdas";
+const COL_PEDIDOS = "pedidos";
 
 /** Erro de domínio — sempre com mensagem apresentável ao operador. */
 export class ErroRepositorio extends Error {}
@@ -176,6 +178,29 @@ export class RepositorioFirestore implements Repositorio {
       canceladaEm: new Date().toISOString(),
       motivoCancelamento: motivo,
     });
+  }
+
+  // ------------------------------------------------------------ pedidos
+
+  /**
+   * `lojaId` não é filtro de conveniência: as regras só deixam a filial
+   * ler os próprios pedidos, então uma consulta sem o `where` seria
+   * recusada inteira quando feita por uma filial. A matriz chama sem
+   * argumento e recebe os de todas as lojas.
+   */
+  async listarPedidos(lojaId?: string): Promise<PedidoFilial[]> {
+    const consulta = lojaId
+      ? query(collection(db, COL_PEDIDOS), where("lojaId", "==", lojaId))
+      : collection(db, COL_PEDIDOS);
+    const snap = await getDocs(consulta);
+    return snap.docs
+      .map((d) => d.data() as PedidoFilial)
+      .sort((a, b) => a.data.localeCompare(b.data));
+  }
+
+  async salvarPedido(pedido: PedidoFilial): Promise<PedidoFilial> {
+    await setDoc(doc(db, COL_PEDIDOS, pedido.id), limpar(pedido));
+    return pedido;
   }
 
   // ------------------------------------------------------------ migração

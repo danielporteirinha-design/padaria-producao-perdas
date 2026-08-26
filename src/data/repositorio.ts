@@ -10,6 +10,7 @@
 import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
+import type { PedidoFilial } from "../types/pedido";
 
 export interface Repositorio {
   listarProdutos(): Promise<Produto[]>;
@@ -32,4 +33,12 @@ export interface Repositorio {
   ): Promise<RegistroPerda>;
   /** Anula um lançamento errado (só a matriz). Marca, nunca apaga. */
   cancelarPerda(perdaId: string, canceladaPor: string, motivo: string): Promise<void>;
+
+  /**
+   * Pedidos das filiais. A matriz lê os de todas as lojas; a filial só os
+   * próprios (é o que as regras do Firestore permitem — passar `lojaId`
+   * não é otimização, é o que faz a consulta ser aceita).
+   */
+  listarPedidos(lojaId?: string): Promise<PedidoFilial[]>;
+  salvarPedido(pedido: PedidoFilial): Promise<PedidoFilial>;
 }

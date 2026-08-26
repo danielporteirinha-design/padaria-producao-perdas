@@ -17,8 +17,10 @@ import { TelaPerdas } from "./components/TelaPerdas";
 import { TelaAnalises } from "./components/TelaAnalises";
 import { BannerInstalar } from "./components/BannerInstalar";
 import { AvisoPerdaPendente } from "./components/AvisoPerdaPendente";
+import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
+import type { PedidoFilial } from "./types/pedido";
 
-type Aba = "cronograma" | "cadastro" | "perdas" | "analises";
+type Aba = "cronograma" | "cadastro" | "perdas" | "analises" | "pedido";
 
 interface DefinicaoAba {
   chave: Aba;
@@ -44,7 +46,10 @@ const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
     { chave: "perdas", rotulo: "Perdas" },
     { chave: "analises", rotulo: "Análises" },
   ],
-  filial: [{ chave: "perdas", rotulo: "Perdas" }],
+  filial: [
+    { chave: "pedido", rotulo: "Pedido" },
+    { chave: "perdas", rotulo: "Perdas" },
+  ],
 };
 
 /**
@@ -102,6 +107,7 @@ export default function App() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [planos, setPlanos] = useState<PlanoDeProducaoDiario[]>([]);
   const [perdas, setPerdas] = useState<RegistroPerda[]>([]);
+  const [pedidos, setPedidos] = useState<PedidoFilial[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   const [erroCarregamento, setErroCarregamento] = useState("");
@@ -180,12 +186,20 @@ export default function App() {
     if (!repositorio || !migracaoResolvida) return;
     let cancelado = false;
     setCarregando(true);
-    Promise.all([repositorio.listarProdutos(), repositorio.listarPlanos(), repositorio.listarPerdas()])
-      .then(([p, pl, pe]) => {
+    Promise.all([
+      repositorio.listarProdutos(),
+      repositorio.listarPlanos(),
+      repositorio.listarPerdas(),
+      // A filial só pode ler os próprios pedidos (ver firestore.rules) —
+      // sem o filtro, a consulta dela seria recusada inteira.
+      repositorio.listarPedidos(loja?.papel === "filial" ? loja.id : undefined),
+    ])
+      .then(([p, pl, pe, pd]) => {
         if (cancelado) return;
         setProdutos(p);
         setPlanos(pl);
         setPerdas(pe);
+        setPedidos(pd);
         setCarregando(false);
       })
       .catch((erro) => {
@@ -261,6 +275,14 @@ export default function App() {
           : p
       )
     );
+  }
+
+  async function handleSalvarPedido(pedido: PedidoFilial) {
+    await comRetorno(
+      () => repositorio!.salvarPedido(pedido),
+      "Pedido enviado para a matriz."
+    );
+    setPedidos((atual) => [...atual.filter((p) => p.id !== pedido.id), pedido]);
   }
 
   async function handleCriarProduto(input: NovoProdutoInput) {
@@ -466,10 +488,20 @@ export default function App() {
         {abaAtual === "cronograma" && (
           <TelaCronograma
             produtos={produtos}
+            pedidos={pedidos}
             planos={planos}
             perdas={perdas}
             operador={operador}
             onSalvarPlano={handleSalvarPlano}
+          />
+        )}
+        {abaAtual === "pedido" && (
+          <TelaPedidoFilial
+            loja={loja}
+            produtos={produtos}
+            pedidos={pedidos}
+            operador={operador}
+            onSalvarPedido={handleSalvarPedido}
           />
         )}
         {abaAtual === "cadastro" && (
@@ -487,7 +519,7 @@ export default function App() {
             perdas={perdas}
             operador={operador}
             onConfirmarProducao={handleConfirmarProducao}
-            podeAnular={loja.papel === "matriz"}
+            ehMatriz={loja.papel === "matriz"}
             onAnularPerda={handleAnularPerda}
             onRegistrarPerda={handleRegistrarPerda}
           />

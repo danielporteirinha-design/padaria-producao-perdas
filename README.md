@@ -35,16 +35,16 @@ inicial do documento de arquitetura:
 | Unidade de produção | **Sempre unidades** — os ~89 produtos das 5 categorias já são vendidos por unidade no PDV, formato nativo da operação |
 | Unidade de perda | **Sempre pesada em quilos** (balança) — o operador também informa o peso de 1 unidade daquela fornada, e o app deriva quantas unidades a perda representa |
 | Peso unitário do produto | Sugerido automaticamente a partir do último lançamento de perda daquele produto — cadastro se autoatualiza, sem passo manual |
-| Impressão | Normalmente UMA fita PNG com todas as sessões confirmadas, separadas por linha de corte (pontilhado + tesoura) — corta-se fisicamente após imprimir, um pedaço por quadro de aviso de cada setor. Se o cronograma do dia for grande demais para uma imagem só, divide automaticamente em mais de uma (ver seção "Fita de impressão" abaixo) |
+| Impressão | **Dois documentos** por confirmação: Lista de Produção (totais, para o padeiro) e um romaneio Separação por filial (para o despacho da manhã) — ver "Pedidos das filiais". Cada um é uma fita PNG com todas as sessões, separadas por linha de corte (pontilhado + tesoura) — corta-se fisicamente após imprimir, um pedaço por quadro de aviso de cada setor. Se o cronograma do dia for grande demais para uma imagem só, divide automaticamente em mais de uma (ver seção "Fita de impressão" abaixo) |
 | Sugestão de produção | Botão "✨ Sugerir com IA" por categoria (Gemini) — sempre assistido: pré-preenche quantidades vazias com base no histórico, operador revisa/ajusta antes de confirmar |
-| Escopo do catálogo | Só as 5 categorias de produção — o catálogo importado do PDV tem ~19 categorias, a maioria revenda (mercearia, refrigerante, laticínio...), fora do escopo deste app (ago/2026: limpeza feita em Cadastro de Produtos → aba "Fora de escopo") |
+| Escopo do catálogo | Só as 5 categorias de produção — o catálogo importado do PDV tem ~19 categorias, a maioria revenda (mercearia, refrigerante, laticínio...), fora do escopo deste app (ago/2026: limpeza concluída; as abas de migração foram removidas e o formulário passou a exigir a categoria) |
 | Prazo de validade | Por produto (`Produto.prazoValidadeDias`, editável, sugerido por categoria). Serve para identificar de QUAL fornada a perda veio — **nunca para autorizar ou barrar o lançamento** (ver "Perda não é vencimento" abaixo) |
 | Edição de cadastro | Nome, categoria, unidade, peso médio e prazo de validade são editáveis direto na tabela do Catálogo (edição inline por linha) — corrige erro de cadastro ou de importação sem precisar excluir e recriar o produto |
 | Limpar sessão | Botão "limpar esta sessão" por acordeão, com confirmação em dois toques. **Nunca existe um "limpar tudo" global** — um toque errado apagaria o cronograma inteiro montado no fim do expediente, sem desfazer |
 | Assinatura da fita | "Montado por" sai no rodapé de **cada sessão**, não uma vez só no fim: a fita é cortada e cada pedaço vai para o quadro de um setor — pedaço sem nome é pedaço sem responsável |
 | Perda no mesmo dia | Fornada queimada ou fora do padrão deve ser pesada e lançada no dia, nunca no dia seguinte. O app sempre aceitou isso; o que faltava era chamar o operador — ver "Perda no mesmo dia" abaixo |
 | Produção realizada | No fim do expediente, junto com as perdas, confirma-se o que REALMENTE saiu do forno. Marcação binária ("não saiu"), porque é assim que acontece na prática — não sai em quantidade menor. O plano nunca é reescrito |
-| Abas por perfil | A filial vê **só Perdas**. Catálogo, Cronograma e Análises são da matriz — as regras do Firestore já negariam gravação da filial neles, e mostrar as abas só ofereceria caminhos que terminam em "sem permissão". A tela de Pedido da filial entra na Parte B |
+| Abas por perfil | A filial vê **Pedido e Perdas**. Catálogo, Cronograma e Análises são da matriz — as regras do Firestore já negariam gravação da filial neles, e mostrar as abas só ofereceria caminhos que terminam em "sem permissão". |
 | Anular perda | Lançamento errado (1000 em vez de 10) é **anulado pela matriz, nunca apagado** — o registro fica no histórico marcado, com quem anulou e por quê, e sai de todos os cálculos |
 | Excluir produto | Exige a **senha da loja** (revalidada no Firebase), não só um segundo clique — apaga catálogo compartilhado pelas três lojas |
 | Quem pode receber perda | Qualquer produto que já tenha sido produzido em **alguma** ocasião. Produto nunca produzido não entra (não existe fornada da qual pudesse ter vindo) |
@@ -616,6 +616,73 @@ fuso de São Paulo (o build roda em UTC no Vercel, e três horas de
 diferença no rodapé só gerariam dúvida) e inclui o hash curto do commit
 quando `VERCEL_GIT_COMMIT_SHA` existe. Rodando local, fica só a data.
 
+## Pedidos das filiais — Parte B (ago/2026)
+
+As filiais não produzem, pedem. O fluxo diário fechado com o dono do
+negócio:
+
+1. **À noite:** cada filial monta o pedido do dia seguinte e **envia**
+2. **À noite:** a matriz monta a própria produção e vê os pedidos chegando
+3. **Ao confirmar:** saem DOIS documentos distintos
+4. **De manhã:** a separação usa os romaneios
+
+### Por que dois documentos
+
+A operação faz duas perguntas diferentes, e um documento só não responde
+as duas:
+
+| Documento | Para quem | Mostra |
+|---|---|---|
+| Lista de Produção | Padeiro | Quantidade **totalizada** (matriz + filiais) |
+| Separação — *Filial* | Quem separa de manhã | O que sai para **aquela loja** |
+
+Um documento só, com o total, deixaria a separação adivinhando; um
+documento só, por loja, faria o padeiro somar de cabeça. `src/lib/consolidacao.ts`
+é o módulo puro que faz essa conta, e a verificação `Caso 22` trava a
+propriedade que mais importa: **o que se produz tem que fechar com o que
+se distribui**. Se essa soma não bater, sobra ou falta mercadoria no
+despacho — o erro mais caro dessa operação.
+
+O romaneio também vem agrupado por categoria: quem separa anda pela
+padaria por setor, não por ordem alfabética de produto.
+
+### Enviar é um passo explícito
+
+Pedido em **rascunho não entra na produção**. A filial ainda está mexendo
+nele, e produzir com base num número que ninguém confirmou é pior que
+produzir sem ele.
+
+O id do pedido é derivado da data e da loja (`2026-08-27_FILIAL_ARTHUR_BERNARDES`)
+em vez de aleatório: enviar duas vezes — por toque repetido ou por
+reconexão offline — atualiza o mesmo documento em vez de virar dois
+pedidos somados.
+
+### O risco de a filial atrasar
+
+`PainelPedidosFiliais.tsx` mostra, no topo do Cronograma:
+
+```
+✓ Arthur Bernardes      enviado · 19 un
+⚠ Benjamin Constant     aguardando
+```
+
+**Não bloqueia a confirmação de propósito.** Pode ser tarde, a filial
+pode não ter o que pedir, e travar o cronograma da padaria inteira por
+causa de uma loja seria pior. O que se garante é que ninguém confirme sem
+ter visto que faltava alguém.
+
+### Regras de acesso dos pedidos
+
+A filial escreve só o próprio pedido; a matriz lê todos mas **não
+escreve** — o número tem que ser o que a filial mandou, não o que a
+matriz achou que ela queria. Pedido enviado não pode ser apagado: se a
+filial desistir, ela zera os itens, e assim a matriz nunca fica sem saber
+se a loja já respondeu.
+
+Consequência prática no código: `listarPedidos(lojaId?)` recebe a loja
+quando quem chama é uma filial. Não é otimização — uma consulta sem esse
+filtro seria **recusada inteira** pelas regras.
+
 ## Estrutura
 
 ```
@@ -628,10 +695,12 @@ producao-perdas/
   src/
     types/
       produto.ts                # Modelo de Produto
+      pedido.ts                  # Pedido de filial (um por loja por dia)
       producao.ts                 # Sessão de Produção (por categoria), Plano Diário — quantidade em unidades
       perda.ts                     # Registro de Perda — peso em kg + peso unitário informado + unidades estimadas
     lib/
       errosFirestore.ts              # Traduz falha de gravação para linguagem de padaria
+      consolidacao.ts                # Junta produção da matriz + pedidos das filiais (totais e romaneios)
       lojas.ts                      # As 3 lojas (matriz + 2 filiais) e o mapeamento conta -> loja
       firebase.ts                    # Inicialização do Firestore (com cache offline) e do Auth
       categorias.ts                 # As 5 categorias fixas de produção + "Encomendas e Especiais" + validade sugerida por categoria
@@ -649,6 +718,8 @@ producao-perdas/
       Icones.tsx               # Ícones SVG inline (só traço, currentColor) — sem CDN
       ConfirmarComSenha.tsx     # Revalida a senha da loja antes de ação irreversível
       AvisoGlobal.tsx          # Faixa de retorno de gravação (sucesso/erro), acionada só pelo App
+      TelaPedidoFilial.tsx     # Tela principal da filial: quanto ela vai precisar amanhã
+      PainelPedidosFiliais.tsx  # Indicador "enviado / aguardando" no topo do Cronograma
       TelaLogin.tsx            # Entrada por LOJA (não por funcionário) — escolhe a loja e digita a senha
       ImportarDadosLocais.tsx   # Migração única de localStorage para a nuvem
       BannerInstalar.tsx       # Convite para instalar o app (botão no Chrome/Android, instruções no iPhone)
@@ -678,7 +749,7 @@ producao-perdas/
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (78 asserções)
+npm run verificar   # roda scripts/verificar_logica.ts (94 asserções)
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```

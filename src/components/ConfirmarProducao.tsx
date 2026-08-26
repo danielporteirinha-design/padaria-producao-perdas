@@ -95,6 +95,11 @@ export function ConfirmarProducao({ plano, produtos, operador, onConfirmar }: Co
         Tudo já vem marcado como produzido. Desmarque apenas o que não saiu — é isso que faz a taxa
         de perda ser calculada sobre a produção real, e não sobre a lista.
       </p>
+      <p className="nota-rodape">
+        Você pode confirmar mais de uma vez ao longo do dia, conforme as fornadas vão saindo, e
+        corrigir depois. Deixar tudo para o fim do expediente é o que faz alguém esquecer o que
+        aconteceu de manhã.
+      </p>
 
       {plano.sessoes.map((sessao) => (
         <div key={sessao.id} className="grupo-confirmacao">

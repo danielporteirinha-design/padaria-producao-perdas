@@ -32,7 +32,7 @@ body {
 
 button, input, select, textarea { font: inherit; }
 
-.app { max-width: 720px; margin: 0 auto; padding-bottom: 48px; }
+.app { max-width: 720px; margin: 0 auto; padding-bottom: 96px; }
 
 .cabecalho-app {
   display: flex;
@@ -601,29 +601,36 @@ button.perigo:hover { background: #822525; }
    pode estar olhando o rodapé do formulário.
    --------------------------------------------------------------- */
 
+/* Fica na parte de BAIXO da tela (ago/2026, pedido do dono do negócio):
+   no topo, a faixa competia com o cabeçalho e o polegar já está embaixo
+   no celular. Verde fechado com texto claro em vez do verde pálido — a
+   confirmação precisa ser vista de relance, sem virar alarme. */
 .aviso-global {
-  position: sticky;
-  top: 0;
-  z-index: 20;
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 60;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
-  margin-bottom: 12px;
-  border-radius: 0 0 var(--raio) var(--raio);
+  padding: 14px 16px;
+  border-radius: var(--raio);
   font-size: 15px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22);
+  max-width: 696px;
+  margin: 0 auto;
 }
 .aviso-global.sucesso {
-  background: var(--cor-sucesso-fundo);
-  border: 1px solid var(--cor-sucesso);
-  color: var(--cor-texto);
+  background: #2f6b41;
+  border: 1px solid #275838;
+  color: #ffffff;
 }
 .aviso-global.erro {
-  background: #fbeaea;
-  border: 1px solid #9b2c2c;
-  color: #6d1f1f;
+  background: #8f2626;
+  border: 1px solid #7a1f1f;
+  color: #ffffff;
 }
 .fechar-aviso {
   background: none;
@@ -632,6 +639,7 @@ button.perigo:hover { background: #822525; }
   line-height: 1;
   cursor: pointer;
   color: inherit;
+  opacity: 0.85;
   padding: 0 4px;
   flex-shrink: 0;
 }
@@ -684,4 +692,61 @@ button.perigo:hover { background: #822525; }
   opacity: 0.75;
   padding: 20px 12px 8px;
   user-select: text;
+}
+
+/* ---------------------------------------------------------------
+   Painel "quem já mandou o pedido" (PainelPedidosFiliais.tsx) e resumo
+   do pedido da filial. Âmbar quando falta alguém, verde quando todas
+   enviaram — a mesma linguagem de cor do resto do app.
+   --------------------------------------------------------------- */
+
+.painel-pedidos {
+  border: 1px solid var(--cor-borda);
+  border-left-width: 4px;
+  border-radius: var(--raio);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: var(--cor-superficie);
+}
+.painel-pedidos.aguardando { border-left-color: var(--cor-alerta); background: var(--cor-alerta-fundo); }
+.painel-pedidos.completo { border-left-color: var(--cor-sucesso); background: var(--cor-sucesso-fundo); }
+.linhas-pedidos { display: flex; flex-direction: column; gap: 6px; }
+.linha-pedido-filial { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.linha-pedido-filial .icone-status { display: flex; flex-shrink: 0; }
+.painel-pedidos.completo .icone-status { color: var(--cor-sucesso); }
+.painel-pedidos.aguardando .icone-status { color: var(--cor-alerta); }
+.nome-filial { flex: 1; font-weight: 600; }
+.status-filial { color: var(--cor-texto-suave); font-size: 14px; white-space: nowrap; }
+.painel-pedidos .nota-rodape { margin: 10px 0 0; }
+
+.resumo-pedido { margin-top: 16px; }
+.largura-cheia { width: 100%; margin-top: 12px; }
+
+/* Seletor entre os dois documentos de impressão (produção × separação
+   por filial). Segmentado, não abas: são saídas alternativas do mesmo
+   passo, não seções diferentes da tela. */
+.seletor-documento {
+  display: flex;
+  gap: 6px;
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 4px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+}
+.seletor-documento button {
+  flex: 1;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  padding: 9px 12px;
+  font-weight: 600;
+  color: var(--cor-texto-suave);
+  cursor: pointer;
+}
+.seletor-documento button.ativa {
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
 }

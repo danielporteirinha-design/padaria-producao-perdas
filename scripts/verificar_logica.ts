@@ -34,6 +34,8 @@ import {
 import type { Produto } from "../src/types/produto";
 import type { PlanoDeProducaoDiario } from "../src/types/producao";
 import { perdaEstaValida, type RegistroPerda } from "../src/types/perda";
+import { idDoPedido, totalDoPedido, type PedidoFilial } from "../src/types/pedido";
+import { consolidarProducao, itensParaLoja, quantidadeDaLoja } from "../src/lib/consolidacao";
 
 let falhas = 0;
 function afirmar(condicao: boolean, descricao: string) {
@@ -860,6 +862,108 @@ const perdas: RegistroPerda[] = [
     picos[0].perdaPercentualMedia === 10,
     `picos de perda ignoram o anulado (obtido: ${picos[0].perdaPercentualMedia}%)`
   );
+}
+
+// ---------------------------------------------------------------
+// Caso 22: consolidação matriz + filiais (Parte B, ago/2026). É a conta
+// que decide o que o padeiro produz e o que vai para cada loja — errar
+// aqui é produzir a menos (loja abre sem mercadoria) ou a mais (vira
+// perda). Por isso está coberta caso a caso.
+// ---------------------------------------------------------------
+{
+  const MATRIZ = "MATRIZ";
+  const ARTHUR = "FILIAL_ARTHUR_BERNARDES";
+  const BENJAMIN = "FILIAL_BENJAMIN_CONSTANT";
+
+  const pedidoArthur: PedidoFilial = {
+    id: "2026-08-27_" + ARTHUR,
+    lojaId: ARTHUR,
+    data: "2026-08-27",
+    itens: [{ codigoPdv: 112, quantidadeUnidades: 15 }, { codigoPdv: 200, quantidadeUnidades: 5 }],
+    status: "enviado",
+    criadoPor: "filial",
+    criadoEm: "2026-08-26T20:00:00Z",
+    enviadoEm: "2026-08-26T20:05:00Z",
+  };
+  const pedidoBenjaminRascunho: PedidoFilial = {
+    ...pedidoArthur,
+    id: "2026-08-27_" + BENJAMIN,
+    lojaId: BENJAMIN,
+    itens: [{ codigoPdv: 112, quantidadeUnidades: 99 }],
+    status: "rascunho",
+    enviadoEm: undefined,
+  };
+
+  const daMatriz = [{ codigoPdv: 112, quantidadeUnidades: 40 }];
+
+  const consolidado = consolidarProducao(daMatriz, [pedidoArthur, pedidoBenjaminRascunho], MATRIZ);
+  const pao = consolidado.find((c) => c.codigoPdv === 112)!;
+
+  afirmar(
+    pao.totalUnidades === 55,
+    `total soma matriz (40) + filial que enviou (15) = 55, obtido: ${pao.totalUnidades}`
+  );
+  afirmar(
+    !pao.destinos.some((d) => d.lojaId === BENJAMIN),
+    "pedido em RASCUNHO não entra na produção — a filial ainda está mexendo nele"
+  );
+  afirmar(quantidadeDaLoja(pao, MATRIZ) === 40, "a matriz leva o que ela mesma programou");
+  afirmar(quantidadeDaLoja(pao, ARTHUR) === 15, "Arthur Bernardes leva o que pediu");
+  afirmar(quantidadeDaLoja(pao, BENJAMIN) === 0, "loja sem pedido enviado não leva nada");
+
+  // Produto que só a filial pediu tem que entrar na produção mesmo a
+  // matriz não tendo programado nada dele.
+  const soDaFilial = consolidado.find((c) => c.codigoPdv === 200);
+  afirmar(
+    soDaFilial !== undefined && soDaFilial.totalUnidades === 5,
+    "produto pedido só pela filial entra na produção da matriz"
+  );
+  afirmar(
+    soDaFilial !== undefined && quantidadeDaLoja(soDaFilial, MATRIZ) === 0,
+    "esse produto não sobra para a matriz — vai inteiro para a filial"
+  );
+
+  // O romaneio de separação de cada loja.
+  const romaneioArthur = itensParaLoja(consolidado, ARTHUR);
+  afirmar(romaneioArthur.length === 2, `romaneio de Arthur tem 2 itens (obtido: ${romaneioArthur.length})`);
+  afirmar(
+    romaneioArthur.every((i) => i.quantidadeUnidades > 0),
+    "romaneio nunca traz linha com quantidade zero"
+  );
+  const romaneioBenjamin = itensParaLoja(consolidado, BENJAMIN);
+  afirmar(romaneioBenjamin.length === 0, "loja sem pedido enviado não gera romaneio");
+
+  // A soma dos romaneios + o que fica na matriz TEM que fechar com o
+  // total produzido — se não fechar, sobra ou falta mercadoria no
+  // despacho, que é o erro mais caro dessa operação.
+  const totalProduzido = consolidado.reduce((soma, c) => soma + c.totalUnidades, 0);
+  const totalDistribuido = [MATRIZ, ARTHUR, BENJAMIN]
+    .flatMap((loja) => itensParaLoja(consolidado, loja))
+    .reduce((soma, i) => soma + i.quantidadeUnidades, 0);
+  afirmar(
+    totalProduzido === totalDistribuido,
+    `o que se produz fecha com o que se distribui (${totalProduzido} = ${totalDistribuido})`
+  );
+
+  // Sem pedido nenhum, o comportamento é o de antes das filiais.
+  const soMatriz = consolidarProducao(daMatriz, [], MATRIZ);
+  afirmar(
+    soMatriz.length === 1 && soMatriz[0].totalUnidades === 40,
+    "sem pedidos, o total é exatamente o que a matriz programou"
+  );
+
+  // O id do pedido é derivado da data e da loja: enviar duas vezes
+  // atualiza o mesmo documento em vez de somar dois pedidos.
+  afirmar(
+    idDoPedido("2026-08-27", ARTHUR) === idDoPedido("2026-08-27", ARTHUR),
+    "id do pedido é estável para a mesma data e loja"
+  );
+  afirmar(
+    idDoPedido("2026-08-27", ARTHUR) !== idDoPedido("2026-08-28", ARTHUR),
+    "dias diferentes geram pedidos diferentes"
+  );
+  afirmar(totalDoPedido(pedidoArthur) === 20, `total do pedido soma os itens (obtido: ${totalDoPedido(pedidoArthur)})`);
+  afirmar(totalDoPedido(undefined) === 0, "pedido inexistente conta como zero");
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

@@ -30,8 +30,12 @@ interface TelaPerdasProps {
   operador: string;
   /** Confirma o que realmente saiu do forno no plano de hoje (ver ConfirmarProducao.tsx). */
   onConfirmarProducao: (planoId: string, codigosNaoProduzidos: number[]) => Promise<void>;
-  /** Só a matriz anula lançamento errado — ver firestore.rules. */
-  podeAnular: boolean;
+  /**
+   * Só a matriz produz, então só ela confirma o que saiu do forno e só
+   * ela anula lançamento errado. Na filial esses blocos não aparecem —
+   * ver src/lib/lojas.ts e firestore.rules.
+   */
+  ehMatriz: boolean;
   onAnularPerda: (perdaId: string, motivo: string) => Promise<void>;
   onRegistrarPerda: (payload: {
     codigoPdv: number;
@@ -51,7 +55,7 @@ export function TelaPerdas({
   perdas,
   operador,
   onConfirmarProducao,
-  podeAnular,
+  ehMatriz,
   onAnularPerda,
   onRegistrarPerda,
 }: TelaPerdasProps) {
@@ -71,7 +75,7 @@ export function TelaPerdas({
     [planos, hoje]
   );
 
-  const blocoConfirmacao = planoDeHoje ? (
+  const blocoConfirmacao = ehMatriz && planoDeHoje ? (
     <ConfirmarProducao
       plano={planoDeHoje}
       produtos={produtos}
@@ -163,13 +167,13 @@ export function TelaPerdas({
               <th>Peso unitário usado</th>
               <th>Unidades (est.)</th>
               <th>Motivo</th>
-              {podeAnular && <th aria-label="Anular" />}
+              {ehMatriz && <th aria-label="Anular" />}
             </tr>
           </thead>
           <tbody>
             {perdasDeHoje.length === 0 && (
               <tr>
-                <td colSpan={podeAnular ? 6 : 5} className="vazio">
+                <td colSpan={ehMatriz ? 6 : 5} className="vazio">
                   Nenhuma perda registrada ainda hoje.
                 </td>
               </tr>
@@ -181,7 +185,7 @@ export function TelaPerdas({
                 <td>{p.pesoUnitarioGramasInformado} g</td>
                 <td>{p.quantidadeUnidadesEstimada}</td>
                 <td>{p.cancelada ? "anulada" : p.motivo}</td>
-                {podeAnular && (
+                {ehMatriz && (
                   <td>
                     {!p.cancelada && (
                       <button
