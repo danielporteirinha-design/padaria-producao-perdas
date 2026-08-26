@@ -20,6 +20,18 @@
  * qualquer envio. Sem isso, um endereço público conseguiria disparar
  * notificação para os celulares da padaria inteira.
  *
+ * ASSINATURA: (req, res), NÃO Request/Response
+ * ---------------------------------------------
+ * Esta função nasceu escrita no padrão Web (`Request` -> `Response`) e
+ * NUNCA funcionou em produção: o runtime Node do Vercel injeta um
+ * `http.IncomingMessage`, onde `headers` é um objeto simples. Chamar
+ * `headers.get("authorization")` estourava TypeError, e o `Response`
+ * devolvido pelo catch era ignorado pelo runtime — resultado: HTTP 500
+ * genérico, sem corpo JSON, indistinguível de "chave de serviço errada".
+ *
+ * As outras duas funções de /api já usavam (req, res). Esta agora segue a
+ * mesma convenção — uma convenção por projeto, e não uma por arquivo.
+ *
  * CONFIGURAÇÃO NO VERCEL
  * ----------------------
  * Uma variável de ambiente, `FIREBASE_SERVICE_ACCOUNT`, com o conteúdo
@@ -85,20 +97,23 @@ async function confirmarQueEhAMatriz(cabecalho: string | undefined) {
   }
 }
 
-export default async function handler(requisicao: Request): Promise<Response> {
-  if (requisicao.method !== "POST") {
-    return Response.json({ erro: "Método não permitido." }, { status: 405 });
+// Tipagem mínima e deliberadamente solta, igual às outras funções de /api.
+export default async function handler(req: any, res: any) {
+  if (req.method !== "POST") {
+    res.status(405).json({ erro: "Método não permitido — use POST." });
+    return;
   }
 
   try {
-    await confirmarQueEhAMatriz(requisicao.headers.get("authorization") ?? undefined);
+    await confirmarQueEhAMatriz(req.headers?.authorization);
 
-    const { nomeProduto, codigoPdv, vezesHoje, teste } = (await requisicao.json()) as {
+    const corpoBruto: {
       nomeProduto?: string;
       codigoPdv?: number;
       vezesHoje?: number;
       teste?: boolean;
-    };
+    } = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {});
+    const { nomeProduto, codigoPdv, vezesHoje, teste } = corpoBruto;
     if (!teste && (!nomeProduto || typeof codigoPdv !== "number")) {
       throw new ErroNotificacao("Faltou o produto no pedido de aviso.", 400);
     }
@@ -117,11 +132,12 @@ export default async function handler(requisicao: Request): Promise<Response> {
       .filter((token): token is string => Boolean(token));
 
     if (tokens.length === 0) {
-      return Response.json({
+      res.status(200).json({
         enviados: 0,
         registrados: 0,
         aviso: "Nenhuma filial ativou os avisos ainda.",
       });
+      return;
     }
 
     const corpo = teste
@@ -186,7 +202,7 @@ export default async function handler(requisicao: Request): Promise<Response> {
       ),
     ];
 
-    return Response.json({
+    res.status(200).json({
       enviados: resultado.successCount,
       falharam: resultado.failureCount,
       removidos: invalidos.length,
@@ -195,12 +211,19 @@ export default async function handler(requisicao: Request): Promise<Response> {
     });
   } catch (erro) {
     if (erro instanceof ErroNotificacao) {
-      return Response.json({ erro: erro.message }, { status: erro.status });
+      res.status(erro.status).json({ erro: erro.message });
+      return;
     }
     console.error("Falha ao avisar as filiais:", erro);
-    return Response.json(
-      { erro: "Não foi possível avisar as filiais. A fornada foi marcada normalmente." },
-      { status: 500 }
-    );
+    /**
+     * A mensagem técnica vai junto. Aviso é infraestrutura: sem o motivo
+     * real na tela, quem está na padaria não tem como distinguir chave
+     * errada de token vencido, e a investigação vira tentativa e erro.
+     */
+    res.status(500).json({
+      erro: `Não foi possível avisar as filiais (a fornada foi marcada normalmente). Motivo técnico: ${
+        erro instanceof Error ? erro.message : String(erro)
+      }`,
+    });
   }
 }
