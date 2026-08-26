@@ -11,7 +11,7 @@ import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
 import type { PedidoFilial } from "../types/pedido";
-import type { TrabalhoImpressao } from "../types/impressao";
+import type { EstadoTrabalhoImpressao, TrabalhoImpressao } from "../types/impressao";
 import type { FornadaPronta } from "../types/fornada";
 
 export interface Repositorio {
@@ -60,6 +60,22 @@ export interface Repositorio {
    * por imagem — ver src/types/impressao.ts.
    */
   enviarParaImpressao(trabalhos: TrabalhoImpressao[]): Promise<void>;
+
+  /**
+   * Acompanha os trabalhos enviados até o agente do caixa dar o desfecho.
+   *
+   * Existe porque quem apertava "Imprimir no caixa" não recebia NADA em
+   * seguida (ago/2026): nem "saiu", nem "o programa do caixa está
+   * fechado". No primeiro dia de uso a fila ficou parada horas, e a
+   * descoberta veio de abrir o log do PC — coisa que o padeiro não vai
+   * fazer. Recurso em que não se confia não é usado.
+   *
+   * Devolve a função que desliga a escuta.
+   */
+  observarImpressao(
+    ids: string[],
+    aoMudar: (estados: EstadoTrabalhoImpressao[]) => void
+  ): () => void;
 
   /** Fornadas prontas do dia — marcadas pela matriz ao longo do expediente. */
   listarFornadas(data: string): Promise<FornadaPronta[]>;

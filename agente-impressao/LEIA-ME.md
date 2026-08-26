@@ -107,16 +107,31 @@ Conectado como impressora@paodemel.local
 
 **Deixe essa janela aberta.** Fechou, parou de imprimir.
 
-### 6. Subir junto com o Windows (opcional, recomendado)
+### 6. Subir junto com o Windows — NÃO é opcional
 
-Para não depender de alguém lembrar de abrir:
+Dois cliques em **`instalar-inicio-automatico.bat`**. Uma vez só.
+
+Isto deixou de ser "opcional, recomendado" depois do primeiro dia de uso
+(ago/2026): a fila inteira ficou parada porque ninguém tinha aberto o
+programa, e a lista de produção do dia seguinte dependia disso. Depender
+de alguém lembrar de abrir um programa todo dia, num balcão de padaria às
+5 da manhã, não é um plano — é uma falha esperando a hora.
+
+O agente **só imprime enquanto a janela dele está aberta**. Fechou, a fila
+para de andar (nada se perde: os trabalhos ficam na nuvem e saem todos
+quando ele voltar).
+
+Vale a partir do próximo reinício do PC. Hoje, abra o `iniciar.bat` uma
+vez à mão.
+
+Para desfazer: **Windows + R** → `shell:startup` → apague o atalho
+"Agente de impressao".
+
+#### Se preferir fazer à mão
 
 1. Tecla **Windows + R**
 2. Digite `shell:startup` e Enter
 3. Arraste o **`iniciar.bat`** para dentro dessa pasta segurando **Alt**
-   (cria um atalho)
-
-Da próxima vez que o PC ligar, o agente sobe sozinho.
 
 ## Uso no dia a dia
 
@@ -138,6 +153,10 @@ veja a última linha.
 | `Falta a biblioteca ...` | O `instalar.bat` não rodou, ou o Python foi instalado sem "Add to PATH" |
 | `FALHOU: ... printer ...` | Nome da impressora errado no `config.ini` — rode `listar-impressoras.py` |
 | `Erro ao consultar a fila` | Internet caiu. O agente tenta de novo sozinho, esperando cada vez mais |
+| `aguardando — nada na fila` | Está tudo certo. É o sinal de vida, a cada 5 minutos, para o log responder se o agente está de pé |
+
+Se a última linha do log for de horas atrás e **não** for um
+`aguardando`, o agente está fechado. Abra o `iniciar.bat`.
 
 Um trabalho que falha é marcado como erro e **não é tentado de novo** —
 senão ficaria num laço infinito gastando papel. Mande imprimir de novo

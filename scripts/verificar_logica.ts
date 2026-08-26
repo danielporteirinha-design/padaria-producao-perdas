@@ -62,7 +62,12 @@ import {
   semanaDoMes,
   topProdutosPorPerda,
 } from "../src/lib/analises";
-import { base64DoDataUrl, ErroImpressao, LIMITE_BASE64_BYTES } from "../src/types/impressao";
+import {
+  base64DoDataUrl,
+  ErroImpressao,
+  LIMITE_BASE64_BYTES,
+  resumoDaImpressao,
+} from "../src/types/impressao";
 
 let falhas = 0;
 function afirmar(condicao: boolean, descricao: string) {
@@ -1707,6 +1712,83 @@ const perdas: RegistroPerda[] = [
   // Não restaura: este é o último bloco do script e o processo encerra
   // em seguida. Deixar navigator falso vivo para casos futuros seria a
   // armadilha clássica de teste que contamina o vizinho.
+}
+
+// ---------------------------------------------------------------
+// Caso 21: desfecho da impressão no caixa (ago/2026)
+//
+// O que se protege aqui é a diferença entre "ainda não respondeu" e
+// "respondeu". Confundir os dois foi o defeito original: a tela tratava
+// silêncio como sucesso, e o operador ficava esperando um papel que não
+// vinha porque o programa do caixa estava fechado.
+// ---------------------------------------------------------------
+{
+  // Nada respondeu ainda: NÃO está pronto. É este caso que deixa o
+  // relógio de desistência correr até avisar sobre o agente fechado.
+  afirmar(
+    resumoDaImpressao([], 1).pronto === false,
+    "sem resposta nenhuma, o desfecho continua em aberto"
+  );
+
+  // Uma parte de duas: ainda em aberto — anunciar sucesso aqui faria o
+  // operador sair de perto da impressora com metade da lista.
+  afirmar(
+    resumoDaImpressao([{ id: "a", status: "impresso" }], 2).pronto === false,
+    "impressão parcial não conta como concluída"
+  );
+
+  const duasPartes = resumoDaImpressao(
+    [
+      { id: "a", status: "impresso" },
+      { id: "b", status: "impresso" },
+    ],
+    2
+  );
+  afirmar(duasPartes.pronto && duasPartes.sucesso, "todas as partes impressas fecham com sucesso");
+  afirmar(
+    duasPartes.texto.includes("2 partes"),
+    `o texto diz quantas partes saíram (obtido: "${duasPartes.texto}")`
+  );
+
+  const umaParte = resumoDaImpressao([{ id: "a", status: "impresso" }], 1);
+  afirmar(
+    umaParte.sucesso && !umaParte.texto.includes("partes"),
+    "com uma parte só, o texto não fala em partes"
+  );
+
+  // Erro manda em qualquer combinação: se uma parte falhou, a lista está
+  // incompleta, e dizer "impresso" seria pior que não dizer nada.
+  const comFalha = resumoDaImpressao(
+    [
+      { id: "a", status: "impresso" },
+      { id: "b", status: "erro", erro: "Impressora nao encontrada" },
+    ],
+    2
+  );
+  afirmar(comFalha.pronto && !comFalha.sucesso, "uma parte com erro reprova o conjunto");
+  afirmar(
+    comFalha.texto.includes("Impressora nao encontrada"),
+    `o motivo do agente chega até a tela (obtido: "${comFalha.texto}")`
+  );
+
+  // Erro sem mensagem ainda precisa virar frase apresentável.
+  const semMotivo = resumoDaImpressao([{ id: "a", status: "erro" }], 1);
+  afirmar(
+    semMotivo.pronto && !semMotivo.sucesso && semMotivo.texto.length > 10,
+    "erro sem motivo informado ainda produz uma frase legível"
+  );
+
+  const motivoVazio = resumoDaImpressao([{ id: "a", status: "erro", erro: "   " }], 1);
+  afirmar(
+    !motivoVazio.texto.includes("  "),
+    "motivo só com espaços não vaza para a mensagem"
+  );
+
+  // Pendente é o estado normal logo depois de enviar.
+  afirmar(
+    resumoDaImpressao([{ id: "a", status: "pendente" }], 1).pronto === false,
+    "trabalho pendente mantém o desfecho em aberto"
+  );
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

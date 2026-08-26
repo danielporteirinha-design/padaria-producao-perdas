@@ -63,6 +63,15 @@ SEGUNDOS_ENTRE_CONSULTAS = 15
 # O token do Firebase vale 1 hora; renovamos antes por seguranca.
 SEGUNDOS_ATE_RENOVAR_TOKEN = 45 * 60
 
+# Sinal de vida no log quando nao ha nada para imprimir.
+#
+# POR QUE (ago/2026): o agente so' escrevia ao imprimir ou ao falhar.
+# Fila vazia = silencio total, e o log ficava identico ao de um agente
+# FECHADO. Passamos meia hora sem conseguir responder "ele esta rodando?"
+# olhando justamente o arquivo que existe para responder isso.
+# 20 ciclos de 15s = uma linha a cada 5 minutos.
+CICLOS_ENTRE_SINAIS_DE_VIDA = 20
+
 
 def registrar(mensagem):
     """Escreve na tela e no arquivo de log, com hora local."""
@@ -337,11 +346,20 @@ def main():
 
     sessao = Sessao(config)
     falhas_seguidas = 0
+    ciclos_em_silencio = 0
 
     while True:
         try:
             pendentes = buscar_pendentes(sessao, config)
             falhas_seguidas = 0
+
+            if not pendentes:
+                ciclos_em_silencio += 1
+                if ciclos_em_silencio >= CICLOS_ENTRE_SINAIS_DE_VIDA:
+                    registrar("aguardando — nada na fila")
+                    ciclos_em_silencio = 0
+            else:
+                ciclos_em_silencio = 0
 
             for trabalho in pendentes:
                 rotulo = f"{trabalho['documento']} ({trabalho['parte']}/{trabalho['totalPartes']})"

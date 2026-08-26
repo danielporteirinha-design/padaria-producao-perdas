@@ -19,7 +19,7 @@ import { BannerInstalar } from "./components/BannerInstalar";
 import { AvisoPerdaPendente } from "./components/AvisoPerdaPendente";
 import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
 import { decidirReposicao, ehReposicao, type PedidoFilial } from "./types/pedido";
-import { base64DoDataUrl, type TrabalhoImpressao } from "./types/impressao";
+import { base64DoDataUrl, resumoDaImpressao, type TrabalhoImpressao } from "./types/impressao";
 import { idDaFornada, type FornadaPronta } from "./types/fornada";
 import {
   avisarDesfechoReposicao,
@@ -87,6 +87,16 @@ const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
  * para o operador não achar que o app travou.
  */
 const SEGUNDOS_ATE_ASSUMIR_OFFLINE = 6000;
+
+/**
+ * Quanto esperar o agente do caixa antes de assumir que ele está fechado.
+ *
+ * O agente consulta a fila a cada 15 segundos e leva 1 a 2 para imprimir.
+ * 45 segundos cobrem um ciclo perdido e a impressão com folga — e são
+ * pouco o bastante para o operador ainda estar perto da impressora quando
+ * a mensagem chegar, que é quando ela serve para alguma coisa.
+ */
+const SEGUNDOS_ATE_DESISTIR_DA_IMPRESSAO = 45_000;
 
 /**
  * A partir de ago/2026 o app atende três lojas e os dados vivem no
@@ -443,6 +453,49 @@ export default function App() {
         ? `Enviado para a impressora do caixa — ${canvases.length} partes.`
         : "Enviado para a impressora do caixa."
     );
+
+    acompanharImpressao(trabalhos.map((t) => t.id));
+  }
+
+  /**
+   * Acompanha os trabalhos até o agente do caixa dar o desfecho.
+   *
+   * O caso que motivou isto não é a falha de impressão — é o SILÊNCIO. No
+   * primeiro dia de uso o programa do caixa estava fechado: o app gravou
+   * tudo certo, a nuvem guardou tudo certo, e ninguém do outro lado pegou.
+   * Da tela, isso era indistinguível de ter funcionado. A descoberta veio
+   * de abrir o log do PC — coisa que o padeiro não vai fazer.
+   *
+   * Por isso existe o tempo limite: quando nada responde, a mensagem
+   * aponta para a causa real em vez de deixar o operador esperando um
+   * papel que não vem.
+   */
+  function acompanharImpressao(ids: string[]) {
+    if (!repositorio) return;
+
+    let encerrado = false;
+    const finalizar = () => {
+      if (encerrado) return;
+      encerrado = true;
+      clearTimeout(relogio);
+      desligar();
+    };
+
+    const desligar = repositorio.observarImpressao(ids, (estados) => {
+      const resumo = resumoDaImpressao(estados, ids.length);
+      if (!resumo.pronto) return;
+      setAviso({ tipo: resumo.sucesso ? "sucesso" : "erro", texto: resumo.texto });
+      finalizar();
+    });
+
+    const relogio = setTimeout(() => {
+      setAviso({
+        tipo: "erro",
+        texto:
+          "O caixa não respondeu. Confira se o programa de impressão está aberto no computador do caixa — a lista fica guardada e sai assim que ele abrir.",
+      });
+      finalizar();
+    }, SEGUNDOS_ATE_DESISTIR_DA_IMPRESSAO);
   }
 
   /**

@@ -46,7 +46,7 @@ import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
 import type { PedidoFilial } from "../types/pedido";
-import type { TrabalhoImpressao } from "../types/impressao";
+import type { EstadoTrabalhoImpressao, TrabalhoImpressao } from "../types/impressao";
 import type { FornadaPronta } from "../types/fornada";
 import type { Repositorio } from "./repositorio";
 
@@ -234,6 +234,39 @@ export class RepositorioFirestore implements Repositorio {
   }
 
   // ---------------------------------------------------------- impressão
+
+  /**
+   * Uma escuta por documento, e não uma consulta na coleção: são no
+   * máximo três partes por impressão, e escutar por id dispensa índice e
+   * não traz para o celular os trabalhos de outras impressões — cada
+   * documento carrega a imagem inteira em base64, e puxar os alheios
+   * custaria megabytes numa conexão de padaria.
+   */
+  observarImpressao(
+    ids: string[],
+    aoMudar: (estados: EstadoTrabalhoImpressao[]) => void
+  ): () => void {
+    const conhecidos = new Map<string, EstadoTrabalhoImpressao>();
+
+    const desligar = ids.map((id) =>
+      onSnapshot(
+        doc(db, COL_IMPRESSAO, id),
+        (instantaneo) => {
+          const dados = instantaneo.data() as TrabalhoImpressao | undefined;
+          if (!dados) return;
+          conhecidos.set(id, {
+            id,
+            status: dados.status,
+            erro: (dados as { erro?: string }).erro,
+          });
+          aoMudar([...conhecidos.values()]);
+        },
+        (erro) => console.warn("Escuta de impressão interrompida:", erro)
+      )
+    );
+
+    return () => desligar.forEach((parar) => parar());
+  }
 
   async enviarParaImpressao(trabalhos: TrabalhoImpressao[]): Promise<void> {
     // Sequencial de propósito: são no máximo três imagens, e gravar em

@@ -42,6 +42,55 @@ export interface TrabalhoImpressao {
 }
 
 /** Erro de domínio — sempre com mensagem apresentável ao operador. */
+/**
+ * O que o agente do caixa respondeu sobre um trabalho enviado. Só os
+ * campos que a tela precisa — a imagem em base64 é grande e não tem uso
+ * nenhum depois de enviada.
+ */
+export interface EstadoTrabalhoImpressao {
+  id: string;
+  status: StatusImpressao;
+  /** Preenchido pelo agente quando a impressão falha. */
+  erro?: string;
+}
+
+/**
+ * Traduz o desfecho do conjunto de trabalhos para uma frase de operador.
+ *
+ * O caso `null` é o que mais importa e o menos óbvio: nada respondeu
+ * dentro do tempo. Na prática isso quer dizer que o programa do caixa
+ * está fechado — foi exatamente o que aconteceu no primeiro dia de uso, e
+ * ninguém tinha como saber olhando a tela.
+ */
+export function resumoDaImpressao(
+  estados: EstadoTrabalhoImpressao[],
+  total: number
+): { pronto: boolean; sucesso: boolean; texto: string } {
+  const comErro = estados.filter((e) => e.status === "erro");
+  const impressos = estados.filter((e) => e.status === "impresso");
+
+  if (comErro.length > 0) {
+    const motivo = comErro[0].erro?.trim();
+    return {
+      pronto: true,
+      sucesso: false,
+      texto: motivo
+        ? `A impressora do caixa recusou: ${motivo}`
+        : "A impressora do caixa recusou o trabalho.",
+    };
+  }
+
+  if (impressos.length >= total) {
+    return {
+      pronto: true,
+      sucesso: true,
+      texto: total > 1 ? `Impresso no caixa — ${total} partes.` : "Impresso no caixa.",
+    };
+  }
+
+  return { pronto: false, sucesso: false, texto: "" };
+}
+
 export class ErroImpressao extends Error {}
 
 /**

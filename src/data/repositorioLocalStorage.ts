@@ -14,6 +14,7 @@ import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
 import type { PedidoFilial } from "../types/pedido";
 import type { FornadaPronta } from "../types/fornada";
+import type { EstadoTrabalhoImpressao } from "../types/impressao";
 import produtosSeed from "../../data/produtos.seed.json";
 import type { Repositorio } from "./repositorio";
 
@@ -158,6 +159,18 @@ export class RepositorioLocalStorage implements Repositorio {
   async desmarcarFornada(fornadaId: string): Promise<void> {
     const todas = ler<FornadaPronta[]>("padaria:fornadas", []);
     escrever("padaria:fornadas", todas.filter((f) => f.id !== fornadaId));
+  }
+
+  /**
+   * Sem nuvem não há agente do caixa para responder. Devolve o estado
+   * como pendente e não escuta nada — a tela mostra o aviso de tempo
+   * esgotado, que é a verdade nesse modo.
+   */
+  observarImpressao(
+    _ids: string[],
+    _aoMudar: (estados: EstadoTrabalhoImpressao[]) => void
+  ): () => void {
+    return () => {};
   }
 
   async enviarParaImpressao(): Promise<void> {

@@ -199,6 +199,39 @@ Hobby), e cada chamada ao Gemini já pode levar alguns segundos — retries
 demais arriscam estourar esse limite, o que seria um erro pior (sem
 mensagem nenhuma) do que simplesmente informar que está sobrecarregado.
 
+## O app diz se a lista saiu (ago/2026)
+
+Quem apertava "Imprimir no caixa" não recebia mais nada depois disso. O
+defeito não era a impressão falhar — era o **silêncio**.
+
+No primeiro dia de uso o programa do caixa estava fechado: o app gravou
+certo, a nuvem guardou certo, e não havia ninguém do outro lado para
+pegar. Da tela, isso era indistinguível de ter funcionado. A descoberta
+veio de abrir o `agente.log` no PC — coisa que o padeiro não vai fazer.
+
+Agora o app acompanha os trabalhos que enviou (`observarImpressao`, uma
+escuta por documento) e fecha o assunto de um dos três jeitos:
+
+| Desfecho | O que aparece |
+|---|---|
+| Todas as partes impressas | "Impresso no caixa — N partes." |
+| Alguma parte com erro | "A impressora do caixa recusou: <motivo do agente>" |
+| Nada respondeu em 45s | "O caixa não respondeu. Confira se o programa de impressão está aberto…" |
+
+O terceiro é o que mais importa e o menos óbvio: é o caso do agente
+fechado, e a mensagem aponta para a causa real em vez de deixar o
+operador esperando um papel que não vem. A lista não se perde — fica na
+fila e sai assim que o programa abrir, e a mensagem diz isso.
+
+**45 segundos** porque o agente consulta a fila a cada 15 e leva 1 a 2
+para imprimir: cobre um ciclo perdido com folga, e é pouco o bastante
+para o operador ainda estar perto da impressora quando a mensagem chegar
+— que é quando ela serve para alguma coisa.
+
+Escuta por id, e não consulta na coleção: cada documento carrega a imagem
+inteira em base64, e puxar os trabalhos de outras impressões custaria
+megabytes numa conexão de padaria.
+
 ## Fita de impressão (divisão automática) — set/2026
 
 Erro relatado: "não foi possível gerar a imagem para impressão", sem
@@ -1235,6 +1268,7 @@ producao-perdas/
     config.exemplo.ini               # Modelo de configuração (o config.ini real fica fora do Git)
     instalar.bat / iniciar.bat        # Atalhos de dois cliques para quem não usa terminal
     _encontrar-python.bat              # Acha o Python (py ou python) e avisa quando não existe
+    instalar-inicio-automatico.bat     # Põe o agente na inicialização do Windows — sem isso ele depende de alguém abrir
     listar-impressoras.bat / .py       # Mostra o nome exato da impressora para o config.ini
   firestore.rules                 # REGRAS DE ACESSO — a única coisa que protege os dados
   firebase.json                   # Aponta onde ficam as regras (uso opcional pela CLI)
