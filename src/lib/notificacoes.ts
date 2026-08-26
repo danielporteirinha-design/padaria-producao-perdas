@@ -35,7 +35,7 @@ import { app, db } from "./firebase";
  * Vazia = avisos ainda não configurados. Nesse caso o app não quebra: o
  * botão explica o que falta em vez de dar erro técnico.
  */
-export const CHAVE_VAPID = "";
+export const CHAVE_VAPID = "BHcEUH922avwC9HfttGYgMjBn3mV1hoGsqus0Tf5YVcSStTAe5KUlJL53_khCnZ-Yigt-qIW87k1DVF2ZcDBR3M";
 
 export type EstadoAviso =
   | "nao-suportado" // navegador sem push, ou iPhone com o app fora da tela de início
