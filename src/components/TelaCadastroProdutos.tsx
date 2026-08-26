@@ -25,8 +25,6 @@ const VALOR_INICIAL: NovoProdutoInput = {
   nome: "",
   categoria: CATEGORIAS_PRODUCAO[0].chave,
   unidadeProducao: "un",
-  precoCusto: 0,
-  precoVenda: 0,
   ativoNaProducao: true,
   pesoMedioUnitarioGramas: undefined,
   prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[CATEGORIAS_PRODUCAO[0].chave] ?? null,
@@ -72,10 +70,19 @@ export function TelaCadastroProdutos({
     e.preventDefault();
     if (!form.nome.trim()) return;
     setSalvando(true);
-    await onCriarProduto(form);
-    setSalvando(false);
-    setForm(VALOR_INICIAL);
-    setValidadeTocada(false);
+    try {
+      await onCriarProduto(form);
+      // Só limpa o formulário quando a gravação deu certo — senão o
+      // operador perderia o que digitou junto com o erro.
+      setForm(VALOR_INICIAL);
+      setValidadeTocada(false);
+    } catch {
+      // A mensagem já é exibida pelo aviso global (ver App.tsx). Aqui só
+      // interessa não deixar o botão preso em "Salvando..." — foi
+      // exatamente esse o defeito relatado em produção.
+    } finally {
+      setSalvando(false);
+    }
   }
 
   function iniciarEdicao(p: Produto) {
@@ -97,19 +104,27 @@ export function TelaCadastroProdutos({
   async function salvarEdicao(produtoOriginal: Produto) {
     if (!rascunhoEdicao || !rascunhoEdicao.nome.trim()) return;
     setSalvandoEdicao(true);
-    await onAtualizarProduto({
-      ...produtoOriginal,
-      nome: rascunhoEdicao.nome.trim(),
-      categoria: rascunhoEdicao.categoria,
-      unidadeProducao: rascunhoEdicao.unidadeProducao,
-      pesoMedioUnitarioGramas: rascunhoEdicao.pesoMedioUnitarioGramas.trim()
-        ? Number(rascunhoEdicao.pesoMedioUnitarioGramas)
-        : undefined,
-      prazoValidadeDias: rascunhoEdicao.prazoValidadeDias.trim() ? Number(rascunhoEdicao.prazoValidadeDias) : null,
-    });
-    setSalvandoEdicao(false);
-    setCodigoEmEdicao(null);
-    setRascunhoEdicao(null);
+    try {
+      await onAtualizarProduto({
+        ...produtoOriginal,
+        nome: rascunhoEdicao.nome.trim(),
+        categoria: rascunhoEdicao.categoria,
+        unidadeProducao: rascunhoEdicao.unidadeProducao,
+        pesoMedioUnitarioGramas: rascunhoEdicao.pesoMedioUnitarioGramas.trim()
+          ? Number(rascunhoEdicao.pesoMedioUnitarioGramas)
+          : undefined,
+        prazoValidadeDias: rascunhoEdicao.prazoValidadeDias.trim()
+          ? Number(rascunhoEdicao.prazoValidadeDias)
+          : null,
+      });
+      setCodigoEmEdicao(null);
+      setRascunhoEdicao(null);
+    } catch {
+      // Mantém a linha aberta em edição: o operador não perde o que
+      // digitou e pode tentar de novo. A mensagem vem do aviso global.
+    } finally {
+      setSalvandoEdicao(false);
+    }
   }
 
   const produtosFiltrados = useMemo(() => {
@@ -200,26 +215,6 @@ export function TelaCadastroProdutos({
                 <option value="kg">kg</option>
                 <option value="l">l</option>
               </select>
-            </label>
-            <label>
-              Preço custo
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                value={form.precoCusto}
-                onChange={(e) => setForm({ ...form, precoCusto: Number(e.target.value) })}
-              />
-            </label>
-            <label>
-              Preço venda
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                value={form.precoVenda}
-                onChange={(e) => setForm({ ...form, precoVenda: Number(e.target.value) })}
-              />
             </label>
           </div>
 

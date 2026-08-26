@@ -34,8 +34,6 @@ export interface Produto {
 
   unidadeProducao: UnidadeProducao;
 
-  precoCusto: number;
-  precoVenda: number;
 
   statusVenda: StatusVenda;
 
@@ -91,8 +89,6 @@ export interface NovoProdutoInput {
   nome: string;
   categoria: string;
   unidadeProducao: UnidadeProducao;
-  precoCusto: number;
-  precoVenda: number;
   ativoNaProducao: boolean;
   pesoMedioUnitarioGramas?: number | null;
   prazoValidadeDias?: number | null;

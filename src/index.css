@@ -528,3 +528,44 @@ button.perigo:hover { background: #822525; }
   border-radius: var(--raio);
   font-size: 14px;
 }
+
+/* ---------------------------------------------------------------
+   Faixa de retorno de gravação (ver AvisoGlobal.tsx). Fixa no topo para
+   ser vista mesmo com a tela rolada — quem acabou de tocar em "Salvar"
+   pode estar olhando o rodapé do formulário.
+   --------------------------------------------------------------- */
+
+.aviso-global {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-radius: 0 0 var(--raio) var(--raio);
+  font-size: 15px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.aviso-global.sucesso {
+  background: var(--cor-sucesso-fundo);
+  border: 1px solid var(--cor-sucesso);
+  color: var(--cor-texto);
+}
+.aviso-global.erro {
+  background: #fbeaea;
+  border: 1px solid #9b2c2c;
+  color: #6d1f1f;
+}
+.fechar-aviso {
+  background: none;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  padding: 0 4px;
+  flex-shrink: 0;
+}

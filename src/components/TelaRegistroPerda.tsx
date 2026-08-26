@@ -89,18 +89,31 @@ export function TelaRegistroPerda({
   const podeSalvar =
     preview?.ok === true && (!exigeFornadaDeOrigem || planoDeProducaoId !== "");
 
-  function handleSalvar() {
+  const [salvando, setSalvando] = useState(false);
+
+  async function handleSalvar() {
     if (!podeSalvar || preview?.ok !== true) return;
-    onSalvar({
-      codigoPdv: produto.codigoPdv,
-      planoDeProducaoId,
-      quantidadeQuilos: preview.resultado.quantidadeQuilos,
-      pesoUnitarioGramasInformado: preview.resultado.pesoUnitarioGramasInformado,
-      quantidadeUnidadesEstimada: preview.resultado.quantidadeUnidadesEstimada,
-      motivo,
-      observacao: observacao || undefined,
-      registradoPor,
-    });
+    setSalvando(true);
+    try {
+      // Precisa AGUARDAR: antes era disparo sem espera, então uma
+      // gravação recusada pelo banco virava rejeição não tratada e o
+      // operador achava que a perda tinha sido lançada.
+      await onSalvar({
+        codigoPdv: produto.codigoPdv,
+        planoDeProducaoId,
+        quantidadeQuilos: preview.resultado.quantidadeQuilos,
+        pesoUnitarioGramasInformado: preview.resultado.pesoUnitarioGramasInformado,
+        quantidadeUnidadesEstimada: preview.resultado.quantidadeUnidadesEstimada,
+        motivo,
+        observacao: observacao || undefined,
+        registradoPor,
+      });
+    } catch {
+      // Mantém os valores na tela para o operador tentar de novo sem
+      // repesar o produto. A mensagem vem do aviso global (App.tsx).
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -192,8 +205,13 @@ export function TelaRegistroPerda({
         placeholder="Observação (opcional)"
       />
 
-      <button type="button" className="primario" disabled={!podeSalvar} onClick={handleSalvar}>
-        Registrar perda
+      <button
+        type="button"
+        className="primario"
+        disabled={!podeSalvar || salvando}
+        onClick={handleSalvar}
+      >
+        {salvando ? "Registrando..." : "Registrar perda"}
       </button>
     </div>
   );

@@ -30,8 +30,6 @@ const CATEGORIAS_VALIDAS = new Set(CATEGORIAS_PRODUCAO.map((c) => c.chave));
 export interface LinhaPlanilhaProduto {
   categoria: unknown;
   nome: unknown;
-  precoCusto: unknown;
-  precoVenda: unknown;
   medida: unknown;
   statusVenda: unknown;
   codigoPdv: unknown;
@@ -112,8 +110,6 @@ export function importarProdutos(linhas: LinhaPlanilhaProduto[]): {
       nome,
       categoria,
       unidadeProducao,
-      precoCusto: Number(linha.precoCusto) || 0,
-      precoVenda: Number(linha.precoVenda) || 0,
       statusVenda,
       ativoNaProducao: statusVenda === "Ativo",
       // Campo novo do app — nunca existe na planilha de origem, entra

@@ -4,8 +4,6 @@
     "nome": "PÃO FRANCÊS",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 0.6,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -15,8 +13,6 @@
     "nome": "PÃO AMANTEIGADO",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.25,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -26,8 +22,6 @@
     "nome": "PÃO BAIANO",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 0.75,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -37,8 +31,6 @@
     "nome": "PÃO DE ÁCUÇAR",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.25,
-    "precoVenda": 0.75,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -48,8 +40,6 @@
     "nome": "PÃO CASEIRO",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 0.75,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -59,8 +49,6 @@
     "nome": "PÃO DE BATATA",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 0.75,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -70,8 +58,6 @@
     "nome": "PÃO DE LEITE",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 0.75,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -81,8 +67,6 @@
     "nome": "PÃO LÍNGUA DE SOGRA",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.25,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -92,8 +76,6 @@
     "nome": "PÃO DE CERVEJA",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -103,8 +85,6 @@
     "nome": "PÃO MINEIRO",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.25,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -114,8 +94,6 @@
     "nome": "PÃO DE CREME",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.25,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -125,8 +103,6 @@
     "nome": "FATIA DE CHOCOLATE",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 8.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -136,8 +112,6 @@
     "nome": "PÃO DE MILHO",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 0.75,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -147,8 +121,6 @@
     "nome": "PÃO SOVADO",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 8.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -158,8 +130,6 @@
     "nome": "ROSCA FLOR",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 8.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -169,8 +139,6 @@
     "nome": "ROSCA TATU",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 6.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -180,8 +148,6 @@
     "nome": "ROSCA TRANÇADA",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 6.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -191,8 +157,6 @@
     "nome": "ROSQUINHA CASEIRA",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -202,8 +166,6 @@
     "nome": "TORRADINHAS - 100 GRAMAS",
     "categoria": "PÃES E ROSCAS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 3.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -213,8 +175,6 @@
     "nome": "Pão de Queijo Recheado Carne Seca",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 1.5,
-    "precoVenda": 2.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -224,8 +184,6 @@
     "nome": "Pão de Queijo Recheado Costelinha",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 1.5,
-    "precoVenda": 2.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -235,8 +193,6 @@
     "nome": "Pão de Queijo Recheado Frango",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 1.5,
-    "precoVenda": 2.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -246,8 +202,6 @@
     "nome": "Pão de queijo Recheado Lombinho",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 1.5,
-    "precoVenda": 2.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -257,8 +211,6 @@
     "nome": "Pão de Queijo Recheado Requeijao",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 1.5,
-    "precoVenda": 2.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -268,8 +220,6 @@
     "nome": "Pão de Queijo Tradicional",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.25,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -279,8 +229,6 @@
     "nome": "Pão de Queijo Mini",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -290,8 +238,6 @@
     "nome": "Biscoito de Mandioca",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.25,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -301,8 +247,6 @@
     "nome": "Biscoito de milho",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 1.0,
-    "precoVenda": 1.25,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -312,8 +256,6 @@
     "nome": "Biscoito Espremido",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 6.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -323,8 +265,6 @@
     "nome": "Biscoito Frito de Sal",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -334,8 +274,6 @@
     "nome": "Biscoito Toalha",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -345,8 +283,6 @@
     "nome": "Biscoito Frito Doce",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -356,8 +292,6 @@
     "nome": "Biscoito Provolone",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.5,
     "statusVenda": "Pausado",
     "ativoNaProducao": false,
     "pesoMedioUnitarioGramas": null
@@ -367,8 +301,6 @@
     "nome": "Biscoito Quebra Quebra",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -378,8 +310,6 @@
     "nome": "Palito Vegetariano",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -389,8 +319,6 @@
     "nome": "Pão de Queijo na Farinha",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.25,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -400,8 +328,6 @@
     "nome": "Pão de Queijo Recheado...",
     "categoria": "BISCOITOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 4.0,
     "statusVenda": "Pausado",
     "ativoNaProducao": false,
     "pesoMedioUnitarioGramas": null
@@ -411,8 +337,6 @@
     "nome": "BOLO PEDAÇO",
     "categoria": "BOLOS",
     "unidadeProducao": "un",
-    "precoCusto": 1.0,
-    "precoVenda": 3.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -422,8 +346,6 @@
     "nome": "BOLO DE CENOURA COM COBERTURA",
     "categoria": "BOLOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 14.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -433,8 +355,6 @@
     "nome": "BOLO DE CHOCOLATE - CHOCOBOLO",
     "categoria": "BOLOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 14.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -444,8 +364,6 @@
     "nome": "BOLO DE FUBÁ",
     "categoria": "BOLOS",
     "unidadeProducao": "un",
-    "precoCusto": 1.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -455,8 +373,6 @@
     "nome": "BOLO DE LARANJA",
     "categoria": "BOLOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -466,8 +382,6 @@
     "nome": "BOLO DE LEITE NINHO",
     "categoria": "BOLOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 14.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -477,8 +391,6 @@
     "nome": "BOLO DE MANDIOCA",
     "categoria": "BOLOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 15.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -488,8 +400,6 @@
     "nome": "BOLO DE MANDIOCA - Fatia",
     "categoria": "BOLOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 2.5,
     "statusVenda": "Pausado",
     "ativoNaProducao": false,
     "pesoMedioUnitarioGramas": null
@@ -499,8 +409,6 @@
     "nome": "BOLO DE QUEIJO",
     "categoria": "BOLOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -510,8 +418,6 @@
     "nome": "BOLO FORMIGUEIRO",
     "categoria": "BOLOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 14.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -521,8 +427,6 @@
     "nome": "COXINHA DE CARNE MINI",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.25,
-    "precoVenda": 1.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -532,8 +436,6 @@
     "nome": "espetinho de frango",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 4.0,
-    "precoVenda": 7.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -543,8 +445,6 @@
     "nome": "TORTA DE SALSICHA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 10.0,
-    "precoVenda": 25.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -554,8 +454,6 @@
     "nome": "BAURUZÃO",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 6.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -565,8 +463,6 @@
     "nome": "BAURUZINHO",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -576,8 +472,6 @@
     "nome": "COXINHA DE FRANGO",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -587,8 +481,6 @@
     "nome": "CROQUETE",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -598,8 +490,6 @@
     "nome": "EMPADÃO",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 6.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -609,8 +499,6 @@
     "nome": "EMPADINHA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -620,8 +508,6 @@
     "nome": "ENROLADINHO DE SALSICHA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -631,8 +517,6 @@
     "nome": "ESFIHÃO DE FRANGO",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 6.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -642,8 +526,6 @@
     "nome": "ESFIRRA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -653,8 +535,6 @@
     "nome": "FOCACCIA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 4.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -664,8 +544,6 @@
     "nome": "FOLHADO DE BACON",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 3.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -675,8 +553,6 @@
     "nome": "FOLHADO DE FRANGO",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 6.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -686,8 +562,6 @@
     "nome": "HAMBÚRGÃO",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 6.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -697,8 +571,6 @@
     "nome": "MIN PIZZA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -708,8 +580,6 @@
     "nome": "MIN SANDUÍCHE",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -719,8 +589,6 @@
     "nome": "MINI HOT-DOG",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 3.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -730,8 +598,6 @@
     "nome": "NAPOLITANO",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -741,8 +607,6 @@
     "nome": "OVO DE COTIA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 1.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -752,8 +616,6 @@
     "nome": "PÃO PIZZA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 6.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -763,8 +625,6 @@
     "nome": "PÃOZINHO DE ALHO",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -774,8 +634,6 @@
     "nome": "PASTEL PIPOCADO",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 4.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -785,8 +643,6 @@
     "nome": "PIZZA BROTO À MODA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -796,8 +652,6 @@
     "nome": "PIZZA BROTO CALABRESA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -807,8 +661,6 @@
     "nome": "QUEIJADINHA SALGADA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -818,8 +670,6 @@
     "nome": "ROSCA GRATINADA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 10.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -829,8 +679,6 @@
     "nome": "ROSQUINHA APIMENTADA",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -840,8 +688,6 @@
     "nome": "ROSQUINHA DE ORÉGANO",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -851,8 +697,6 @@
     "nome": "STREET DOG",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 12.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -862,8 +706,6 @@
     "nome": "TORTA DE FRANGO",
     "categoria": "SALGADOS",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 4.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -873,8 +715,6 @@
     "nome": "SONHO",
     "categoria": "CONFEITARIA",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 6.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -884,8 +724,6 @@
     "nome": "CENOURITO",
     "categoria": "CONFEITARIA",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 7.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -895,8 +733,6 @@
     "nome": "BOLO PRESTÍGIO",
     "categoria": "CONFEITARIA",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 7.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -906,8 +742,6 @@
     "nome": "AMOR EM PEDAÇOS",
     "categoria": "CONFEITARIA",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 7.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -917,8 +751,6 @@
     "nome": "BOLO DA ÍNDIA",
     "categoria": "CONFEITARIA",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 7.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -928,8 +760,6 @@
     "nome": "BOLO NO POTE",
     "categoria": "CONFEITARIA",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 10.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -939,8 +769,6 @@
     "nome": "CAÇAROLA ITALIANA - FATIA",
     "categoria": "CONFEITARIA",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 4.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -950,8 +778,6 @@
     "nome": "MARTA ROCHA",
     "categoria": "CONFEITARIA",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 3.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -961,8 +787,6 @@
     "nome": "MINI PUDIM DE LEITE CO...",
     "categoria": "CONFEITARIA",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 2.5,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null
@@ -972,8 +796,6 @@
     "nome": "PUDIM DE LEITE CONDENSADO",
     "categoria": "CONFEITARIA",
     "unidadeProducao": "un",
-    "precoCusto": 0.0,
-    "precoVenda": 19.0,
     "statusVenda": "Ativo",
     "ativoNaProducao": true,
     "pesoMedioUnitarioGramas": null

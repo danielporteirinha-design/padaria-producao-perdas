@@ -47,8 +47,6 @@ export class RepositorioLocalStorage implements Repositorio {
       nome: input.nome,
       categoria: input.categoria || "SEM_CATEGORIA",
       unidadeProducao: input.unidadeProducao,
-      precoCusto: input.precoCusto,
-      precoVenda: input.precoVenda,
       statusVenda: "Ativo",
       ativoNaProducao: input.ativoNaProducao,
       pesoMedioUnitarioGramas: input.pesoMedioUnitarioGramas,

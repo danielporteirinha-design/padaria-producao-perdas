@@ -15,6 +15,7 @@ import {
   identificarPicosDePerda,
 } from "../src/lib/metricas";
 import { calcularCandidatosPerda } from "../src/lib/janelaValidade";
+import { ehFalhaTemporariaDeRede, mensagemDeFalhaAoSalvar } from "../src/lib/errosFirestore";
 import {
   itensPlanejados,
   naoFoiProduzido,
@@ -52,8 +53,6 @@ const paoFrances: Produto = {
   nome: "PÃO FRANCÊS",
   categoria: "PÃES E ROSCAS",
   unidadeProducao: "un",
-  precoCusto: 0.25,
-  precoVenda: 0.6,
   statusVenda: "Ativo",
   ativoNaProducao: true,
   pesoMedioUnitarioGramas: 50,
@@ -239,8 +238,6 @@ const perdas: RegistroPerda[] = [
     nome: "TORTA DE MORANGO",
     categoria: "CONFEITARIA",
     unidadeProducao: "un",
-    precoCusto: 5,
-    precoVenda: 12,
     statusVenda: "Ativo",
     ativoNaProducao: true,
     prazoValidadeDias: 3,
@@ -311,8 +308,6 @@ const perdas: RegistroPerda[] = [
     nome: "TORTA DE LIMÃO",
     categoria: "CONFEITARIA",
     unidadeProducao: "un",
-    precoCusto: 5,
-    precoVenda: 12,
     statusVenda: "Ativo",
     ativoNaProducao: true,
   };
@@ -343,8 +338,6 @@ const perdas: RegistroPerda[] = [
     nome: "PÃO NOVO",
     categoria: "PÃES E ROSCAS",
     unidadeProducao: "un",
-    precoCusto: 0.2,
-    precoVenda: 0.5,
     statusVenda: "Ativo",
     ativoNaProducao: true,
   };
@@ -364,8 +357,6 @@ const perdas: RegistroPerda[] = [
     nome: "BRIGADEIRO GOURMET",
     categoria: "CONFEITARIA",
     unidadeProducao: "un",
-    precoCusto: 1,
-    precoVenda: 3,
     statusVenda: "Ativo",
     ativoNaProducao: true,
   };
@@ -427,8 +418,6 @@ const perdas: RegistroPerda[] = [
     nome: "PALHA ITALIANA",
     categoria: "CONFEITARIA",
     unidadeProducao: "un",
-    precoCusto: 1,
-    precoVenda: 3,
     statusVenda: "Ativo",
     ativoNaProducao: true,
   };
@@ -488,8 +477,6 @@ const perdas: RegistroPerda[] = [
     nome: `PRODUTO ${i}`,
     categoria: "PÃES E ROSCAS",
     unidadeProducao: "un",
-    precoCusto: 1,
-    precoVenda: 2,
     statusVenda: "Ativo",
     ativoNaProducao: true,
   }));
@@ -518,8 +505,6 @@ const perdas: RegistroPerda[] = [
     nome: `PRODUTO GRANDE ${i}`,
     categoria: "CONFEITARIA",
     unidadeProducao: "un",
-    precoCusto: 1,
-    precoVenda: 2,
     statusVenda: "Ativo",
     ativoNaProducao: true,
   }));
@@ -565,8 +550,6 @@ const perdas: RegistroPerda[] = [
     nome: "PRODUTO ÚNICO",
     categoria: "BOLOS",
     unidadeProducao: "un",
-    precoCusto: 1,
-    precoVenda: 2,
     statusVenda: "Ativo",
     ativoNaProducao: true,
   };
@@ -604,8 +587,6 @@ const perdas: RegistroPerda[] = [
     nome: "PAO TESTE ASSINATURA",
     categoria: "PÃES E ROSCAS",
     unidadeProducao: "un",
-    precoCusto: 1,
-    precoVenda: 2,
     statusVenda: "Ativo",
     ativoNaProducao: true,
   };
@@ -748,6 +729,61 @@ const perdas: RegistroPerda[] = [
     !candidatos.some((c) => c.produto.codigoPdv === 999),
     "produto que NÃO saiu do forno não pode receber perda (não existe fornada dele)"
   );
+}
+
+// ---------------------------------------------------------------
+// Caso 20: tradução de falhas de gravação (ago/2026). Nasceu de um
+// defeito real em produção: logado como filial, editar um produto ficava
+// preso em "Salvando..." para sempre, sem mensagem nenhuma. Eram duas
+// falhas somadas — a tela não tinha `finally`, e nada traduzia o erro do
+// Firestore para uma frase que o operador entendesse.
+// ---------------------------------------------------------------
+{
+  const permissao = mensagemDeFalhaAoSalvar({ code: "firestore/permission-denied" });
+  afirmar(
+    /permiss/i.test(permissao) && /matriz/i.test(permissao),
+    "permissão negada explica que o catálogo é mantido pela matriz"
+  );
+  afirmar(
+    !permissao.includes("permission-denied") && !permissao.includes("firestore/"),
+    "mensagem não vaza o código técnico para a tela"
+  );
+
+  const semRede = mensagemDeFalhaAoSalvar({ code: "unavailable" });
+  afirmar(
+    /guardado no aparelho|internet voltar/i.test(semRede),
+    "falta de rede avisa que o dado está guardado e vai subir sozinho"
+  );
+  afirmar(
+    ehFalhaTemporariaDeRede({ code: "unavailable" }),
+    "falta de rede é classificada como temporária (aviso verde, não vermelho)"
+  );
+  afirmar(
+    ehFalhaTemporariaDeRede({ code: "deadline-exceeded" }),
+    "tempo esgotado também conta como temporário"
+  );
+  afirmar(
+    !ehFalhaTemporariaDeRede({ code: "firestore/permission-denied" }),
+    "permissão negada NÃO é temporária — refazer não adianta"
+  );
+
+  afirmar(
+    /sess.o expirou/i.test(mensagemDeFalhaAoSalvar({ code: "unauthenticated" })),
+    "sessão expirada manda entrar de novo"
+  );
+
+  // Código desconhecido não pode virar tela em branco nem texto técnico.
+  const desconhecido = mensagemDeFalhaAoSalvar({ code: "algo-que-nao-mapeamos" });
+  afirmar(desconhecido.length > 20, "erro desconhecido ainda produz uma frase útil");
+  afirmar(
+    !desconhecido.includes("algo-que-nao-mapeamos"),
+    "erro desconhecido não vaza o código cru"
+  );
+  afirmar(
+    mensagemDeFalhaAoSalvar(new Error("erro sem code")).length > 20,
+    "erro sem código nenhum também é tratado"
+  );
+  afirmar(mensagemDeFalhaAoSalvar(undefined).length > 20, "erro nulo não quebra a tradução");
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

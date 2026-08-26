@@ -29,8 +29,6 @@ except ImportError:
 
 COL_CATEGORIA = 2
 COL_NOME = 3
-COL_PRECO_CUSTO = 4
-COL_PRECO_VENDA = 5
 COL_MEDIDA = 6
 COL_STATUS_VENDA = 11
 COL_COD_PDV = 12
@@ -104,8 +102,6 @@ def importar(caminho_entrada: str, caminho_saida: str) -> RelatorioImportacao:
                 "nome": str(nome).strip(),
                 "categoria": categoria,
                 "unidadeProducao": unidade,
-                "precoCusto": float(ws.cell(row=r, column=COL_PRECO_CUSTO).value or 0),
-                "precoVenda": float(ws.cell(row=r, column=COL_PRECO_VENDA).value or 0),
                 "statusVenda": ws.cell(row=r, column=COL_STATUS_VENDA).value or "Ativo",
                 # Campos abaixo NAO existem na planilha de origem -- entram com
                 # valor padrao seguro e devem ser revisados no Cadastro de Produtos.

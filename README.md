@@ -481,6 +481,63 @@ Na primeira vez que o app rodar contra o Firestore real, conferir nesta ordem:
 5. **Modo avião no celular** — o app deve continuar abrindo e aceitando
    lançamento; ao voltar a conexão, o dado aparece nas outras lojas.
 
+### Retorno de gravação e o defeito que o motivou (ago/2026)
+
+Primeiro dia contra o Firestore real, relatado pela padaria: logado como
+filial, editar um produto deixava o botão preso em **"Salvando..." para
+sempre**, sem mensagem nenhuma. E, como matriz, cadastrar um produto
+funcionava mas não dizia que tinha funcionado.
+
+Eram três problemas somados, todos nascidos da virada de `localStorage`
+para um banco em rede — com localStorage nenhuma escrita falhava nem
+demorava:
+
+1. **Sem `try/finally` nas telas.** A promessa era rejeitada pela regra de
+   segurança e o `setSalvando(false)` nunca rodava.
+2. **Sem tradução do erro.** `permission-denied` não diz nada a um
+   padeiro. `src/lib/errosFirestore.ts` traduz cada caso.
+3. **Sem limite de espera.** Este é o mais sutil: com persistência
+   offline, uma escrita feita sem rede fica **enfileirada e a promessa
+   nunca resolve** até reconectar. Só `try/finally` não resolveria — o
+   botão continuaria travado, agora com o dado já salvo localmente.
+
+A correção é central, em `App.tsx`: o envelope `comRetorno()` embrulha
+TODA gravação do app e alimenta `AvisoGlobal.tsx`. Ser um lugar só é
+proposital — cada tela ter o próprio tratamento foi justamente o que
+permitiu uma delas nascer sem.
+
+| Situação | O que o operador vê |
+|---|---|
+| Gravou | Faixa verde com o que foi salvo, some em 4s |
+| Sem permissão | Faixa vermelha explicando que o catálogo é da matriz; fica até fechar |
+| Sem rede (>6s) | Faixa verde: "Salvo neste aparelho. Vai para a nuvem assim que a internet voltar" |
+| Sessão expirada | Faixa vermelha mandando entrar de novo |
+
+Falta de rede aparece em VERDE de propósito: o dado está salvo no
+aparelho e sobe sozinho. Um alerta vermelho faria o operador refazer um
+trabalho que já está feito.
+
+Detalhe de implementação que não deve ser "simplificado" depois: o
+`setProdutos`/`setPerdas` de criação está amarrado ao `.then()` da
+promessa, e não ao retorno de `comRetorno`. É isso que permite o limite
+de espera existir sem perder o item recém-criado — offline, ele entra na
+lista quando a conexão voltar.
+
+### Nome do operador é por loja
+
+`padaria:operador:<lojaId>`. Antes era uma chave só, e entrar como filial
+num aparelho já usado pela matriz herdava o nome anterior sem perguntar
+nada — os lançamentos da filial saíam assinados por quem usou o celular
+antes.
+
+### Preço de custo e preço de venda: removidos (ago/2026)
+
+Decisão do dono do negócio: não fazem sentido nesta ferramenta. Não eram
+usados em nenhum cálculo — só ocupavam espaço no formulário e em todo
+documento gravado. Removidos do tipo `Produto`, do formulário, dos dois
+repositórios, da importação de planilha e de `data/produtos.seed.json`.
+Precificação é assunto do Sistema de Gestão, não deste app.
+
 ## Estrutura
 
 ```
@@ -496,6 +553,7 @@ producao-perdas/
       producao.ts                 # Sessão de Produção (por categoria), Plano Diário — quantidade em unidades
       perda.ts                     # Registro de Perda — peso em kg + peso unitário informado + unidades estimadas
     lib/
+      errosFirestore.ts              # Traduz falha de gravação para linguagem de padaria
       lojas.ts                      # As 3 lojas (matriz + 2 filiais) e o mapeamento conta -> loja
       firebase.ts                    # Inicialização do Firestore (com cache offline) e do Auth
       categorias.ts                 # As 5 categorias fixas de produção + "Encomendas e Especiais" + validade sugerida por categoria
@@ -510,6 +568,7 @@ producao-perdas/
       insightsCatalogo.ts                  # Cliente dos insights de catálogo por IA — monta resumo, chama /api
       importarProdutos.ts                  # Mapeamento planilha -> Produto (uso no navegador), já filtra fora de escopo
     components/
+      AvisoGlobal.tsx          # Faixa de retorno de gravação (sucesso/erro), acionada só pelo App
       TelaLogin.tsx            # Entrada por LOJA (não por funcionário) — escolhe a loja e digita a senha
       ImportarDadosLocais.tsx   # Migração única de localStorage para a nuvem
       BannerInstalar.tsx       # Convite para instalar o app (botão no Chrome/Android, instruções no iPhone)
@@ -539,7 +598,7 @@ producao-perdas/
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (59 asserções)
+npm run verificar   # roda scripts/verificar_logica.ts (70 asserções)
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```

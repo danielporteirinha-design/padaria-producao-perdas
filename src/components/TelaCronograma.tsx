@@ -199,10 +199,18 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
       criadoEm: planoExistente?.criadoEm ?? new Date().toISOString(),
       confirmadoEm: new Date().toISOString(),
     };
-    await onSalvarPlano(plano);
-    setSalvando(false);
-    setPlanoConfirmado(plano);
-    setFase("exportar");
+    try {
+      await onSalvarPlano(plano);
+      setPlanoConfirmado(plano);
+      setFase("exportar");
+    } catch {
+      // Fica na tela de resumo com os itens intactos — a mensagem de
+      // falha vem do aviso global (ver App.tsx). Avançar para a tela de
+      // impressão sem ter salvo seria pior: o operador imprimiria uma
+      // lista que o banco não tem.
+    } finally {
+      setSalvando(false);
+    }
   }
 
   // ------------------------------------------------------------------

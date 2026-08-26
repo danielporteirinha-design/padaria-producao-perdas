@@ -8,6 +8,8 @@ import { auth } from "./lib/firebase";
 import { lojaPorEmail } from "./lib/lojas";
 import { TelaLogin } from "./components/TelaLogin";
 import { ImportarDadosLocais } from "./components/ImportarDadosLocais";
+import { AvisoGlobal, type Aviso } from "./components/AvisoGlobal";
+import { ehFalhaTemporariaDeRede, mensagemDeFalhaAoSalvar } from "./lib/errosFirestore";
 import { dataDeHojeIso, diaDaSemanaDeData } from "./lib/data";
 import { TelaCronograma } from "./components/TelaCronograma";
 import { TelaCadastroProdutos } from "./components/TelaCadastroProdutos";
@@ -17,6 +19,14 @@ import { BannerInstalar } from "./components/BannerInstalar";
 import { AvisoPerdaPendente } from "./components/AvisoPerdaPendente";
 
 type Aba = "cronograma" | "cadastro" | "perdas" | "analises";
+
+/**
+ * Quanto esperar a confirmação do servidor antes de assumir que a
+ * gravação está apenas enfileirada offline (ver comRetorno). Generoso o
+ * bastante para uma conexão ruim confirmar de verdade, curto o bastante
+ * para o operador não achar que o app travou.
+ */
+const SEGUNDOS_ATE_ASSUMIR_OFFLINE = 6000;
 
 /**
  * A partir de ago/2026 o app atende três lojas e os dados vivem no
@@ -56,7 +66,11 @@ export default function App() {
     });
   }, []);
 
-  const [operador, setOperador] = useState(() => localStorage.getItem("padaria:operador") ?? "");
+  // O nome fica gravado POR LOJA. Sem isso, entrar como filial num
+  // aparelho que já tinha sido usado pela matriz herdava o nome antigo —
+  // o app não perguntava nada e os lançamentos da filial saíam assinados
+  // por quem usou o celular antes (defeito relatado em produção).
+  const [operador, setOperador] = useState("");
   const [aba, setAba] = useState<Aba>("cronograma");
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [planos, setPlanos] = useState<PlanoDeProducaoDiario[]>([]);
@@ -64,6 +78,76 @@ export default function App() {
   const [carregando, setCarregando] = useState(true);
 
   const [erroCarregamento, setErroCarregamento] = useState("");
+  const [aviso, setAviso] = useState<Aviso | null>(null);
+
+  /**
+   * Envelope de TODA gravação do app. Existe para que nenhuma tela
+   * precise lembrar de tratar falha de rede ou de permissão: o retorno
+   * visual é o mesmo em todo lugar, e é impossível uma tela nova nascer
+   * sem ele.
+   *
+   * O LIMITE DE ESPERA não é detalhe — é o que torna offline utilizável.
+   * Com persistência local, uma escrita feita sem rede é enfileirada e a
+   * promessa do Firestore fica PENDENTE indefinidamente, até reconectar.
+   * Sem o limite, o botão ficaria em "Salvando..." o resto do expediente
+   * mesmo com o dado já salvo no aparelho — que é exatamente a
+   * experiência que se quer evitar numa cozinha com wifi ruim.
+   *
+   * Passado o limite, tratamos como sucesso local: o dado ESTÁ gravado
+   * (o cache do Firestore já o aplicou) e vai subir sozinho. A promessa
+   * original continua viva em segundo plano só para registrar no console
+   * se acabar sendo recusada.
+   *
+   * Relança o erro de propósito. A tela que chamou continua responsável
+   * por soltar o próprio "Salvando..." num `finally` — sem o relance,
+   * um botão travaria em silêncio, que foi o defeito que motivou isto.
+   */
+  async function comRetorno<T>(
+    acao: () => Promise<T>,
+    mensagemSucesso: string
+  ): Promise<T | undefined> {
+    const promessa = acao();
+    let expirou = false;
+
+    const limite = new Promise<undefined>((resolve) =>
+      setTimeout(() => {
+        expirou = true;
+        resolve(undefined);
+      }, SEGUNDOS_ATE_ASSUMIR_OFFLINE)
+    );
+
+    try {
+      const resultado = await Promise.race([promessa, limite]);
+      if (expirou) {
+        promessa.catch((erro) =>
+          console.warn("Gravação enfileirada acabou recusada pelo servidor:", erro)
+        );
+        setAviso({
+          tipo: "sucesso",
+          texto: "Salvo neste aparelho. Vai para a nuvem assim que a internet voltar.",
+        });
+        return undefined;
+      }
+      setAviso({ tipo: "sucesso", texto: mensagemSucesso });
+      return resultado;
+    } catch (erro) {
+      console.error("Falha ao gravar:", erro);
+      setAviso({
+        tipo: ehFalhaTemporariaDeRede(erro) ? "sucesso" : "erro",
+        texto: mensagemDeFalhaAoSalvar(erro),
+      });
+      throw erro;
+    }
+  }
+
+  // Carrega o nome gravado para ESTA loja sempre que a loja muda.
+  useEffect(() => {
+    if (!loja) {
+      setOperador("");
+      return;
+    }
+    setOperador(localStorage.getItem(chaveOperador(loja.id)) ?? "");
+  }, [loja]);
 
   useEffect(() => {
     if (!repositorio || !migracaoResolvida) return;
@@ -93,13 +177,17 @@ export default function App() {
     };
   }, [repositorio, migracaoResolvida]);
 
+  function chaveOperador(lojaId: string): string {
+    return `padaria:operador:${lojaId}`;
+  }
+
   function handleDefinirOperador(nome: string) {
     setOperador(nome);
-    localStorage.setItem("padaria:operador", nome);
+    if (loja) localStorage.setItem(chaveOperador(loja.id), nome);
   }
 
   async function handleSalvarPlano(plano: PlanoDeProducaoDiario) {
-    await repositorio!.salvarPlano(plano);
+    await comRetorno(() => repositorio!.salvarPlano(plano), "Cronograma salvo.");
     setPlanos((atual) => [...atual.filter((p) => p.id !== plano.id), plano]);
   }
 
@@ -120,22 +208,34 @@ export default function App() {
         codigosNaoProduzidos,
       },
     };
-    await repositorio!.salvarPlano(atualizado);
+    await comRetorno(() => repositorio!.salvarPlano(atualizado), "Produção do dia confirmada.");
     setPlanos((atual) => atual.map((p) => (p.id === planoId ? atualizado : p)));
   }
 
   async function handleCriarProduto(input: NovoProdutoInput) {
-    const novo = await repositorio!.salvarNovoProduto(input);
-    setProdutos((atual) => [...atual, novo]);
+    // A lista é atualizada quando a gravação confirmar — imediatamente se
+    // houver rede, ou na reconexão se o app estiver offline. Amarrar o
+    // setProdutos ao `then` em vez do retorno de comRetorno é o que
+    // permite o limite de espera existir sem perder o produto criado.
+    const promessa = repositorio!.salvarNovoProduto(input);
+    promessa
+      .then((novo) => setProdutos((atual) => [...atual, novo]))
+      .catch(() => {
+        /* falha já reportada por comRetorno */
+      });
+    await comRetorno(() => promessa, `"${input.nome}" cadastrado no catálogo.`);
   }
 
   async function handleAtualizarProduto(produto: Produto) {
-    await repositorio!.atualizarProduto(produto);
+    await comRetorno(() => repositorio!.atualizarProduto(produto), `"${produto.nome}" atualizado.`);
     setProdutos((atual) => atual.map((p) => (p.codigoPdv === produto.codigoPdv ? produto : p)));
   }
 
   async function handleExcluirProdutos(codigosPdv: number[]) {
-    await repositorio!.excluirProdutos(codigosPdv);
+    await comRetorno(
+      () => repositorio!.excluirProdutos(codigosPdv),
+      `${codigosPdv.length} ${codigosPdv.length === 1 ? "produto excluído" : "produtos excluídos"} do catálogo.`
+    );
     const remover = new Set(codigosPdv);
     setProdutos((atual) => atual.filter((p) => !remover.has(p.codigoPdv)));
   }
@@ -160,13 +260,18 @@ export default function App() {
       observacao: payload.observacao,
       registradoPor: payload.registradoPor,
     };
-    const registro = await repositorio!.registrarPerda({
+    const promessaPerda = repositorio!.registrarPerda({
       ...input,
       quantidadeUnidadesEstimada: payload.quantidadeUnidadesEstimada,
       diaDaSemana: diaDaSemanaDeData(hoje),
       data: hoje,
     });
-    setPerdas((atual) => [...atual, registro]);
+    promessaPerda
+      .then((registro) => setPerdas((atual) => [...atual, registro]))
+      .catch(() => {
+        /* falha já reportada por comRetorno */
+      });
+    await comRetorno(() => promessaPerda, `Perda registrada: ${payload.quantidadeQuilos} kg.`);
 
     // Decisão operacional (ago/2026): o peso unitário informado no lançamento
     // de perda retroalimenta o cadastro do produto automaticamente — a
@@ -174,7 +279,19 @@ export default function App() {
     // vez mais precisa, sem passo manual extra em Produtos.
     const produto = produtos.find((p) => p.codigoPdv === payload.codigoPdv);
     if (produto && produto.pesoMedioUnitarioGramas !== payload.pesoUnitarioGramasInformado) {
-      await handleAtualizarProduto({ ...produto, pesoMedioUnitarioGramas: payload.pesoUnitarioGramasInformado });
+      const atualizado = { ...produto, pesoMedioUnitarioGramas: payload.pesoUnitarioGramasInformado };
+      try {
+        // Silencioso de propósito: é efeito colateral, não o que o
+        // operador pediu. Não passa por comRetorno para não sobrescrever
+        // o aviso "Perda registrada" com um segundo aviso sobre cadastro.
+        await repositorio!.atualizarProduto(atualizado);
+        setProdutos((atual) => atual.map((p) => (p.codigoPdv === atualizado.codigoPdv ? atualizado : p)));
+      } catch (erro) {
+        // A perda já foi gravada e é o que importa. A filial, por regra,
+        // nem tem permissão de escrever no catálogo — falhar aqui é o
+        // comportamento esperado nela, e não pode virar erro na tela.
+        console.warn("Peso médio do produto não foi atualizado (a perda foi registrada normalmente):", erro);
+      }
     }
   }
 
@@ -262,6 +379,8 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      <AvisoGlobal aviso={aviso} onFechar={() => setAviso(null)} />
 
       <BannerInstalar />
 

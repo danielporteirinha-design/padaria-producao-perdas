@@ -57,6 +57,9 @@ export function ConfirmarProducao({ plano, produtos, operador, onConfirmar }: Co
     try {
       await onConfirmar([...naoProduzidos]);
       setEditando(false);
+    } catch {
+      // Continua em modo de edição com as marcações preservadas — a
+      // mensagem de falha vem do aviso global (ver App.tsx).
     } finally {
       setSalvando(false);
     }
