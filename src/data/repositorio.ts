@@ -45,6 +45,17 @@ export interface Repositorio {
   salvarPedido(pedido: PedidoFilial): Promise<PedidoFilial>;
 
   /**
+   * Avisa sempre que os pedidos mudarem no servidor, sem precisar
+   * recarregar a página. Devolve a função que desliga a escuta.
+   *
+   * Existe por um defeito de uso real (ago/2026): a filial pedia
+   * reposição e a matriz só via ao dar F5 — num pedido que existe
+   * justamente porque é urgente. Carregar uma vez na abertura tratava
+   * dados que mudam durante o expediente como se fossem estáticos.
+   */
+  observarPedidos(lojaId: string | undefined, aoMudar: (pedidos: PedidoFilial[]) => void): () => void;
+
+  /**
    * Enfileira imagens para a impressora térmica do caixa. Um documento
    * por imagem — ver src/types/impressao.ts.
    */
@@ -52,6 +63,8 @@ export interface Repositorio {
 
   /** Fornadas prontas do dia — marcadas pela matriz ao longo do expediente. */
   listarFornadas(data: string): Promise<FornadaPronta[]>;
+  /** Mesma ideia de observarPedidos, para as fornadas do dia. */
+  observarFornadas(data: string, aoMudar: (fornadas: FornadaPronta[]) => void): () => void;
   marcarFornada(fornada: FornadaPronta): Promise<void>;
   /** Desfaz uma marcação feita por engano. */
   desmarcarFornada(fornadaId: string): Promise<void>;

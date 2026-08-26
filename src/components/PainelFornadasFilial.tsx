@@ -17,16 +17,17 @@
  * é o que ainda está quente e o que a filial tem chance de receber hoje.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
-import { ehReposicao, idDaReposicao } from "../types/pedido";
+import { desfechoDaReposicao, ehReposicao, idDaReposicao } from "../types/pedido";
 import type { Loja } from "../lib/lojas";
 import { dataDeHojeIso } from "../lib/data";
+import { fornadasNaoVistas, marcarFornadasComoVistas } from "../lib/fornadasVistas";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
-import { IconeConfere, IconeForno, IconeSeta } from "./Icones";
+import { IconeChama, IconeConfere, IconeSeta } from "./Icones";
 
 interface PainelFornadasFilialProps {
   loja: Loja;
@@ -46,7 +47,8 @@ export function PainelFornadasFilial({
   onSalvarPedido,
 }: PainelFornadasFilialProps) {
   const hoje = dataDeHojeIso();
-  const [aberto, setAberto] = useState(true);
+  const [aberto, setAberto] = useState(false);
+  const [naoVistas, setNaoVistas] = useState(0);
   const [codigoPedindo, setCodigoPedindo] = useState<number | null>(null);
   const [quantidade, setQuantidade] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -63,17 +65,57 @@ export function PainelFornadasFilial({
       .sort((a, b) => b.doDia[0].marcadaEm.localeCompare(a.doDia[0].marcadaEm));
   }, [fornadas, produtos, hoje]);
 
-  /** Reposições que esta loja já mandou hoje — evita pedir duas vezes sem saber. */
+  /**
+   * O que esta loja já pediu hoje E o que a matriz respondeu.
+   *
+   * A resposta fica na mesma linha do produto de propósito: quem está sem
+   * o item no balcão precisa saber, olhando uma vez só, se adianta
+   * esperar. Uma reposição cancelada num canto separado da tela seria
+   * descoberta tarde demais para a loja fazer outra coisa.
+   *
+   * Cancelamento manda no resumo: se a filial pediu duas vezes e a
+   * segunda foi recusada, é a recusa que muda o que ela faz agora.
+   */
   const jaPedidoHoje = useMemo(() => {
-    const contagem = new Map<number, number>();
+    const mapa = new Map<
+      number,
+      { unidades: number; cancelado?: string; confirmado: boolean }
+    >();
     for (const pedido of pedidos) {
       if (pedido.data !== hoje || pedido.lojaId !== loja.id || !ehReposicao(pedido)) continue;
+      const desfecho = desfechoDaReposicao(pedido);
       for (const item of pedido.itens) {
-        contagem.set(item.codigoPdv, (contagem.get(item.codigoPdv) ?? 0) + item.quantidadeUnidades);
+        const atual = mapa.get(item.codigoPdv) ?? { unidades: 0, confirmado: false };
+        mapa.set(item.codigoPdv, {
+          unidades: atual.unidades + item.quantidadeUnidades,
+          cancelado: desfecho === "cancelado" ? pedido.atendimento?.motivo || "sem motivo informado" : atual.cancelado,
+          confirmado: atual.confirmado || desfecho === "confirmado",
+        });
       }
     }
-    return contagem;
+    return mapa;
   }, [pedidos, hoje, loja.id]);
+
+  /**
+   * Recalcula o contador sempre que chegar fornada nova. Com a escuta em
+   * tempo real, isso acontece durante o expediente sem ninguém recarregar
+   * nada — que é o ponto do foguinho.
+   */
+  useEffect(() => {
+    setNaoVistas(fornadasNaoVistas(loja.id, hoje, fornadas));
+  }, [fornadas, loja.id, hoje]);
+
+  function alternar() {
+    const abrindo = !aberto;
+    setAberto(abrindo);
+    // Abrir É o ato de ver. Zera na hora, sem esperar rolar a lista: se o
+    // número sobrevivesse à abertura, voltaria a ser o contador que nunca
+    // zera e que ninguém olha.
+    if (abrindo) {
+      marcarFornadasComoVistas(loja.id, hoje, fornadas);
+      setNaoVistas(0);
+    }
+  }
 
   async function enviarReposicao(codigoPdv: number) {
     if (!ehNumeroValidoPositivo(quantidade)) return;
@@ -103,7 +145,7 @@ export function PainelFornadasFilial({
   if (prontosHoje.length === 0) {
     return (
       <div className="painel-fornadas vazio">
-        <IconeForno tamanho={20} />
+        <IconeChama tamanho={20} />
         <span>Nada saiu do forno na matriz ainda hoje.</span>
       </div>
     );
@@ -124,9 +166,17 @@ export function PainelFornadasFilial({
         type="button"
         className="cabecalho-fornadas"
         aria-expanded={aberto}
-        onClick={() => setAberto((v) => !v)}
+        aria-label={
+          naoVistas > 0
+            ? `Saiu do forno hoje — ${naoVistas} fornada(s) nova(s)`
+            : "Saiu do forno hoje"
+        }
+        onClick={alternar}
       >
-        <IconeForno tamanho={18} />
+        <span className="marca-chama">
+          <IconeChama tamanho={20} />
+          {naoVistas > 0 && <span className="contador-chama">{naoVistas}</span>}
+        </span>
         <span className="titulo-fornadas">Saiu do forno hoje</span>
         <span className="contagem-itens">{prontosHoje.length}</span>
         <IconeSeta className="seta-sessao" />
@@ -140,7 +190,8 @@ export function PainelFornadasFilial({
 
       {prontosHoje.map(({ produto, doDia }) => {
         const pedindo = codigoPedindo === produto.codigoPdv;
-        const jaPedi = jaPedidoHoje.get(produto.codigoPdv) ?? 0;
+        const meuPedido = jaPedidoHoje.get(produto.codigoPdv);
+        const jaPedi = meuPedido?.unidades ?? 0;
         return (
           <div key={produto.codigoPdv} className="linha-fornada">
             <div className="info-fornada">
@@ -153,10 +204,16 @@ export function PainelFornadasFilial({
                     {" · "}
                     <span className="ja-pedido">
                       <IconeConfere tamanho={13} /> já pedi {jaPedi} un
+                      {meuPedido?.confirmado && " · separado"}
                     </span>
                   </>
                 )}
               </span>
+              {meuPedido?.cancelado && (
+                <span className="reposicao-negada">
+                  Não vem: {meuPedido.cancelado}
+                </span>
+              )}
             </div>
 
             {pedindo ? (

@@ -75,6 +75,21 @@ export async function avisarMatriz(
 }
 
 /**
+ * Avisa a filial que pediu qual foi o desfecho da reposição. Só a matriz
+ * consegue endereçar uma loja específica — o servidor confere isso pela
+ * conta de quem chamou, não por este parâmetro.
+ */
+export async function avisarDesfechoReposicao(
+  paraLojaId: string,
+  nomeProduto: string,
+  codigoPdv: number,
+  desfecho: "confirmado" | "cancelado",
+  motivo?: string
+): Promise<ResultadoAviso> {
+  return enviar({ paraLojaId, nomeProduto, codigoPdv, desfecho, motivo });
+}
+
+/**
  * Dispara um aviso de teste para os aparelhos das filiais, sem marcar
  * fornada nenhuma. Existe porque a alternativa para conferir se o push
  * funciona é marcar uma fornada de mentira — que entra no histórico do dia

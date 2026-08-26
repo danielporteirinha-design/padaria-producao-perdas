@@ -95,6 +95,18 @@ service cloud.firestore {
       allow read: if ehMatriz() || (lojaConhecida() && resource.data.lojaId == lojaDoUsuario());
       allow create, update: if lojaConhecida()
                             && request.resource.data.lojaId == lojaDoUsuario();
+      // A matriz responde à reposição — e SÓ isso. A lista de chaves
+      // permitidas é o que impede a resposta virar porta para reescrever
+      // a quantidade que a filial pediu: o número tem que continuar sendo
+      // o que a loja mandou, mesmo depois de atendido.
+      allow update: if ehMatriz()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['atendimento'])
+                    && request.resource.data.atendimento.desfecho in ['confirmado', 'cancelado']
+                    // Cancelar sem motivo deixaria a filial no escuro, que
+                    // é exatamente o problema que este campo resolve.
+                    && (request.resource.data.atendimento.desfecho == 'confirmado'
+                        || request.resource.data.atendimento.motivo is string);
       // Pedido enviado não some: se a filial desistir, ela zera os itens.
       // Assim a matriz nunca fica sem saber se a filial já respondeu.
       allow delete: if false;

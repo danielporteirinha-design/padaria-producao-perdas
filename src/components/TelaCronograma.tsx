@@ -52,6 +52,12 @@ interface TelaCronogramaProps {
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   operador: string;
+  /** Só a matriz recebe — é ela que responde à reposição. */
+  onDecidirReposicao?: (
+    pedido: PedidoFilial,
+    desfecho: "confirmado" | "cancelado",
+    motivo?: string
+  ) => Promise<void>;
   onSalvarPlano: (plano: PlanoDeProducaoDiario) => Promise<void>;
 }
 
@@ -78,6 +84,7 @@ export function TelaCronograma({
   planos,
   perdas,
   operador,
+  onDecidirReposicao,
   onSalvarPlano,
 }: TelaCronogramaProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
@@ -510,6 +517,7 @@ export function TelaCronograma({
         pedidos={pedidos}
         data={dataAlvo}
         reposicoesDeHoje={pedidos.filter((p) => p.data === hojeIso && p.tipo === "reposicao")}
+        onDecidirReposicao={onDecidirReposicao}
         nomeDoProduto={nomeDoProduto}
       />
 

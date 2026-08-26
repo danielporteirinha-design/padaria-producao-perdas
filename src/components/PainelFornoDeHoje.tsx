@@ -21,14 +21,15 @@
  * quanto ela quer, ela informa no pedido de reposição.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import { rotuloDaCategoria } from "../lib/categorias";
+import { fornadasNaoVistas, marcarFornadasComoVistas } from "../lib/fornadasVistas";
 import { ErroAviso, explicarFalhaDeEnvio, testarAvisos } from "../lib/avisarFiliais";
-import { IconeForno, IconeSeta } from "./Icones";
+import { IconeChama, IconeSeta } from "./Icones";
 
 interface PainelFornoDeHojeProps {
   /** Plano confirmado de HOJE. Sem ele não há o que marcar. */
@@ -46,10 +47,24 @@ export function PainelFornoDeHoje({
   dataHoje,
   onMarcarFornada,
 }: PainelFornoDeHojeProps) {
-  const [aberto, setAberto] = useState(true);
+  const [aberto, setAberto] = useState(false);
+  const [naoVistas, setNaoVistas] = useState(0);
   const [marcando, setMarcando] = useState<number | null>(null);
   const [testando, setTestando] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState("");
+
+  useEffect(() => {
+    setNaoVistas(fornadasNaoVistas("MATRIZ", dataHoje, fornadas));
+  }, [fornadas, dataHoje]);
+
+  function alternar() {
+    const abrindo = !aberto;
+    setAberto(abrindo);
+    if (abrindo) {
+      marcarFornadasComoVistas("MATRIZ", dataHoje, fornadas);
+      setNaoVistas(0);
+    }
+  }
 
   /**
    * Conferir o push sem marcar fornada. A alternativa era marcar uma
@@ -99,9 +114,15 @@ export function PainelFornoDeHoje({
         type="button"
         className="cabecalho-forno"
         aria-expanded={aberto}
-        onClick={() => setAberto((v) => !v)}
+        aria-label={
+          naoVistas > 0 ? `Forno de hoje — ${naoVistas} fornada(s) nova(s)` : "Forno de hoje"
+        }
+        onClick={alternar}
       >
-        <IconeForno tamanho={20} />
+        <span className="marca-chama">
+          <IconeChama tamanho={20} />
+          {naoVistas > 0 && <span className="contador-chama">{naoVistas}</span>}
+        </span>
         <span className="titulo-forno">Forno de hoje</span>
         <span className="contagem-itens">
           {totalMarcado} de {totalItens}

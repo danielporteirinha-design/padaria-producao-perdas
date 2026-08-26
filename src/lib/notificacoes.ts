@@ -114,10 +114,50 @@ export function ouvirAvisosEmPrimeiroPlano(
     const messaging = getMessaging(app);
     return onMessage(messaging, (payload) => {
       const dados = payload.data ?? {};
-      aoReceber(dados.titulo ?? "Padaria Pão de Mel", dados.corpo ?? "");
+      const titulo = dados.titulo ?? "Padaria Pão de Mel";
+      const corpo = dados.corpo ?? "";
+      aoReceber(titulo, corpo);
+      // Além da faixa dentro do app, a notificação do sistema. Com o app
+      // aberto o service worker não é acionado, e uma faixa interna não
+      // resolve o caso real: no PC do caixa a janela está atrás da
+      // planilha ou do PDV, e ninguém vê aviso nenhum.
+      void mostrarNotificacaoLocal(titulo, corpo, dados.tag);
     });
   } catch (erro) {
     console.warn("Avisos em primeiro plano indisponíveis:", erro);
     return () => {};
+  }
+}
+
+/**
+ * Mostra uma notificação do sistema a partir da própria página.
+ *
+ * Vai pelo `registration.showNotification` do service worker, e não pelo
+ * `new Notification(...)`: o construtor direto é ignorado no Android e
+ * some sozinho em alguns navegadores de desktop, enquanto pelo service
+ * worker o aviso entra na bandeja do sistema, aceita `tag` (o aviso do
+ * mesmo produto substitui o anterior em vez de empilhar) e sobrevive à
+ * janela do app estar atrás de outra.
+ */
+export async function mostrarNotificacaoLocal(
+  titulo: string,
+  corpo: string,
+  tag?: string
+): Promise<void> {
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    const registro = await navigator.serviceWorker?.getRegistration();
+    if (!registro) return;
+    await registro.showNotification(titulo, {
+      body: corpo,
+      icon: "/pwa-192x192.png",
+      badge: "/pwa-192x192.png",
+      tag: tag ?? "padaria",
+      silent: false,
+    });
+  } catch (erro) {
+    // Notificação é acessório: se não der, a faixa dentro do app continua
+    // valendo e a operação não pode parar por causa disso.
+    console.warn("Não foi possível mostrar a notificação local:", erro);
   }
 }

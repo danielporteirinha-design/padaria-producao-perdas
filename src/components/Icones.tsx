@@ -131,3 +131,17 @@ export function IconeForno(props: IconeProps) {
     </Svg>
   );
 }
+
+/**
+ * Chama. Marca o que acabou de sair do forno — é o único ícone do app
+ * que aparece com um contador ao lado, então precisa ser reconhecível
+ * pequeno e de relance, sem depender do texto.
+ */
+export function IconeChama(props: IconeProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3c.6 2.4-.5 3.6-1.6 4.8C9.2 9.1 8 10.4 8 12.6a4 4 0 0 0 8 0c0-1.5-.6-2.6-1.3-3.5" />
+      <path d="M12 21a2.6 2.6 0 0 1-2.6-2.6c0-1.6 1.5-2.3 2.6-4 1.1 1.7 2.6 2.4 2.6 4A2.6 2.6 0 0 1 12 21z" />
+    </Svg>
+  );
+}

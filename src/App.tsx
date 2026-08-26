@@ -18,10 +18,16 @@ import { TelaAnalises } from "./components/TelaAnalises";
 import { BannerInstalar } from "./components/BannerInstalar";
 import { AvisoPerdaPendente } from "./components/AvisoPerdaPendente";
 import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
-import { ehReposicao, type PedidoFilial } from "./types/pedido";
+import { decidirReposicao, ehReposicao, type PedidoFilial } from "./types/pedido";
 import { base64DoDataUrl, type TrabalhoImpressao } from "./types/impressao";
 import { idDaFornada, type FornadaPronta } from "./types/fornada";
-import { avisarFiliais, avisarMatriz, ErroAviso, explicarFalhaDeEnvio } from "./lib/avisarFiliais";
+import {
+  avisarDesfechoReposicao,
+  avisarFiliais,
+  avisarMatriz,
+  ErroAviso,
+  explicarFalhaDeEnvio,
+} from "./lib/avisarFiliais";
 import { ouvirAvisosEmPrimeiroPlano } from "./lib/notificacoes";
 import { AtivarAvisos } from "./components/AtivarAvisos";
 
@@ -98,7 +104,10 @@ export default function App() {
    * veria o aviso de fornada pronta.
    */
   useEffect(() => {
-    if (!loja || loja.papel !== "filial") return;
+    // Todas as lojas, não só as filiais: desde que o aviso passou a
+    // correr nos dois sentidos, é a MATRIZ quem recebe o pedido de
+    // reposição — e era justamente ela que não escutava nada aqui.
+    if (!loja) return;
     return ouvirAvisosEmPrimeiroPlano((titulo, corpo) =>
       setAviso({ tipo: "sucesso", texto: `${titulo} — ${corpo}` })
     );
@@ -278,6 +287,31 @@ export default function App() {
     };
   }, [repositorio, migracaoResolvida]);
 
+  /**
+   * Escuta ao vivo dos dados que mudam DURANTE o expediente.
+   *
+   * Defeito que motivou isto (ago/2026): a filial pedia reposição e a
+   * matriz só via depois de recarregar a página — num pedido que existe
+   * justamente porque é urgente. A carga única da abertura tratava dado
+   * vivo como se fosse estático.
+   *
+   * Só pedidos e fornadas. Catálogo, cronograma e perdas mudam por ação
+   * de quem está com a tela na mão, e escutar tudo custaria leitura sem
+   * mudar nada na prática.
+   */
+  useEffect(() => {
+    if (!repositorio || !loja || carregando) return;
+    const desligarPedidos = repositorio.observarPedidos(
+      loja.papel === "filial" ? loja.id : undefined,
+      setPedidos
+    );
+    const desligarFornadas = repositorio.observarFornadas(dataDeHojeIso(), setFornadas);
+    return () => {
+      desligarPedidos();
+      desligarFornadas();
+    };
+  }, [repositorio, loja, carregando]);
+
   function chaveOperador(lojaId: string): string {
     return `padaria:operador:${lojaId}`;
   }
@@ -450,6 +484,39 @@ export default function App() {
       } catch (erro) {
         console.warn("Reposição gravada, mas o aviso à matriz não saiu:", erro);
       }
+    }
+  }
+
+  /**
+   * A matriz responde a uma reposição: confirmada (vai na próxima
+   * entrega) ou cancelada (com motivo). O motivo é obrigatório e a regra
+   * vive em decidirReposicao — a tela só a apresenta.
+   *
+   * A gravação vem primeiro e o aviso depois, na ordem que importa: a
+   * decisão precisa ficar registrada mesmo que o push falhe. A filial vê
+   * o desfecho na tela de qualquer forma, porque os pedidos agora chegam
+   * em tempo real.
+   */
+  async function handleDecidirReposicao(
+    pedido: PedidoFilial,
+    desfecho: "confirmado" | "cancelado",
+    motivo?: string
+  ) {
+    const decidido = decidirReposicao(pedido, desfecho, operador, motivo);
+    await comRetorno(
+      () => repositorio!.salvarPedido(decidido),
+      desfecho === "confirmado" ? "Reposição confirmada." : "Reposição cancelada."
+    );
+    setPedidos((atual) => [...atual.filter((p) => p.id !== decidido.id), decidido]);
+
+    try {
+      const item = decidido.itens[0];
+      if (item) {
+        const nome = produtos.find((p) => p.codigoPdv === item.codigoPdv)?.nome ?? "Produto";
+        await avisarDesfechoReposicao(decidido.lojaId, nome, item.codigoPdv, desfecho, motivo);
+      }
+    } catch (erro) {
+      console.warn("Decisão gravada, mas o aviso à filial não saiu:", erro);
     }
   }
 
@@ -667,6 +734,7 @@ export default function App() {
             onImprimirNoCaixa={handleImprimirNoCaixa}
             fornadas={fornadas}
             onMarcarFornada={handleMarcarFornada}
+            onDecidirReposicao={loja.papel === "matriz" ? handleDecidirReposicao : undefined}
             planos={planos}
             perdas={perdas}
             operador={operador}

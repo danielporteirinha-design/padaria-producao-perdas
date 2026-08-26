@@ -951,6 +951,57 @@ Enquanto a `CHAVE_VAPID` estiver vazia, o app não quebra: a tela da filial
 mostra "avisos ainda não configurados" e as fornadas continuam aparecendo
 ao abrir o app.
 
+## Tempo real, foguinho e resposta à reposição (ago/2026)
+
+Três mudanças que vieram do uso real, no mesmo dia.
+
+### Os dados chegam sozinhos
+
+`pedidos` e `fornadas` passaram a usar `onSnapshot` (ver `observarPedidos`
+e `observarFornadas` em `src/data/repositorio.ts`). Antes tudo era
+`getDocs` na abertura, e a matriz só via a reposição depois de recarregar
+a página — num pedido que existe justamente porque é urgente. Carga única
+tratava dado vivo como se fosse estático.
+
+Só essas duas coleções. Catálogo, cronograma e perdas mudam por ação de
+quem está com a tela na mão; escutar tudo custaria leitura sem mudar nada.
+
+### O aviso aparece com o app aberto
+
+Com a página em foco o service worker não é acionado, então o FCM entrega
+via `onMessage` — e o app só mostrava uma faixa interna. No PC do caixa a
+janela está atrás do PDV: faixa interna ali não existe. Agora o
+`onMessage` também chama `registration.showNotification`, que põe o aviso
+na bandeja do sistema. E a escuta passou a valer para TODAS as lojas: era
+restrita a filiais, então a matriz — que desde a via de mão dupla é quem
+recebe a reposição — não escutava nada.
+
+### Foguinho com contador de não vistos
+
+O painel de fornadas nasce FECHADO, atrás de um ícone de chama, nos dois
+perfis. O número ao lado conta o que chegou **desde a última abertura**,
+não o total do dia: um contador que nunca zera marca 20 às 10h e continua
+20 para sempre, e aí ignorá-lo passa a ser a reação correta. A marca fica
+no aparelho (`src/lib/fornadasVistas.ts`), por loja e por dia — o celular
+de um turno não zera o contador do outro.
+
+Guarda o INSTANTE da última fornada vista, não a contagem: contagem
+quebraria se uma marcação fosse desfeita.
+
+### A matriz responde a cada reposição
+
+Confirmar ou cancelar, item por item. Cancelar **exige motivo**, e a regra
+vive em `decidirReposicao` (`src/types/pedido.ts`), não só no botão
+desabilitado — mais as regras do Firestore, que recusam um cancelamento
+sem `motivo` e limitam a matriz a tocar apenas em `atendimento`. A
+quantidade que a filial pediu continua sendo a que ela mandou, mesmo
+depois de atendida.
+
+O motivo vai no corpo do push e na linha do produto na tela da filial:
+quem está sem o item no balcão precisa decidir o que fazer AGORA, e é o
+motivo que muda a decisão — esperar a próxima fornada é uma coisa, acabou
+a matéria-prima é outra.
+
 ## Painel de análises (ago/2026)
 
 A pergunta que o painel existe para responder: **existe padrão de perda por
@@ -1105,7 +1156,7 @@ producao-perdas/
 ## Verificação
 
 ```
-npm run verificar   # 149 asserções de lógica + carga das funções de /api no runtime do Vercel
+npm run verificar   # 169 asserções de lógica + carga das funções de /api no runtime do Vercel
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```

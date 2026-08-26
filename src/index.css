@@ -1082,3 +1082,104 @@ button.perigo:hover { background: #822525; }
   gap: 6px;
   align-items: flex-start;
 }
+
+/* ---------------------------------------------------------------
+   Foguinho das fornadas (ago/2026)
+   O painel passou a nascer FECHADO, atrás de um ícone de chama, para
+   reduzir ruído: durante o dia a lista chega a dezenas de itens e ficava
+   permanentemente aberta na frente de quem só queria trabalhar.
+   O contador é do tipo "não lido" — ver src/lib/fornadasVistas.ts.
+   --------------------------------------------------------------- */
+/* Folga à direita para o contador não encostar no título. */
+.marca-chama { position: relative; display: inline-flex; flex-shrink: 0; margin-right: 4px; }
+.marca-chama > svg { color: var(--cor-acento); }
+/* Sobre o ícone, não ao lado: junto do foguinho o número se lê como
+   "quantas fornadas", e não como mais um dado solto no cabeçalho. */
+.contador-chama {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------
+   Resposta da matriz à reposição (ago/2026)
+   --------------------------------------------------------------- */
+/* Cada reposição vira um bloco próprio sobre a superfície clara. Sem
+   isso as três corriam juntas no mesmo fundo âmbar e não dava para ver
+   onde uma terminava e a outra começava — e é justamente aqui que a
+   matriz decide, item por item, o que vai e o que não vai. */
+.linha-reposicao {
+  /* Linha, não coluna: a regra anterior era `column`, e com ela o
+     `align-items: center` centralizava tudo horizontalmente — nome, item
+     e botões saíam no meio do bloco, sem margem comum para o olho
+     descer. Em linha, o texto encosta à esquerda e a ação vai à direita. */
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  background: var(--cor-superficie);
+  border-radius: var(--raio);
+}
+.linha-reposicao:last-child { margin-bottom: 0; }
+.linha-reposicao .nome-filial { font-weight: 700; }
+.linha-reposicao .status-filial { flex: 1 1 100%; }
+.acoes-reposicao { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.acoes-reposicao .primario { padding: 6px 12px; font-size: 14px; }
+.motivo-cancelamento {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+}
+.motivo-cancelamento input { flex: 1 1 180px; min-width: 0; }
+.motivo-cancelamento .perigo { padding: 6px 12px; font-size: 14px; white-space: nowrap; }
+
+.selo-reposicao {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.selo-reposicao.confirmado { background: var(--cor-sucesso-fundo); color: var(--cor-sucesso); }
+.selo-reposicao.cancelado {
+  /* Linha inteira, alinhada à esquerda com o resto: encolhido no canto
+     direito, o motivo — que é a informação que importa — ficava com cara
+     de etiqueta decorativa. */
+  flex: 1 1 100%;
+  margin-left: 0;
+  border-radius: var(--raio);
+  background: var(--cor-alerta-fundo);
+  color: var(--cor-alerta);
+  font-weight: 500;
+}
+
+/* Visto da filial: a recusa não pode ficar discreta — é ela que muda o
+   que a loja faz nos próximos minutos. */
+.reposicao-negada {
+  display: block;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: var(--raio);
+  background: var(--cor-alerta-fundo);
+  color: var(--cor-alerta);
+  font-size: 13px;
+}

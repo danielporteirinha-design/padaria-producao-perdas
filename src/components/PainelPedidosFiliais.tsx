@@ -20,7 +20,8 @@
  * ou âmbar — e o estado se lê pela cor, antes de ler a palavra.
  */
 
-import type { PedidoFilial } from "../types/pedido";
+import { useState } from "react";
+import { desfechoDaReposicao, type PedidoFilial } from "../types/pedido";
 
 /**
  * Quantas VARIEDADES o pedido tem, não quantas unidades (ago/2026): "195
@@ -39,6 +40,12 @@ interface PainelPedidosFiliaisProps {
   /** Reposições pedidas HOJE — urgentes, aparecem em destaque à parte. */
   reposicoesDeHoje?: PedidoFilial[];
   nomeDoProduto?: (codigoPdv: number) => string;
+  /** Ausente para quem não é matriz — só ela decide. */
+  onDecidirReposicao?: (
+    pedido: PedidoFilial,
+    desfecho: "confirmado" | "cancelado",
+    motivo?: string
+  ) => Promise<void>;
 }
 
 export function PainelPedidosFiliais({
@@ -46,7 +53,35 @@ export function PainelPedidosFiliais({
   data,
   reposicoesDeHoje = [],
   nomeDoProduto,
+  onDecidirReposicao,
 }: PainelPedidosFiliaisProps) {
+  /**
+   * Qual reposição está com o campo de motivo aberto. Cancelar é o único
+   * caminho que pede digitação, e ele fica escondido até ser escolhido:
+   * um campo de texto sempre visível ao lado de "Confirmar" sugeriria que
+   * cancelar é tão rotineiro quanto confirmar, e não é.
+   */
+  const [cancelando, setCancelando] = useState<string | null>(null);
+  const [motivo, setMotivo] = useState("");
+  const [salvando, setSalvando] = useState<string | null>(null);
+
+  async function decidir(
+    pedido: PedidoFilial,
+    desfecho: "confirmado" | "cancelado",
+    textoMotivo?: string
+  ) {
+    if (!onDecidirReposicao) return;
+    setSalvando(pedido.id);
+    try {
+      await onDecidirReposicao(pedido, desfecho, textoMotivo);
+      setCancelando(null);
+      setMotivo("");
+    } catch {
+      // A faixa de aviso global já explica o que houve.
+    } finally {
+      setSalvando(null);
+    }
+  }
   const situacao = FILIAIS.map((filial) => {
     const pedido = pedidos.find(
       (p) => p.data === data && p.lojaId === filial.id && p.tipo !== "reposicao"
@@ -82,21 +117,91 @@ export function PainelPedidosFiliais({
       {reposicoesDeHoje.length > 0 && (
         <div className="cartao-reposicoes">
           <strong>Reposições pedidas hoje</strong>
-          {reposicoesDeHoje.map((pedido) => (
-            <div key={pedido.id} className="linha-reposicao">
-              <span className="nome-filial">
-                {FILIAIS.find((f) => f.id === pedido.lojaId)?.nomeCurto ?? pedido.lojaId}
-              </span>
-              <span className="status-filial">
-                {pedido.itens
-                  .map(
-                    (i) =>
-                      `${nomeDoProduto ? nomeDoProduto(i.codigoPdv) : i.codigoPdv} (${i.quantidadeUnidades} un)`
-                  )
-                  .join(", ")}
-              </span>
-            </div>
-          ))}
+          {reposicoesDeHoje.map((pedido) => {
+            const desfecho = desfechoDaReposicao(pedido);
+            const ocupado = salvando === pedido.id;
+            return (
+              <div key={pedido.id} className={`linha-reposicao ${desfecho}`}>
+                <span className="nome-filial">
+                  {FILIAIS.find((f) => f.id === pedido.lojaId)?.nomeCurto ?? pedido.lojaId}
+                </span>
+                <span className="status-filial">
+                  {pedido.itens
+                    .map(
+                      (i) =>
+                        `${nomeDoProduto ? nomeDoProduto(i.codigoPdv) : i.codigoPdv} (${i.quantidadeUnidades} un)`
+                    )
+                    .join(", ")}
+                </span>
+
+                {desfecho === "confirmado" && (
+                  <span className="selo-reposicao confirmado">
+                    <IconeConfere tamanho={14} /> separado
+                  </span>
+                )}
+                {desfecho === "cancelado" && (
+                  <span className="selo-reposicao cancelado">
+                    não enviado — {pedido.atendimento?.motivo}
+                  </span>
+                )}
+
+                {desfecho === "pendente" && onDecidirReposicao && (
+                  <>
+                    {cancelando === pedido.id ? (
+                      <div className="motivo-cancelamento">
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="Por que não vai? A filial vê este texto."
+                          value={motivo}
+                          onChange={(e) => setMotivo(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="perigo"
+                          disabled={ocupado || motivo.trim().length === 0}
+                          onClick={() => decidir(pedido, "cancelado", motivo)}
+                        >
+                          {ocupado ? "..." : "Cancelar pedido"}
+                        </button>
+                        <button
+                          type="button"
+                          className="link"
+                          onClick={() => {
+                            setCancelando(null);
+                            setMotivo("");
+                          }}
+                        >
+                          voltar
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="acoes-reposicao">
+                        <button
+                          type="button"
+                          className="primario"
+                          disabled={ocupado}
+                          onClick={() => decidir(pedido, "confirmado")}
+                        >
+                          {ocupado ? "..." : "Confirmar"}
+                        </button>
+                        <button
+                          type="button"
+                          className="link"
+                          onClick={() => {
+                            setCancelando(pedido.id);
+                            setMotivo("");
+                          }}
+                        >
+                          não vai
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

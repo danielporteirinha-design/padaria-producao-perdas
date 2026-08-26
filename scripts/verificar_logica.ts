@@ -35,13 +35,17 @@ import type { Produto } from "../src/types/produto";
 import type { PlanoDeProducaoDiario } from "../src/types/producao";
 import { perdaEstaValida, type RegistroPerda } from "../src/types/perda";
 import {
+  decidirReposicao,
+  desfechoDaReposicao,
   ehPedidoDiario,
   ehReposicao,
   idDaReposicao,
   idDoPedido,
+  reposicaoEstaPendente,
   totalDoPedido,
   type PedidoFilial,
 } from "../src/types/pedido";
+import { fornadasNaoVistas, marcarFornadasComoVistas } from "../src/lib/fornadasVistas";
 import {
   codigosComFornadaNoDia,
   fornadasDoProduto,
@@ -1480,6 +1484,135 @@ const perdas: RegistroPerda[] = [
       "perda sem produção no recorte não entra no ranking (evitaria uma barra de taxa infinita)"
     );
   }
+}
+
+// ---------------------------------------------------------------
+// Caso 18: resposta da matriz à reposição (ago/2026)
+//
+// A filial pedia e ficava no escuro. O que se protege aqui é a regra que
+// dá sentido ao recurso: cancelar SEM MOTIVO não pode existir, porque o
+// motivo é a única coisa que diz à loja o que fazer em seguida.
+// ---------------------------------------------------------------
+{
+  const base: PedidoFilial = {
+    id: "rep-1",
+    lojaId: "FILIAL_ARTHUR_BERNARDES",
+    data: "2026-08-26",
+    itens: [{ codigoPdv: 112, quantidadeUnidades: 30 }],
+    status: "enviado",
+    tipo: "reposicao",
+    criadoPor: "Ana",
+    criadoEm: "2026-08-26T09:00:00.000Z",
+    enviadoEm: "2026-08-26T09:00:00.000Z",
+  };
+
+  afirmar(desfechoDaReposicao(base) === "pendente", "reposição sem resposta conta como pendente");
+  afirmar(reposicaoEstaPendente(base), "e aparece na fila da matriz");
+
+  const confirmada = decidirReposicao(base, "confirmado", "Matriz");
+  afirmar(desfechoDaReposicao(confirmada) === "confirmado", "confirmar registra o desfecho");
+  afirmar(
+    confirmada.atendimento?.decididoPor === "Matriz" && Boolean(confirmada.atendimento?.decididoEm),
+    "e registra quem decidiu e quando"
+  );
+  afirmar(
+    confirmada.atendimento?.motivo === undefined,
+    "confirmação não carrega motivo — motivo é coisa de recusa"
+  );
+  afirmar(!reposicaoEstaPendente(confirmada), "decidida sai da fila de pendentes");
+  afirmar(
+    confirmada.itens[0].quantidadeUnidades === 30 && base.atendimento === undefined,
+    "a decisão não altera a quantidade pedida nem muta o pedido original"
+  );
+
+  const cancelada = decidirReposicao(base, "cancelado", "Matriz", "  acabou a farinha  ");
+  afirmar(
+    cancelada.atendimento?.motivo === "acabou a farinha",
+    `motivo é gravado sem espaço sobrando (obtido: "${cancelada.atendimento?.motivo}")`
+  );
+
+  let recusou = false;
+  try {
+    decidirReposicao(base, "cancelado", "Matriz", "   ");
+  } catch {
+    recusou = true;
+  }
+  afirmar(recusou, "cancelar só com espaços em branco é recusado pelo domínio");
+
+  recusou = false;
+  try {
+    decidirReposicao(base, "cancelado", "Matriz");
+  } catch {
+    recusou = true;
+  }
+  afirmar(recusou, "cancelar sem motivo nenhum é recusado pelo domínio");
+
+  // Pedido diário não entra nesse fluxo: ele é planejamento, não urgência.
+  const diarioQualquer: PedidoFilial = { ...base, id: "d1", tipo: "diario" };
+  afirmar(
+    !reposicaoEstaPendente(diarioQualquer),
+    "pedido diário nunca aparece como reposição pendente"
+  );
+}
+
+// ---------------------------------------------------------------
+// Caso 19: contador "não visto" do foguinho (ago/2026)
+//
+// O número ao lado da chama conta o que chegou DEPOIS da última abertura.
+// Um contador que nunca zera vira ruído: às 10h marca 20 e continua 20
+// para sempre, e a reação certa passa a ser ignorá-lo.
+// ---------------------------------------------------------------
+{
+  const HOJE = "2026-08-26";
+  const memoria = new Map<string, string>();
+  // O módulo grava no localStorage; no Node ele não existe.
+  (globalThis as { localStorage?: unknown }).localStorage = {
+    getItem: (k: string) => memoria.get(k) ?? null,
+    setItem: (k: string, v: string) => void memoria.set(k, v),
+  };
+
+  const fornada = (id: string, hora: string, data = HOJE) => ({
+    id,
+    data,
+    codigoPdv: 112,
+    marcadaPor: "Padeiro",
+    marcadaEm: `${data}T${hora}:00.000Z`,
+  });
+
+  const tres = [fornada("a", "06:00"), fornada("b", "07:00"), fornada("c", "08:00")];
+
+  afirmar(
+    fornadasNaoVistas("MATRIZ", HOJE, tres) === 3,
+    "sem nunca ter aberto, todas as fornadas contam como novas"
+  );
+
+  marcarFornadasComoVistas("MATRIZ", HOJE, tres);
+  afirmar(fornadasNaoVistas("MATRIZ", HOJE, tres) === 0, "abrir zera o contador");
+
+  const comNova = [...tres, fornada("d", "09:30")];
+  afirmar(
+    fornadasNaoVistas("MATRIZ", HOJE, comNova) === 1,
+    `fornada posterior à abertura volta a contar (obtido: ${fornadasNaoVistas("MATRIZ", HOJE, comNova)})`
+  );
+
+  // Cada loja tem a própria marca: a filial abrir não pode zerar a matriz.
+  afirmar(
+    fornadasNaoVistas("FILIAL_ARTHUR_BERNARDES", HOJE, comNova) === 4,
+    "a marca é por loja — abrir numa não zera a outra"
+  );
+
+  // E por dia: a marca de ontem não silencia o forno de hoje.
+  const ontem = [fornada("x", "06:00", "2026-08-25")];
+  afirmar(
+    fornadasNaoVistas("MATRIZ", "2026-08-25", ontem) === 1,
+    "a marca é por dia — o que foi visto ontem não conta para hoje"
+  );
+
+  // Fornada de OUTRO dia nunca entra na conta do dia consultado.
+  afirmar(
+    fornadasNaoVistas("MATRIZ", HOJE, [...comNova, ...ontem]) === 1,
+    "fornada de outro dia fica fora do contador do dia"
+  );
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

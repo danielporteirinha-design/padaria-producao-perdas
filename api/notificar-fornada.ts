@@ -196,9 +196,13 @@ export default async function handler(req: any, res: any) {
       codigoPdv?: number;
       vezesHoje?: number;
       quantidade?: number;
+      paraLojaId?: string;
+      motivo?: string;
+      desfecho?: "confirmado" | "cancelado";
       teste?: boolean;
     } = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {});
-    const { nomeProduto, codigoPdv, vezesHoje, quantidade, teste } = corpoBruto;
+    const { nomeProduto, codigoPdv, vezesHoje, quantidade, paraLojaId, motivo, desfecho, teste } =
+      corpoBruto;
     if (!teste && (!nomeProduto || typeof codigoPdv !== "number")) {
       throw new ErroNotificacao("Faltou o produto no pedido de aviso.", 400);
     }
@@ -217,14 +221,24 @@ export default async function handler(req: any, res: any) {
      */
     const ehDaMatriz = quemChamou.id === "MATRIZ";
 
+    /**
+     * Só a matriz pode endereçar uma loja específica — é ela que responde
+     * "confirmado" ou "cancelado" a quem pediu. Se uma filial pudesse
+     * escolher o destinatário, conseguiria mandar aviso para a loja
+     * vizinha em nome da matriz.
+     */
+    const destinoDirigido = ehDaMatriz && paraLojaId ? paraLojaId : undefined;
+
     const app = aplicativoAdmin(modulos);
 
     // Só aparelhos de FILIAL: a matriz não precisa ser avisada do que ela
     // mesma acabou de marcar.
     const colecao = modulos.firestore.getFirestore(app).collection("dispositivos");
-    const snapshot = ehDaMatriz
-      ? await colecao.where("lojaId", "!=", "MATRIZ").get()
-      : await colecao.where("lojaId", "==", "MATRIZ").get();
+    const snapshot = destinoDirigido
+      ? await colecao.where("lojaId", "==", destinoDirigido).get()
+      : ehDaMatriz
+        ? await colecao.where("lojaId", "!=", "MATRIZ").get()
+        : await colecao.where("lojaId", "==", "MATRIZ").get();
 
     const tokens = snapshot.docs
       .map((documento) => documento.get("token") as string)
@@ -245,7 +259,22 @@ export default async function handler(req: any, res: any) {
     let corpo: string;
     let etiqueta: string;
 
-    if (teste) {
+    if (desfecho && destinoDirigido) {
+      // Resposta à reposição. O motivo vai no corpo do aviso, não numa
+      // tela que a filial teria que abrir: quem está sem o produto no
+      // balcão precisa decidir o que fazer agora, e o motivo é o que
+      // muda a decisão — esperar a próxima fornada é uma coisa, acabou a
+      // matéria-prima é outra.
+      titulo =
+        desfecho === "confirmado"
+          ? `${nomeProduto} confirmado`
+          : `${nomeProduto} não será enviado`;
+      corpo =
+        desfecho === "confirmado"
+          ? "A matriz separou e manda na próxima entrega."
+          : motivo || "A matriz cancelou o pedido.";
+      etiqueta = `reposicao-resposta-${codigoPdv}`;
+    } else if (teste) {
       titulo = "Padaria Pão de Mel";
       corpo = "Teste de aviso. Se você está vendo isto, as notificações estão funcionando.";
       etiqueta = "teste-aviso";

@@ -122,6 +122,19 @@ export class RepositorioLocalStorage implements Repositorio {
     return lojaId ? todos.filter((p) => p.lojaId === lojaId) : todos;
   }
 
+  /**
+   * Sem servidor não existe mudança vinda de outro aparelho: entrega o
+   * estado atual uma vez e não escuta nada. Mantém a interface honesta —
+   * a tela não precisa saber qual repositório está por baixo.
+   */
+  observarPedidos(
+    lojaId: string | undefined,
+    aoMudar: (pedidos: PedidoFilial[]) => void
+  ): () => void {
+    void this.listarPedidos(lojaId).then(aoMudar);
+    return () => {};
+  }
+
   async salvarPedido(pedido: PedidoFilial): Promise<PedidoFilial> {
     const todos = await this.listarPedidos();
     escrever("padaria:pedidos", [...todos.filter((p) => p.id !== pedido.id), pedido]);
@@ -130,6 +143,11 @@ export class RepositorioLocalStorage implements Repositorio {
 
   async listarFornadas(data: string): Promise<FornadaPronta[]> {
     return ler<FornadaPronta[]>("padaria:fornadas", []).filter((f) => f.data === data);
+  }
+
+  observarFornadas(data: string, aoMudar: (fornadas: FornadaPronta[]) => void): () => void {
+    void this.listarFornadas(data).then(aoMudar);
+    return () => {};
   }
 
   async marcarFornada(fornada: FornadaPronta): Promise<void> {

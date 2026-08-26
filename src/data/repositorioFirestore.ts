@@ -34,6 +34,7 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  onSnapshot,
   query,
   setDoc,
   updateDoc,
@@ -202,6 +203,31 @@ export class RepositorioFirestore implements Repositorio {
       .sort((a, b) => a.data.localeCompare(b.data));
   }
 
+  /**
+   * Escuta em tempo real. O `onSnapshot` do Firestore já entrega o estado
+   * atual na primeira chamada e depois só as mudanças, e com o cache
+   * offline ligado ele responde do disco antes mesmo de a rede voltar —
+   * é justamente o motivo de o app estar em Firestore e não em REST.
+   */
+  observarPedidos(
+    lojaId: string | undefined,
+    aoMudar: (pedidos: PedidoFilial[]) => void
+  ): () => void {
+    const consulta = lojaId
+      ? query(collection(db, COL_PEDIDOS), where("lojaId", "==", lojaId))
+      : collection(db, COL_PEDIDOS);
+    return onSnapshot(
+      consulta,
+      (snap) =>
+        aoMudar(
+          snap.docs.map((d) => d.data() as PedidoFilial).sort((a, b) => a.data.localeCompare(b.data))
+        ),
+      // Escuta que falha não pode derrubar a tela: o app continua com o
+      // que já carregou, e o operador segue trabalhando.
+      (erro) => console.warn("Escuta de pedidos interrompida:", erro)
+    );
+  }
+
   async salvarPedido(pedido: PedidoFilial): Promise<PedidoFilial> {
     await setDoc(doc(db, COL_PEDIDOS, pedido.id), limpar(pedido));
     return pedido;
@@ -230,6 +256,19 @@ export class RepositorioFirestore implements Repositorio {
     return snap.docs
       .map((d) => d.data() as FornadaPronta)
       .sort((a, b) => a.marcadaEm.localeCompare(b.marcadaEm));
+  }
+
+  observarFornadas(data: string, aoMudar: (fornadas: FornadaPronta[]) => void): () => void {
+    return onSnapshot(
+      query(collection(db, COL_FORNADAS), where("data", "==", data)),
+      (snap) =>
+        aoMudar(
+          snap.docs
+            .map((d) => d.data() as FornadaPronta)
+            .sort((a, b) => a.marcadaEm.localeCompare(b.marcadaEm))
+        ),
+      (erro) => console.warn("Escuta de fornadas interrompida:", erro)
+    );
   }
 
   async marcarFornada(fornada: FornadaPronta): Promise<void> {

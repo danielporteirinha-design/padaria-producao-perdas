@@ -29,6 +29,29 @@ export type StatusPedido = "rascunho" | "enviado";
  */
 export type TipoPedido = "diario" | "reposicao";
 
+/**
+ * Desfecho de uma reposição, decidido pela matriz (ago/2026).
+ *
+ * Nasceu do uso real: a filial pedia e ficava no escuro — sem saber se
+ * alguém viu, se está separando, ou se não vai vir. Um pedido urgente sem
+ * resposta é pior que nenhum pedido, porque a loja para de procurar
+ * alternativa enquanto espera algo que talvez nunca chegue.
+ *
+ * `pendente` é o estado de quem acabou de chegar. Não existe campo para
+ * "recusado sem motivo": cancelar EXIGE o motivo, porque é ele que diz à
+ * filial o que fazer em seguida — esperar a próxima fornada é uma coisa,
+ * acabou a matéria-prima é outra.
+ */
+export type DesfechoReposicao = "pendente" | "confirmado" | "cancelado";
+
+export interface AtendimentoReposicao {
+  desfecho: DesfechoReposicao;
+  decididoPor?: string;
+  decididoEm?: string; // ISO 8601 datetime
+  /** Obrigatório quando o desfecho é `cancelado`. */
+  motivo?: string;
+}
+
 export interface PedidoFilial {
   id: string;
   lojaId: string;
@@ -41,6 +64,48 @@ export interface PedidoFilial {
   criadoPor: string;
   criadoEm: string; // ISO 8601 datetime
   enviadoEm?: string;
+
+  /**
+   * Só em reposições. Ausente = ainda não decidido — inclusive nas
+   * reposições anteriores a esta versão, que continuam válidas e
+   * aparecem como pendentes.
+   */
+  atendimento?: AtendimentoReposicao;
+}
+
+/** Estado atual da reposição, tratando ausência como pendente. */
+export function desfechoDaReposicao(pedido: PedidoFilial): DesfechoReposicao {
+  return pedido.atendimento?.desfecho ?? "pendente";
+}
+
+export function reposicaoEstaPendente(pedido: PedidoFilial): boolean {
+  return ehReposicao(pedido) && desfechoDaReposicao(pedido) === "pendente";
+}
+
+/**
+ * Aplica a decisão da matriz. Cancelar sem motivo é recusado aqui, e não
+ * só desabilitando o botão na tela: a regra é do domínio, e uma tela nova
+ * amanhã não pode conseguir contornar.
+ */
+export function decidirReposicao(
+  pedido: PedidoFilial,
+  desfecho: "confirmado" | "cancelado",
+  decididoPor: string,
+  motivo?: string
+): PedidoFilial {
+  const limpo = (motivo ?? "").trim();
+  if (desfecho === "cancelado" && limpo.length === 0) {
+    throw new Error("Cancelar uma reposição exige o motivo.");
+  }
+  return {
+    ...pedido,
+    atendimento: {
+      desfecho,
+      decididoPor,
+      decididoEm: new Date().toISOString(),
+      ...(desfecho === "cancelado" ? { motivo: limpo } : {}),
+    },
+  };
 }
 
 export function idDoPedido(data: string, lojaId: string): string {
