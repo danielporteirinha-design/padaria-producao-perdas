@@ -353,6 +353,43 @@ deve vir acompanhado da base que o gerou (ex.: "4 últimas quartas: 45,
 50, 48, 47") para virar proposta auditável em vez de caixa-preta, e
 **produto sem histórico fica em branco**, nunca chutado.
 
+## Identidade visual (ago/2026)
+
+A logomarca da padaria entrou no ícone do atalho, nas notificações e na
+tela de entrada. Cores amostradas do próprio arquivo, nunca escolhidas no
+olho: vermelho `#C40027`, amarelo `#FFF950`, creme `#FFFFD7`.
+
+Tudo é gerado por `scripts/gerar_icones.py` a partir de
+`assets/logo-pao-de-mel.png`. Ícone é derivado, não original: mudou a
+marca, roda o script e os sete arquivos mudam juntos — ninguém precisa
+lembrar quais eram os tamanhos.
+
+A origem em alta fica em `assets/`, **fora de `public/`**: tudo que está
+em public/ entra no precache do service worker, e o original tem 673 KB
+que todo celular baixaria a cada atualização sem nunca exibir. A versão
+da tela de login sai do script com 800 px e 90 KB.
+
+### Três famílias, três problemas diferentes
+
+| Arquivo | Regra própria |
+|---|---|
+| `pwa-192`, `pwa-512`, `apple-touch-icon` | Marca inteira sobre creme. A pílula é 2,8× mais larga que alta e nunca encherá um quadrado — quem carrega o reconhecimento nesse tamanho é a forma vermelha e o amarelo, não a leitura das letras |
+| `pwa-maskable-512` | O Android recorta em círculo, gota ou quadrado, à escolha do fabricante. A marca entra a 75% da largura: é o limite para a pílula deitada caber inteira no círculo de segurança |
+| `favicon-32` | Só o "P" do script. A 16–32 px reais a marca inteira é mancha; uma letra do próprio alfabeto dela continua reconhecível |
+| `badge-96` | Silhueta BRANCA sobre transparente. O Android descarta as cores do badge e usa só o formato — a logomarca colorida ali virava um borrão cinza na barra de status |
+
+O badge é desenhado 8× maior e reduzido no fim, com **dois** cortes largos
+em vez de três finos: aos ~24 px reais da barra, vãos estreitos somem por
+completo e sobra um oval branco sem leitura.
+
+O halo branco em volta da pílula é removido no script (corte só no branco
+puro, tolerância curta — o "PADARIA" da marca é creme `#FFFFD7`, longe o
+bastante para não ser apagado junto).
+
+`theme_color` passou para o vermelho da marca: vale para a tela de
+abertura e para a barra do sistema com o app instalado. **A paleta interna
+do app não muda** — segue a mesma, calma.
+
 ## Instalar como app (PWA) — ago/2026
 
 O app é instalável: em vez de procurar o link no navegador, o operador abre
@@ -1176,12 +1213,15 @@ producao-perdas/
       ExportarFita.tsx             # Preview + Compartilhar/Baixar da(s) fita(s) de impressão (botão manual por imagem quando divide em mais de uma)
   scripts/
     importar_produtos.py         # Import em lote (rodado contra Produtos_881.xlsx), já filtra fora de escopo
+    gerar_icones.py               # Gera todos os ícones e a marca da tela de login a partir de assets/
     verificar_logica.ts           # Verificações de conversão/agregação/janela de validade/resumo de insights
   data/
     produtos.seed.json            # 89 produtos das 5 categorias de produção, já convertidos para o schema do app
   public/
     firebase-messaging-sw.js      # Service worker que recebe o aviso com o app fechado
-    pwa-192x192.png               # Ícones do app instalado (gerados por script — ver "Instalar como app")
+    logo-pao-de-mel.png           # Marca reduzida para a tela de entrada (gerada pelo script)
+    badge-96x96.png               # Silhueta monocromática da barra de status do Android
+    pwa-192x192.png               # Ícones do app instalado (gerados por scripts/gerar_icones.py)
     pwa-512x512.png
     pwa-maskable-512x512.png      # Variante maskable exigida pelo Android
     apple-touch-icon.png          # Única via de ícone no iPhone (iOS ignora o manifest)

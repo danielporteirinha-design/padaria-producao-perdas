@@ -69,7 +69,15 @@ export function TelaLogin() {
 
   return (
     <div className="tela-identificacao">
-      <h1>Padaria Pão de Mel</h1>
+      {/* A marca no lugar do título escrito: é a primeira tela do dia e a
+          única onde sobra espaço para ela sem disputar com dado nenhum. */}
+      <img
+        className="marca-login"
+        src="/logo-pao-de-mel.png"
+        alt="Padaria Pão de Mel"
+        width="320"
+        height="115"
+      />
       <p>Produção &amp; Perdas</p>
 
       <form onSubmit={entrar}>

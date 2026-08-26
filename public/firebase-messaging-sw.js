@@ -34,7 +34,14 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(dados.titulo || "Padaria Pão de Mel", {
     body: dados.corpo || "",
     icon: "/pwa-192x192.png",
-    badge: "/pwa-192x192.png",
+    /**
+     * O badge é a silhueta que o Android põe na barra de status, e o
+     * sistema DESCARTA as cores dela — usa só o formato. Mandar a
+     * logomarca colorida aqui produzia um borrão cinza sem leitura; este
+     * arquivo é um pão em branco sobre transparente, desenhado para
+     * sobreviver aos ~24 px reais da barra (ver scripts/gerar_icones.py).
+     */
+    badge: "/badge-96x96.png",
     /**
      * A tag faz o aviso do MESMO produto substituir o anterior em vez de
      * empilhar. Pão francês sai seis vezes por dia; sem isso a filial

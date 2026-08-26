@@ -90,7 +90,7 @@ export default defineConfig({
       includeAssets: ["favicon-32x32.png", "apple-touch-icon.png"],
       manifest: {
         name: "Produção e Perdas — Padaria Pão de Mel",
-        short_name: "Produção",
+        short_name: "Pão de Mel",
         description:
           "Cronograma de produção diária e registro de perdas da Padaria Pão de Mel.",
         lang: "pt-BR",
@@ -98,8 +98,10 @@ export default defineConfig({
         scope: "/",
         display: "standalone",
         orientation: "portrait",
-        background_color: "#faf7f2",
-        theme_color: "#a8642a",
+        background_color: "#fffff0",
+        // Cor da logomarca — vale para a tela de abertura e para a barra
+        // do sistema com o app instalado. A paleta interna do app não muda.
+        theme_color: "#c40027",
         icons: [
           { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
           { src: "pwa-512x512.png", sizes: "512x512", type: "image/png" },

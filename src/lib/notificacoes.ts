@@ -151,7 +151,9 @@ export async function mostrarNotificacaoLocal(
     await registro.showNotification(titulo, {
       body: corpo,
       icon: "/pwa-192x192.png",
-      badge: "/pwa-192x192.png",
+      // Silhueta monocromática — ver o comentário em
+      // public/firebase-messaging-sw.js sobre por que não é a logomarca.
+      badge: "/badge-96x96.png",
       tag: tag ?? "padaria",
       silent: false,
     });

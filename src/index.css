@@ -1252,3 +1252,13 @@ button.perigo:hover { background: #822525; }
   color: var(--cor-alerta);
 }
 .bloco-pedido.enviado .estado-pedido { color: var(--cor-sucesso); }
+
+/* Logomarca na tela de entrada. Largura limitada para não virar um
+   banner no desktop — a marca cumprimenta, não ocupa a tela. */
+.marca-login {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  margin: 0 auto 4px;
+}
