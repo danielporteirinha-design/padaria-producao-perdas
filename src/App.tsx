@@ -21,7 +21,7 @@ import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
 import type { PedidoFilial } from "./types/pedido";
 import { base64DoDataUrl, type TrabalhoImpressao } from "./types/impressao";
 import { idDaFornada, type FornadaPronta } from "./types/fornada";
-import { avisarFiliais } from "./lib/avisarFiliais";
+import { avisarFiliais, ErroAviso } from "./lib/avisarFiliais";
 import { ouvirAvisosEmPrimeiroPlano } from "./lib/notificacoes";
 
 type Aba = "cronograma" | "cadastro" | "perdas" | "analises" | "pedido";
@@ -395,9 +395,27 @@ export default function App() {
      */
     try {
       const vezesHoje = fornadas.filter((f) => f.data === hoje && f.codigoPdv === codigoPdv).length + 1;
-      await avisarFiliais(nome, codigoPdv, vezesHoje);
+      const resultado = await avisarFiliais(nome, codigoPdv, vezesHoje);
+      /**
+       * Só fala quando ALGO impediu o aviso de chegar. Envio normal segue
+       * calado: confirmar "3 aparelhos avisados" a cada fornada seria seis
+       * mensagens por dia só de pão francês, e mensagem que aparece sempre
+       * deixa de ser lida.
+       */
+      if (resultado.enviados === 0) {
+        setAviso({
+          tipo: "sucesso",
+          texto: `${nome} saiu do forno. Nenhum aparelho de filial está recebendo avisos ainda — cada filial precisa tocar em "Ativar" uma vez, no celular dela.`,
+        });
+      }
     } catch (erro) {
       console.warn("Fornada marcada, mas o aviso às filiais não saiu:", erro);
+      setAviso({
+        tipo: "sucesso",
+        texto: `${nome} saiu do forno. O aviso não saiu: ${
+          erro instanceof ErroAviso ? erro.message : "servidor indisponível"
+        }`,
+      });
     }
   }
 
