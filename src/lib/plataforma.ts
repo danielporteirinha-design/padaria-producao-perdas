@@ -63,12 +63,19 @@ export function comoLiberarNotificacao(): CaminhoDaPermissao {
     case "android":
       return instalado
         ? {
+            /**
+             * Com o app instalado (WebAPK) NÃO existe configuração de site
+             * do Chrome para mexer: a permissão passa a ser do aplicativo,
+             * nas configurações do Android. Mandar para o Chrome aqui é
+             * mandar para uma tela que não controla mais nada.
+             */
             titulo: "No Android, com o app instalado",
             passos: [
-              "Toque e segure o ícone do Pão de Mel na tela inicial",
-              'Toque em "Informações do app"',
+              "Toque e SEGURE o ícone do Pão de Mel na tela inicial",
+              'Toque em "Informações do app" (ou no ⓘ)',
               "Abra Notificações e ligue a chave",
               "Volte aqui e toque em Ativar de novo",
+              "Se a chave já estava ligada e mesmo assim nada chega: desinstale o app da tela inicial e instale de novo — a recusa foi gravada antes da instalação",
             ],
           }
         : {
