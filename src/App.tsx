@@ -489,6 +489,7 @@ export default function App() {
           <TelaCronograma
             produtos={produtos}
             pedidos={pedidos}
+            onConfirmarProducao={handleConfirmarProducao}
             planos={planos}
             perdas={perdas}
             operador={operador}
@@ -517,8 +518,8 @@ export default function App() {
             produtos={produtos}
             planos={planos}
             perdas={perdas}
+            loja={loja}
             operador={operador}
-            onConfirmarProducao={handleConfirmarProducao}
             ehMatriz={loja.papel === "matriz"}
             onAnularPerda={handleAnularPerda}
             onRegistrarPerda={handleRegistrarPerda}

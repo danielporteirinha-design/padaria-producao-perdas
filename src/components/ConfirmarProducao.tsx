@@ -3,10 +3,15 @@
  * ---------------------------------------------------------------
  * Passo de fim de expediente: confirmar o que REALMENTE saiu do forno.
  *
- * Fica junto das Perdas de propósito (decisão do dono do negócio,
- * ago/2026): é uma parada só no fim do dia, em vez de mais uma
- * interrupção de manhã. Também é o momento em que o operador já está com
- * a balança na mão e a cabeça no fechamento.
+ * Fica na tela de CRONOGRAMA, não na de Perdas (ago/2026): confirmar o
+ * que saiu do forno é fechar o ciclo do plano, e misturar isso com o
+ * lançamento de perdas na mesma janela confundia duas atividades
+ * diferentes — observação do próprio dono do negócio depois de usar.
+ *
+ * O momento continua sendo o fim do expediente, de uma vez só. A razão
+ * não é comodidade: é aí que dá para comparar tudo o que foi PEDIDO —
+ * pela matriz e pelas filiais — com o que realmente SAIU, e enxergar na
+ * hora onde o gargalo travou a produção.
  *
  * O desenho parte do caso comum: na maioria dos dias sai tudo. Então
  * TODOS os itens já vêm marcados como produzidos e o operador só desmarca
@@ -29,10 +34,22 @@ interface ConfirmarProducaoProps {
   plano: PlanoDeProducaoDiario;
   produtos: Produto[];
   operador: string;
+  /**
+   * Quantidade TOTAL pedida de cada item (matriz + filiais). É o número
+   * que interessa conferir: o padeiro produziu para as três lojas, não só
+   * para a matriz. Ausente para um produto = cai na quantidade do plano.
+   */
+  totaisPedidos?: Map<number, number>;
   onConfirmar: (codigosNaoProduzidos: number[]) => Promise<void>;
 }
 
-export function ConfirmarProducao({ plano, produtos, operador, onConfirmar }: ConfirmarProducaoProps) {
+export function ConfirmarProducao({
+  plano,
+  produtos,
+  operador,
+  totaisPedidos,
+  onConfirmar,
+}: ConfirmarProducaoProps) {
   const jaConfirmado = producaoFoiConfirmada(plano);
   const [editando, setEditando] = useState(!jaConfirmado);
   const [naoProduzidos, setNaoProduzidos] = useState<Set<number>>(
@@ -96,9 +113,9 @@ export function ConfirmarProducao({ plano, produtos, operador, onConfirmar }: Co
         de perda ser calculada sobre a produção real, e não sobre a lista.
       </p>
       <p className="nota-rodape">
-        Você pode confirmar mais de uma vez ao longo do dia, conforme as fornadas vão saindo, e
-        corrigir depois. Deixar tudo para o fim do expediente é o que faz alguém esquecer o que
-        aconteceu de manhã.
+        Feito no fim do expediente, de uma vez: é o momento em que dá para comparar tudo o que foi
+        pedido — pela matriz e pelas filiais — com o que realmente saiu, e ver de imediato onde o
+        gargalo travou a produção.
       </p>
 
       {plano.sessoes.map((sessao) => (
@@ -111,7 +128,9 @@ export function ConfirmarProducao({ plano, produtos, operador, onConfirmar }: Co
                 <input type="checkbox" checked={saiu} onChange={() => alternar(item.codigoPdv)} />
                 <span className="nome-confirmacao">{nomePorCodigo.get(item.codigoPdv) ?? `#${item.codigoPdv}`}</span>
                 <span className="qtd-confirmacao">
-                  {saiu ? `${item.quantidadeUnidades} un` : "não saiu"}
+                  {saiu
+                    ? `${totaisPedidos?.get(item.codigoPdv) ?? item.quantidadeUnidades} un`
+                    : "não saiu"}
                 </span>
               </label>
             );

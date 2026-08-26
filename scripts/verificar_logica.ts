@@ -966,5 +966,51 @@ const perdas: RegistroPerda[] = [
   afirmar(totalDoPedido(undefined) === 0, "pedido inexistente conta como zero");
 }
 
+// ---------------------------------------------------------------
+// Caso 23: escopo de perdas por loja (ago/2026). A filial vê só o que
+// lançou nela; a matriz vê tudo. Registro anterior às filiais não tem
+// lojaId e precisa continuar contando como matriz — senão a migração
+// faria o histórico antigo sumir da tela de quem o criou.
+// ---------------------------------------------------------------
+{
+  const MATRIZ = "MATRIZ";
+  const ARTHUR = "FILIAL_ARTHUR_BERNARDES";
+  const base = {
+    codigoPdv: 112,
+    planoDeProducaoId: "p",
+    data: "2026-08-27",
+    diaDaSemana: "quinta" as const,
+    quantidadeQuilos: 1,
+    pesoUnitarioGramasInformado: 50,
+    quantidadeUnidadesEstimada: 20,
+    motivo: "sobra_nao_vendida" as const,
+    registradoPor: "teste",
+    registradoEm: "2026-08-27T20:00:00Z",
+  };
+  const todas: RegistroPerda[] = [
+    { ...base, id: "matriz", lojaId: MATRIZ },
+    { ...base, id: "arthur", lojaId: ARTHUR },
+    { ...base, id: "antiga" }, // anterior às filiais, sem lojaId
+  ];
+
+  // A regra que a tela aplica: matriz vê tudo; filial filtra pela própria loja.
+  const visiveisPara = (loja: string, ehMatriz: boolean) =>
+    todas.filter((p) => ehMatriz || (p.lojaId ?? MATRIZ) === loja);
+
+  afirmar(visiveisPara(MATRIZ, true).length === 3, "matriz enxerga as perdas das três origens");
+  const daFilial = visiveisPara(ARTHUR, false);
+  afirmar(daFilial.length === 1, `filial enxerga só a própria perda (obtido: ${daFilial.length})`);
+  afirmar(daFilial[0].id === "arthur", "e é exatamente a que ela lançou");
+  afirmar(
+    visiveisPara(MATRIZ, false).some((p) => p.id === "antiga"),
+    "registro sem lojaId (anterior às filiais) continua aparecendo como da matriz"
+  );
+
+  // O total de perda do dia continua somando TODAS as lojas — a taxa de
+  // perda do negócio é do negócio, não de uma unidade.
+  const totalGeral = todas.filter(perdaEstaValida).reduce((s, p) => s + p.quantidadeUnidadesEstimada, 0);
+  afirmar(totalGeral === 60, `análise consolidada soma as três lojas (obtido: ${totalGeral})`);
+}
+
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);
 process.exit(falhas === 0 ? 0 : 1);

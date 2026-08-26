@@ -9,7 +9,7 @@
  * produzido nessas 5 categorias).
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { NovoProdutoInput, Produto, UnidadeProducao } from "../types/produto";
 import { ConfirmarComSenha } from "./ConfirmarComSenha";
 import { IconeLixeira } from "./Icones";
@@ -45,7 +45,6 @@ export function TelaCadastroProdutos({
   onExcluirProdutos,
 }: TelaCadastroProdutosProps) {
   const [form, setForm] = useState<NovoProdutoInput>(VALOR_INICIAL);
-  const [validadeTocada, setValidadeTocada] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
   /**
@@ -81,26 +80,23 @@ export function TelaCadastroProdutos({
   const [produtoAExcluir, setProdutoAExcluir] = useState<Produto | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
-  // Ao trocar a categoria, sugere o prazo de validade típico dela — só se o
-  // operador ainda não tiver ajustado esse campo manualmente (ex.: uma
-  // rosca dentro de "Pães e Roscas" precisa de um valor diferente do pão).
-  useEffect(() => {
-    if (!validadeTocada) {
-      setForm((atual) => ({ ...atual, prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[atual.categoria] ?? null }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.categoria]);
 
   async function handleSalvar(e: React.FormEvent) {
     e.preventDefault();
     if (!form.nome.trim() || !form.categoria) return;
     setSalvando(true);
     try {
-      await onCriarProduto(form);
+      await onCriarProduto({
+        ...form,
+        // Padrões que saíram do formulário: produção é sempre em unidades
+        // (decisão operacional), e o prazo vem da categoria escolhida.
+        unidadeProducao: "un",
+        ativoNaProducao: true,
+        prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[form.categoria] ?? null,
+      });
       // Só limpa o formulário quando a gravação deu certo — senão o
       // operador perderia o que digitou junto com o erro.
       setForm(VALOR_INICIAL);
-      setValidadeTocada(false);
     } catch {
       // A mensagem já é exibida pelo aviso global (ver App.tsx). Aqui só
       // interessa não deixar o botão preso em "Salvando..." — foi
@@ -200,66 +196,27 @@ export function TelaCadastroProdutos({
               ))}
             </select>
           </label>
-          <div className="linha-campos">
-            <label>
-              Unidade de produção
-              <select
-                value={form.unidadeProducao}
-                onChange={(e) => setForm({ ...form, unidadeProducao: e.target.value as UnidadeProducao })}
-              >
-                <option value="un">un</option>
-                <option value="kg">kg</option>
-                <option value="l">l</option>
-              </select>
-            </label>
-          </div>
-
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={form.ativoNaProducao}
-              onChange={(e) => setForm({ ...form, ativoNaProducao: e.target.checked })}
-            />
-            Ativo no Cronograma de Produção
-          </label>
-
           <label>
-            Prazo de validade (dias)
+            Peso médio por unidade (gramas) — opcional
             <input
               type="number"
-              min={1}
-              value={form.prazoValidadeDias ?? ""}
-              onChange={(e) => {
-                setValidadeTocada(true);
-                setForm({ ...form, prazoValidadeDias: Number(e.target.value) || undefined });
-              }}
+              min={0}
+              value={form.pesoMedioUnitarioGramas ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, pesoMedioUnitarioGramas: Number(e.target.value) || undefined })
+              }
             />
             <span className="nota-rodape">
-              Sugerido pela categoria, mas ajuste por produto — ex.: "Pães e Roscas" sugere validade de
-              pão (1 dia); uma rosca da mesma categoria costuma durar mais, digite 2. Usado na tela de
-              Perdas para saber de qual dia de produção uma perda pode ter vindo, já que a etiqueta não
-              traz data de fabricação isolada.
+              Pode deixar em branco: o app aprende esse peso sozinho no primeiro lançamento de perda
+              daquele produto, e vai refinando a cada lançamento seguinte.
             </span>
           </label>
 
-          {form.unidadeProducao === "un" && (
-            <label>
-              Peso médio por unidade (gramas) — opcional
-              <input
-                type="number"
-                min={0}
-                value={form.pesoMedioUnitarioGramas ?? ""}
-                onChange={(e) =>
-                  setForm({ ...form, pesoMedioUnitarioGramas: Number(e.target.value) || undefined })
-                }
-              />
-              <span className="nota-rodape">
-                Usado como sugestão pré-preenchida na tela de Perdas, para calcular quantas unidades uma
-                perda pesada na balança representa. É atualizado automaticamente a cada perda lançada — não
-                precisa manter manualmente, só cadastre um valor inicial.
-              </span>
-            </label>
-          )}
+          <p className="nota-rodape">
+            Unidade e prazo de validade saíram deste formulário (ago/2026) para o cadastro ser de três
+            campos. Produção é sempre em unidades, e o prazo entra sozinho pela categoria — os dois
+            ficam editáveis na linha do produto, no Catálogo, quando algum caso fugir da regra.
+          </p>
 
           <button type="submit" className="primario" disabled={salvando}>
             {salvando ? "Salvando..." : "Salvar produto"}

@@ -19,7 +19,7 @@ import type { RegistroPerda } from "../types/perda";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import { TelaRegistroPerda } from "./TelaRegistroPerda";
 import { calcularCandidatosPerda } from "../lib/janelaValidade";
-import { ConfirmarProducao } from "./ConfirmarProducao";
+import { LOJA_MATRIZ, nomeDaLoja, type Loja } from "../lib/lojas";
 import { IconeLixeira } from "./Icones";
 import { dataDeHojeIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 
@@ -28,12 +28,11 @@ interface TelaPerdasProps {
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   operador: string;
-  /** Confirma o que realmente saiu do forno no plano de hoje (ver ConfirmarProducao.tsx). */
-  onConfirmarProducao: (planoId: string, codigosNaoProduzidos: number[]) => Promise<void>;
+  /** Loja desta sessão — define o que a tela mostra e o que permite. */
+  loja: Loja;
   /**
-   * Só a matriz produz, então só ela confirma o que saiu do forno e só
-   * ela anula lançamento errado. Na filial esses blocos não aparecem —
-   * ver src/lib/lojas.ts e firestore.rules.
+   * Só a matriz anula lançamento errado (ver firestore.rules) e só ela
+   * enxerga as perdas das outras lojas.
    */
   ehMatriz: boolean;
   onAnularPerda: (perdaId: string, motivo: string) => Promise<void>;
@@ -53,8 +52,8 @@ export function TelaPerdas({
   produtos,
   planos,
   perdas,
+  loja,
   operador,
-  onConfirmarProducao,
   ehMatriz,
   onAnularPerda,
   onRegistrarPerda,
@@ -67,32 +66,54 @@ export function TelaPerdas({
   const hoje = dataDeHojeIso();
   const diaDaSemana = diaDaSemanaDeData(hoje);
 
-  const candidatos = useMemo(() => calcularCandidatosPerda(hoje, produtos, planos), [hoje, produtos, planos]);
+  /**
+   * Na MATRIZ a perda é atribuída a uma fornada: ela produziu, então dá
+   * para saber de qual lote veio (ver src/lib/janelaValidade.ts).
+   *
+   * Na FILIAL não se amarra nem à produção do dia nem à validade
+   * (ago/2026): a loja recebe mercadoria da matriz, tem no balcão estoque
+   * de dias diferentes, e o que ela precisa é registrar o que jogou fora.
+   * Qualquer produto ativo do catálogo pode receber perda ali.
+   */
+  const candidatos = useMemo(() => {
+    if (ehMatriz) return calcularCandidatosPerda(hoje, produtos, planos);
+    return produtos
+      .filter((p) => p.ativoNaProducao)
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+      .map((produto) => ({ produto, origens: [], ultimaProducao: "" }));
+  }, [hoje, produtos, planos, ehMatriz]);
 
-  // Plano de HOJE já confirmado — é o que pode ter a produção real conferida.
-  const planoDeHoje = useMemo(
-    () => planos.find((p) => p.data === hoje && p.status === "confirmado"),
-    [planos, hoje]
+
+
+  /**
+   * A filial vê SÓ as perdas lançadas nela (ago/2026). Misturar o
+   * desperdício das três lojas na tela de uma filial não ajuda quem
+   * trabalha lá e expõe número de outra unidade sem necessidade. A matriz
+   * vê tudo, com a loja de origem em cada linha.
+   *
+   * Registro anterior às filiais não tem lojaId — conta como matriz.
+   */
+  const perdasDeHoje = useMemo(
+    () =>
+      perdas.filter(
+        (p) => p.data === hoje && (ehMatriz || (p.lojaId ?? LOJA_MATRIZ.id) === loja.id)
+      ),
+    [perdas, hoje, ehMatriz, loja.id]
   );
-
-  const blocoConfirmacao = ehMatriz && planoDeHoje ? (
-    <ConfirmarProducao
-      plano={planoDeHoje}
-      produtos={produtos}
-      operador={operador}
-      onConfirmar={(codigos) => onConfirmarProducao(planoDeHoje.id, codigos)}
-    />
-  ) : null;
-
-  const perdasDeHoje = useMemo(() => perdas.filter((p) => p.data === hoje), [perdas, hoje]);
 
   const candidatoSelecionado = candidatos.find((c) => c.produto.codigoPdv === codigoSelecionado);
 
-  if (candidatos.length === 0) {
-    return (
-      <div className="tela">
-        <h2>Registro de Perdas</h2>
-        {blocoConfirmacao}
+  return (
+    <div className="tela">
+      <h2>Registro de Perdas</h2>
+      <p className="subtitulo">{rotuloDoDia(diaDaSemana)}, {hoje}</p>
+
+
+
+      {candidatos.length === 0 ? (
+        /* Sem fornada disponível ainda não pode esconder o resto da tela:
+           o histórico do dia e a anulação de lançamento errado precisam
+           continuar acessíveis (defeito encontrado em teste, ago/2026). */
         <p className="callout-inline">
           Ainda não há nenhuma fornada confirmada no app, então não existe produção à qual atribuir
           uma perda. Isso não tem relação com prazo de validade — assim que existir um cronograma
@@ -104,18 +125,7 @@ export function TelaPerdas({
           <strong>Cronograma</strong> → <strong>planejar para outra data</strong>, escolha hoje,
           registre o que foi produzido e confirme. Os itens passam a aparecer aqui.
         </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="tela">
-      <h2>Registro de Perdas</h2>
-      <p className="subtitulo">{rotuloDoDia(diaDaSemana)}, {hoje}</p>
-
-      {blocoConfirmacao}
-
-      {!candidatoSelecionado ? (
+      ) : !candidatoSelecionado ? (
         <div>
           <p>Selecione o produto para lançar a perda:</p>
           <div className="grade-produtos">
@@ -157,7 +167,7 @@ export function TelaPerdas({
         </div>
       )}
 
-      <h3>Perdas lançadas hoje</h3>
+      <h3>{ehMatriz ? "Perdas lançadas hoje — todas as lojas" : "Perdas lançadas hoje"}</h3>
       <div className="tabela-scroll">
         <table className="tabela-simples">
           <thead>
@@ -166,6 +176,7 @@ export function TelaPerdas({
               <th>Peso perdido</th>
               <th>Peso unitário usado</th>
               <th>Unidades (est.)</th>
+              {ehMatriz && <th>Loja</th>}
               <th>Motivo</th>
               {ehMatriz && <th aria-label="Anular" />}
             </tr>
@@ -173,7 +184,7 @@ export function TelaPerdas({
           <tbody>
             {perdasDeHoje.length === 0 && (
               <tr>
-                <td colSpan={ehMatriz ? 6 : 5} className="vazio">
+                <td colSpan={ehMatriz ? 7 : 5} className="vazio">
                   Nenhuma perda registrada ainda hoje.
                 </td>
               </tr>
@@ -184,6 +195,7 @@ export function TelaPerdas({
                 <td>{p.quantidadeQuilos} kg</td>
                 <td>{p.pesoUnitarioGramasInformado} g</td>
                 <td>{p.quantidadeUnidadesEstimada}</td>
+                {ehMatriz && <td>{nomeDaLoja(p.lojaId ?? LOJA_MATRIZ.id)}</td>}
                 <td>{p.cancelada ? "anulada" : p.motivo}</td>
                 {ehMatriz && (
                   <td>

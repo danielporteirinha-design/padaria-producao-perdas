@@ -74,7 +74,7 @@ export function AvisoPerdaPendente({
         <strong>Nenhuma perda lançada hoje</strong>
         <span>
           Fornada queimada ou fora do padrão deve ser pesada e lançada no mesmo dia — deixar para
-          amanhã atrasa a conferência. Aproveite para confirmar o que já saiu do forno até agora.
+          amanhã atrasa a conferência.
         </span>
       </div>
       <div className="acoes-aviso-perda">

@@ -43,8 +43,10 @@ inicial do documento de arquitetura:
 | Limpar sessão | Botão "limpar esta sessão" por acordeão, com confirmação em dois toques. **Nunca existe um "limpar tudo" global** — um toque errado apagaria o cronograma inteiro montado no fim do expediente, sem desfazer |
 | Assinatura da fita | "Montado por" sai no rodapé de **cada sessão**, não uma vez só no fim: a fita é cortada e cada pedaço vai para o quadro de um setor — pedaço sem nome é pedaço sem responsável |
 | Perda no mesmo dia | Fornada queimada ou fora do padrão deve ser pesada e lançada no dia, nunca no dia seguinte. O app sempre aceitou isso; o que faltava era chamar o operador — ver "Perda no mesmo dia" abaixo |
-| Produção realizada | No fim do expediente, junto com as perdas, confirma-se o que REALMENTE saiu do forno. Marcação binária ("não saiu"), porque é assim que acontece na prática — não sai em quantidade menor. O plano nunca é reescrito |
+| Produção realizada | No fim do expediente, na tela de **Cronograma**, confirma-se o que REALMENTE saiu do forno — comparando com o total PEDIDO (matriz + filiais), que é o que revela o gargalo. Marcação binária ("não saiu"), porque é assim que acontece na prática — não sai em quantidade menor. O plano nunca é reescrito |
 | Abas por perfil | A filial vê **Pedido e Perdas**. Catálogo, Cronograma e Análises são da matriz — as regras do Firestore já negariam gravação da filial neles, e mostrar as abas só ofereceria caminhos que terminam em "sem permissão". |
+| Escopo das perdas | A filial vê e lança só as perdas dela, sobre **qualquer produto ativo** — ela recebe da matriz, tem estoque de dias diferentes no balcão e não produz. A matriz vê as três lojas, com a origem em cada linha, e continua atribuindo a perda a uma fornada |
+| Cadastro de produto | Três campos: nome, categoria (obrigatória) e peso médio (opcional). Unidade é sempre "un" e o prazo vem da categoria — ambos editáveis depois, na linha do Catálogo |
 | Anular perda | Lançamento errado (1000 em vez de 10) é **anulado pela matriz, nunca apagado** — o registro fica no histórico marcado, com quem anulou e por quê, e sai de todos os cálculos |
 | Excluir produto | Exige a **senha da loja** (revalidada no Firebase), não só um segundo clique — apaga catálogo compartilhado pelas três lojas |
 | Quem pode receber perda | Qualquer produto que já tenha sido produzido em **alguma** ocasião. Produto nunca produzido não entra (não existe fornada da qual pudesse ter vindo) |
@@ -683,6 +685,36 @@ Consequência prática no código: `listarPedidos(lojaId?)` recebe a loja
 quando quem chama é uma filial. Não é otimização — uma consulta sem esse
 filtro seria **recusada inteira** pelas regras.
 
+### Onde cada coisa mora, e por quê (ago/2026)
+
+Dois ajustes vieram de uso real e vale registrar o raciocínio, porque
+"juntar tudo numa tela só" parece economia e não é:
+
+**Confirmação de produção saiu de Perdas e foi para Cronograma.** A
+observação foi do próprio dono do negócio: confirmar o que saiu do forno
+e lançar perda são atividades diferentes, e a mesma janela confundia. A
+confirmação fecha o ciclo do PLANO — o lugar dela é onde o plano vive.
+
+O momento continua sendo o fim do expediente, de uma vez. A razão não é
+comodidade: é aí que dá para comparar tudo o que foi **pedido** (matriz +
+filiais) com o que realmente **saiu**, e ver na hora onde o gargalo
+travou a produção. Por isso a tela de confirmação mostra o total
+consolidado, não só a quantidade da matriz.
+
+**A filial lança perda sobre qualquer produto ativo.** Na matriz a perda
+é atribuída a uma fornada, porque ela produziu e sabe de qual lote veio.
+Na filial isso não se sustenta: ela recebe mercadoria da matriz, tem no
+balcão estoque de dias diferentes, e o que precisa é registrar o que
+jogou fora. Amarrar à produção do dia ou à validade só travaria o
+lançamento.
+
+**Defeito encontrado em teste, corrigido junto:** a tela de Perdas
+retornava cedo quando não havia fornada disponível, escondendo o
+histórico do dia inteiro — inclusive a anulação de lançamento errado. Num
+dia sem cronograma confirmado, a matriz ficava sem conseguir corrigir uma
+perda digitada errada. O aviso virou um bloco dentro da tela, e o
+histórico agora aparece sempre.
+
 ## Estrutura
 
 ```
@@ -749,7 +781,7 @@ producao-perdas/
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (94 asserções)
+npm run verificar   # roda scripts/verificar_logica.ts (99 asserções)
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```

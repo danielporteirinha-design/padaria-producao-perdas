@@ -22,13 +22,14 @@ import { useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { ItemPlanoProducao, PlanoDeProducaoDiario, SessaoProducao } from "../types/producao";
 import type { RegistroPerda } from "../types/perda";
-import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
+import { dataDeHojeIso, dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 import { gerarId } from "../lib/id";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProducao } from "../lib/sugestaoProducao";
 import { ExportarFita } from "./ExportarFita";
 import { PainelPedidosFiliais } from "./PainelPedidosFiliais";
+import { ConfirmarProducao } from "./ConfirmarProducao";
 import type { PedidoFilial } from "../types/pedido";
 import { FILIAIS, LOJA_MATRIZ, nomeDaLoja } from "../lib/lojas";
 import { consolidarProducao, itensParaLoja, type ItemConsolidado } from "../lib/consolidacao";
@@ -38,6 +39,8 @@ interface TelaCronogramaProps {
   produtos: Produto[];
   /** Pedidos das filiais — entram no total a produzir (ver consolidacao.ts). */
   pedidos: PedidoFilial[];
+  /** Confirma, no fim do expediente, o que realmente saiu do forno. */
+  onConfirmarProducao: (planoId: string, codigosNaoProduzidos: number[]) => Promise<void>;
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   operador: string;
@@ -60,6 +63,7 @@ const GRUPOS = CATEGORIAS_PRODUCAO.map((c) => c.chave);
 export function TelaCronograma({
   produtos,
   pedidos,
+  onConfirmarProducao,
   planos,
   perdas,
   operador,
@@ -90,6 +94,29 @@ export function TelaCronograma({
   const dataFormatada = `${rotuloDoDia(diaDaSemana)}, ${formatarDataBr(dataAlvo)}`;
 
   const pedidosDoDia = useMemo(() => pedidos.filter((p) => p.data === dataAlvo), [pedidos, dataAlvo]);
+
+  /**
+   * A confirmação do que saiu do forno é sobre a produção de HOJE, não
+   * sobre o cronograma que está sendo montado (que é de amanhã). Por isso
+   * o plano usado aqui é o do dia corrente, independente da data que o
+   * operador estiver planejando na tela.
+   */
+  const hojeIso = dataDeHojeIso();
+  const planoDeHoje = useMemo(
+    () => planos.find((p) => p.data === hojeIso && p.status === "confirmado"),
+    [planos, hojeIso]
+  );
+
+  /** Total pedido de cada item hoje (matriz + filiais) — é o que se confere. */
+  const totaisPedidosDeHoje = useMemo(() => {
+    if (!planoDeHoje) return undefined;
+    const consolidado = consolidarProducao(
+      planoDeHoje.sessoes.flatMap((sessao) => sessao.itens),
+      pedidos.filter((p) => p.data === hojeIso),
+      LOJA_MATRIZ.id
+    );
+    return new Map(consolidado.map((c) => [c.codigoPdv, c.totalUnidades]));
+  }, [planoDeHoje, pedidos, hojeIso]);
 
   /** Um documento de produção + um romaneio por filial que enviou pedido. */
   const documentos = useMemo(() => {
@@ -400,6 +427,16 @@ export function TelaCronograma({
         <IconeCalendario tamanho={20} />
         <span>Produção de {dataFormatada}</span>
       </p>
+
+      {planoDeHoje && (
+        <ConfirmarProducao
+          plano={planoDeHoje}
+          produtos={produtos}
+          operador={operador}
+          totaisPedidos={totaisPedidosDeHoje}
+          onConfirmar={(codigos) => onConfirmarProducao(planoDeHoje.id, codigos)}
+        />
+      )}
 
       <PainelPedidosFiliais pedidos={pedidos} data={dataAlvo} />
 

@@ -106,6 +106,11 @@ export function TelaLogin() {
         O acesso fica gravado neste aparelho — não é preciso entrar toda vez. Só o primeiro acesso
         de cada celular precisa de internet.
       </p>
+
+      {/* A versão também aparece AQUI, e não só depois do login (ago/2026):
+          esta é a primeira tela de qualquer aparelho, e é onde se confere
+          se a atualização entrou sem precisar acessar uma loja. */}
+      <p className="rodape-versao">versão de {__VERSAO_APP__}</p>
     </div>
   );
 }
