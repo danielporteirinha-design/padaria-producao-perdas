@@ -19,7 +19,7 @@
 import type { Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import { itensProduzidos } from "./producaoRealizada";
-import type { RegistroPerda } from "../types/perda";
+import { perdaEstaValida, type RegistroPerda } from "../types/perda";
 import { CATEGORIAS_PRODUCAO } from "./categorias";
 import { diasEntreDatas } from "./data";
 
@@ -95,6 +95,7 @@ export function construirResumoParaInsights(
   const perdidoTotalPorCodigo = new Map<number, number>();
   const perdidoPorSobraPorCodigo = new Map<number, number>();
   for (const perda of perdas) {
+    if (!perdaEstaValida(perda)) continue; // anulada pela matriz
     if (!codigosRelevantes.has(perda.codigoPdv)) continue;
     const dias = diasEntreDatas(perda.data, dataReferencia);
     if (dias < 0 || dias > janelaDias) continue;

@@ -20,6 +20,7 @@ import type { PlanoDeProducaoDiario } from "../types/producao";
 import { TelaRegistroPerda } from "./TelaRegistroPerda";
 import { calcularCandidatosPerda } from "../lib/janelaValidade";
 import { ConfirmarProducao } from "./ConfirmarProducao";
+import { IconeLixeira } from "./Icones";
 import { dataDeHojeIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 
 interface TelaPerdasProps {
@@ -29,6 +30,9 @@ interface TelaPerdasProps {
   operador: string;
   /** Confirma o que realmente saiu do forno no plano de hoje (ver ConfirmarProducao.tsx). */
   onConfirmarProducao: (planoId: string, codigosNaoProduzidos: number[]) => Promise<void>;
+  /** Só a matriz anula lançamento errado — ver firestore.rules. */
+  podeAnular: boolean;
+  onAnularPerda: (perdaId: string, motivo: string) => Promise<void>;
   onRegistrarPerda: (payload: {
     codigoPdv: number;
     planoDeProducaoId: string;
@@ -47,8 +51,13 @@ export function TelaPerdas({
   perdas,
   operador,
   onConfirmarProducao,
+  podeAnular,
+  onAnularPerda,
   onRegistrarPerda,
 }: TelaPerdasProps) {
+  const [perdaAAnular, setPerdaAAnular] = useState<RegistroPerda | null>(null);
+  const [motivoAnulacao, setMotivoAnulacao] = useState("");
+  const [anulando, setAnulando] = useState(false);
   const [codigoSelecionado, setCodigoSelecionado] = useState<number | "">("");
 
   const hoje = dataDeHojeIso();
@@ -154,26 +163,100 @@ export function TelaPerdas({
               <th>Peso unitário usado</th>
               <th>Unidades (est.)</th>
               <th>Motivo</th>
+              {podeAnular && <th aria-label="Anular" />}
             </tr>
           </thead>
           <tbody>
             {perdasDeHoje.length === 0 && (
               <tr>
-                <td colSpan={5} className="vazio">Nenhuma perda registrada ainda hoje.</td>
+                <td colSpan={podeAnular ? 6 : 5} className="vazio">
+                  Nenhuma perda registrada ainda hoje.
+                </td>
               </tr>
             )}
             {perdasDeHoje.map((p) => (
-              <tr key={p.id}>
+              <tr key={p.id} className={p.cancelada ? "linha-anulada" : ""}>
                 <td>{produtos.find((pr) => pr.codigoPdv === p.codigoPdv)?.nome ?? p.codigoPdv}</td>
                 <td>{p.quantidadeQuilos} kg</td>
                 <td>{p.pesoUnitarioGramasInformado} g</td>
                 <td>{p.quantidadeUnidadesEstimada}</td>
-                <td>{p.motivo}</td>
+                <td>{p.cancelada ? "anulada" : p.motivo}</td>
+                {podeAnular && (
+                  <td>
+                    {!p.cancelada && (
+                      <button
+                        type="button"
+                        className="botao-limpar-sessao"
+                        title="Anular este lançamento"
+                        aria-label="Anular este lançamento"
+                        onClick={() => {
+                          setPerdaAAnular(p);
+                          setMotivoAnulacao("");
+                        }}
+                      >
+                        <IconeLixeira tamanho={16} />
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* Anular NÃO apaga o registro: marca. Ver o comentário em
+          RegistroPerda.cancelada sobre por que o histórico é preservado. */}
+      {perdaAAnular && (
+        <div className="fundo-modal" role="dialog" aria-modal="true">
+          <div className="caixa-modal">
+            <h3>Anular lançamento</h3>
+            <p className="nota-rodape">
+              {produtos.find((pr) => pr.codigoPdv === perdaAAnular.codigoPdv)?.nome} —{" "}
+              {perdaAAnular.quantidadeQuilos} kg ({perdaAAnular.quantidadeUnidadesEstimada} un).
+              O lançamento deixa de contar nas análises, mas continua no histórico marcado como
+              anulado, com o seu nome e a data.
+            </p>
+            <label>
+              Motivo da anulação
+              <input
+                value={motivoAnulacao}
+                onChange={(e) => setMotivoAnulacao(e.target.value)}
+                placeholder="Ex.: quantidade digitada errada"
+                autoFocus
+              />
+            </label>
+            <div className="acoes">
+              <button
+                type="button"
+                className="secundario"
+                disabled={anulando}
+                onClick={() => setPerdaAAnular(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="perigo"
+                disabled={anulando || motivoAnulacao.trim() === ""}
+                onClick={async () => {
+                  setAnulando(true);
+                  try {
+                    await onAnularPerda(perdaAAnular.id, motivoAnulacao.trim());
+                    setPerdaAAnular(null);
+                  } catch {
+                    // Mensagem vem do aviso global (ver App.tsx).
+                  } finally {
+                    setAnulando(false);
+                  }
+                }}
+              >
+                {anulando ? "Anulando..." : "Anular lançamento"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

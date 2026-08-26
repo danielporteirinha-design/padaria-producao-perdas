@@ -23,7 +23,41 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+/**
+ * Carimbo de versão, montado no momento do build e embutido no bundle.
+ *
+ * Serve a um problema concreto: o app instalado se atualiza sozinho em
+ * segundo plano, então não havia como olhar a tela e saber se a versão
+ * nova já entrou — nem para o operador ("já atualizou?"), nem para mim
+ * quando ele relata um defeito ("qual código você está rodando?").
+ *
+ * A data é formatada no fuso de São Paulo de propósito: o build roda no
+ * servidor do Vercel, em UTC, e um horário três horas adiantado no
+ * rodapé só geraria dúvida.
+ *
+ * O hash curto do commit vem das variáveis que o Vercel injeta no build;
+ * rodando localmente ele não existe e o carimbo fica só com a data.
+ */
+function carimboDeVersao(): string {
+  const agora = new Date()
+    .toLocaleString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    // toLocaleString devolve "26/08, 00:37"; a vírgula sobra numa linha
+    // que já começa com "versão de".
+    .replace(",", "");
+  const commit = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7);
+  return commit ? `${agora} · ${commit}` : agora;
+}
+
 export default defineConfig({
+  define: {
+    __VERSAO_APP__: JSON.stringify(carimboDeVersao()),
+  },
   build: {
     rollupOptions: {
       output: {

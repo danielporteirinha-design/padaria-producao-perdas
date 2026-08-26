@@ -28,6 +28,7 @@ import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProducao } from "../lib/sugestaoProducao";
 import { ExportarFita } from "./ExportarFita";
+import { IconeCalendario, IconeLixeira, IconeSeta } from "./Icones";
 
 interface TelaCronogramaProps {
   produtos: Produto[];
@@ -299,8 +300,13 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
   // ------------------------------------------------------------------
   return (
     <div className="tela">
-      <h2>Cronograma de Produção</h2>
-      <p className="subtitulo destaque-data">Produção de {dataFormatada}</p>
+      {/* O título "Cronograma de Produção" saiu daqui (ago/2026): a aba já
+          diz onde o operador está, e repetir isso empurrava a informação
+          que importa — a DATA da produção — para baixo. */}
+      <p className="destaque-data">
+        <IconeCalendario tamanho={20} />
+        <span>Produção de {dataFormatada}</span>
+      </p>
 
       {planoExistente && (
         <p className="callout-inline">
@@ -340,18 +346,53 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
         const mensagemIA = mensagemSugestao[chave] ?? "";
 
         return (
-          <div key={chave} className="acordeao-sessao">
-            <button
-              type="button"
-              className="cabecalho-sessao"
-              aria-expanded={aberto}
-              onClick={() => setExpandido((atual) => ({ ...atual, [chave]: !atual[chave] }))}
-            >
-              <span>{rotulo}</span>
-              <span className="contagem-itens">
-                {itensDoGrupo.length > 0 ? `${itensDoGrupo.length} itens` : ""} {aberto ? "▲" : "▼"}
-              </span>
-            </button>
+          <div key={chave} className={`acordeao-sessao ${aberto ? "aberta" : ""}`}>
+            {/* O cabeçalho deixou de ser um botão único (ago/2026) para
+                caber "limpar" ao lado da contagem, longe do "remover"
+                de cada produto — os dois botões vizinhos estavam sendo
+                confundidos. Botão não pode aninhar botão, daí a div. */}
+            <div className="cabecalho-sessao">
+              <button
+                type="button"
+                className="abrir-sessao"
+                aria-expanded={aberto}
+                onClick={() => setExpandido((atual) => ({ ...atual, [chave]: !atual[chave] }))}
+              >
+                <span className="nome-sessao">{rotulo}</span>
+                <span className="contagem-itens">
+                  {itensDoGrupo.length > 0
+                    ? `${itensDoGrupo.length} ${itensDoGrupo.length === 1 ? "item" : "itens"}`
+                    : ""}
+                </span>
+                <IconeSeta className="seta-sessao" />
+              </button>
+
+              {itensDoGrupo.length > 0 &&
+                (sessaoAConfirmarLimpeza === chave ? (
+                  <span className="confirmar-limpeza">
+                    <button type="button" className="perigo" onClick={() => limparSessao(chave)}>
+                      Apagar {itensDoGrupo.length}?
+                    </button>
+                    <button
+                      type="button"
+                      className="link"
+                      onClick={() => setSessaoAConfirmarLimpeza(null)}
+                    >
+                      não
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="botao-limpar-sessao"
+                    title={`Limpar ${rotulo}`}
+                    aria-label={`Limpar os itens de ${rotulo}`}
+                    onClick={() => setSessaoAConfirmarLimpeza(chave)}
+                  >
+                    <IconeLixeira tamanho={17} />
+                  </button>
+                ))}
+            </div>
 
             {aberto && (
               <div className="corpo-sessao">
@@ -364,29 +405,6 @@ export function TelaCronograma({ produtos, planos, perdas, operador, onSalvarPla
                   >
                     {statusIA === "carregando" ? "Gerando sugestão..." : "✨ Sugerir quantidades com IA"}
                   </button>
-                  {itensDoGrupo.length > 0 &&
-                    (sessaoAConfirmarLimpeza === chave ? (
-                      <span className="confirmar-limpeza">
-                        <button type="button" className="perigo" onClick={() => limparSessao(chave)}>
-                          Apagar {itensDoGrupo.length} {itensDoGrupo.length === 1 ? "item" : "itens"}?
-                        </button>
-                        <button
-                          type="button"
-                          className="link"
-                          onClick={() => setSessaoAConfirmarLimpeza(null)}
-                        >
-                          cancelar
-                        </button>
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="link"
-                        onClick={() => setSessaoAConfirmarLimpeza(chave)}
-                      >
-                        limpar esta sessão
-                      </button>
-                    ))}
                 </div>
                 {mensagemIA && (
                   <p className={statusIA === "erro" ? "erro-conversao" : "nota-rodape"}>{mensagemIA}</p>

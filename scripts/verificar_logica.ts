@@ -33,7 +33,7 @@ import {
 } from "../src/lib/gerarImagemLista";
 import type { Produto } from "../src/types/produto";
 import type { PlanoDeProducaoDiario } from "../src/types/producao";
-import type { RegistroPerda } from "../src/types/perda";
+import { perdaEstaValida, type RegistroPerda } from "../src/types/perda";
 
 let falhas = 0;
 function afirmar(condicao: boolean, descricao: string) {
@@ -784,6 +784,82 @@ const perdas: RegistroPerda[] = [
     "erro sem código nenhum também é tratado"
   );
   afirmar(mensagemDeFalhaAoSalvar(undefined).length > 20, "erro nulo não quebra a tradução");
+}
+
+// ---------------------------------------------------------------
+// Caso 21: anulação de lançamento de perda (ago/2026). Pedido do dono do
+// negócio: um funcionário pode digitar 1000 onde eram 10, e um erro
+// desses sozinho destrói a taxa de perda do mês. A correção é ANULAÇÃO,
+// não exclusão — o registro fica no histórico, marcado, e sai de todos
+// os cálculos.
+// ---------------------------------------------------------------
+{
+  const planoDoDia: PlanoDeProducaoDiario = {
+    id: "plano-anul",
+    data: "2026-08-20",
+    diaDaSemana: "quinta",
+    status: "confirmado",
+    criadoPor: "teste",
+    criadoEm: "2026-08-19T18:00:00Z",
+    sessoes: [{ id: "s1", categoria: "PÃES E ROSCAS", itens: [{ codigoPdv: 112, quantidadeUnidades: 200 }] }],
+  };
+  const base = {
+    codigoPdv: 112,
+    planoDeProducaoId: "plano-anul",
+    data: "2026-08-20",
+    diaDaSemana: "quinta" as const,
+    pesoUnitarioGramasInformado: 50,
+    motivo: "sobra_nao_vendida" as const,
+    registradoPor: "teste",
+    registradoEm: "2026-08-20T20:00:00Z",
+  };
+  const perdaCerta: RegistroPerda = {
+    ...base, id: "ok", quantidadeQuilos: 1, quantidadeUnidadesEstimada: 20,
+  };
+  // O erro de digitação clássico: 100kg no lugar de 1kg.
+  const perdaErrada: RegistroPerda = {
+    ...base, id: "erro", quantidadeQuilos: 100, quantidadeUnidadesEstimada: 2000,
+  };
+
+  const comErro = calcularTaxaPerdaPorProduto([paoFrances], [planoDoDia], [perdaCerta, perdaErrada]);
+  afirmar(
+    comErro[0].perdaPercentual > 100,
+    `sem anular, o erro de digitação estoura a taxa (obtido: ${comErro[0].perdaPercentual}%)`
+  );
+
+  const anulada: RegistroPerda = {
+    ...perdaErrada,
+    cancelada: true,
+    canceladaPor: "Daniel",
+    canceladaEm: "2026-08-20T21:00:00Z",
+    motivoCancelamento: "quantidade digitada errada",
+  };
+  const corrigido = calcularTaxaPerdaPorProduto([paoFrances], [planoDoDia], [perdaCerta, anulada]);
+  afirmar(
+    corrigido[0].perdaPercentual === 10,
+    `anulando, a taxa volta ao valor real (esperado 10%, obtido: ${corrigido[0].perdaPercentual}%)`
+  );
+  afirmar(
+    corrigido[0].totalPerdido === 20,
+    `unidades perdidas ignoram o registro anulado (obtido: ${corrigido[0].totalPerdido})`
+  );
+  afirmar(
+    corrigido[0].totalPerdidoQuilos === 1,
+    `os quilos também ignoram o anulado (obtido: ${corrigido[0].totalPerdidoQuilos})`
+  );
+
+  afirmar(perdaEstaValida(perdaCerta), "lançamento normal é válido");
+  afirmar(!perdaEstaValida(anulada), "lançamento anulado não é válido");
+  // Registro antigo, anterior ao campo, nunca pode ser lido como anulado.
+  afirmar(perdaEstaValida({ ...perdaCerta, cancelada: undefined }), "registro sem o campo continua valendo");
+
+  // Picos por dia da semana também precisam ignorar o anulado, senão a
+  // análise de "qual dia mais desperdiça" apontaria o dia errado.
+  const picos = identificarPicosDePerda([paoFrances], [planoDoDia], [perdaCerta, anulada], false);
+  afirmar(
+    picos[0].perdaPercentualMedia === 10,
+    `picos de perda ignoram o anulado (obtido: ${picos[0].perdaPercentualMedia}%)`
+  );
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

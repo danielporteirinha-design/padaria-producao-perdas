@@ -114,6 +114,24 @@ export class RepositorioLocalStorage implements Repositorio {
     escrever(CHAVE_PERDAS, [...perdas, registro]);
     return registro;
   }
+
+  async cancelarPerda(perdaId: string, canceladaPor: string, motivo: string): Promise<void> {
+    const perdas = await this.listarPerdas();
+    escrever(
+      CHAVE_PERDAS,
+      perdas.map((p) =>
+        p.id === perdaId
+          ? {
+              ...p,
+              cancelada: true,
+              canceladaPor,
+              canceladaEm: new Date().toISOString(),
+              motivoCancelamento: motivo,
+            }
+          : p
+      )
+    );
+  }
 }
 
 // Reexportado para as telas poderem pré-visualizar o cálculo sem duplicar import.

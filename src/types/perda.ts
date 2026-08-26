@@ -58,6 +58,27 @@ export interface RegistroPerda {
    * uma loja só — a migração carimba MATRIZ neles.
    */
   lojaId?: string;
+
+  /**
+   * Lançamento anulado pela matriz (ago/2026). Um funcionário pode digitar
+   * 1000 onde eram 10, e um erro desses sozinho destrói a taxa de perda do
+   * mês — precisava haver correção.
+   *
+   * É ANULAÇÃO, não exclusão: o documento continua existindo, marcado.
+   * Perda é registro de desperdício, e apagar a linha esconderia que houve
+   * um erro de lançamento; assim fica registrado o que foi lançado, por
+   * quem foi anulado e quando. Todos os cálculos ignoram registros
+   * anulados (ver src/lib/metricas.ts).
+   */
+  cancelada?: boolean;
+  canceladaPor?: string;
+  canceladaEm?: string; // ISO 8601 datetime
+  motivoCancelamento?: string;
+}
+
+/** Registro que ainda vale para cálculo — anulado nunca entra em conta. */
+export function perdaEstaValida(perda: RegistroPerda): boolean {
+  return perda.cancelada !== true;
 }
 
 /** Payload de entrada da tela de Registro de Perdas (antes do cálculo de unidades). */

@@ -44,6 +44,9 @@ inicial do documento de arquitetura:
 | Assinatura da fita | "Montado por" sai no rodapé de **cada sessão**, não uma vez só no fim: a fita é cortada e cada pedaço vai para o quadro de um setor — pedaço sem nome é pedaço sem responsável |
 | Perda no mesmo dia | Fornada queimada ou fora do padrão deve ser pesada e lançada no dia, nunca no dia seguinte. O app sempre aceitou isso; o que faltava era chamar o operador — ver "Perda no mesmo dia" abaixo |
 | Produção realizada | No fim do expediente, junto com as perdas, confirma-se o que REALMENTE saiu do forno. Marcação binária ("não saiu"), porque é assim que acontece na prática — não sai em quantidade menor. O plano nunca é reescrito |
+| Abas por perfil | A filial vê **só Perdas**. Catálogo, Cronograma e Análises são da matriz — as regras do Firestore já negariam gravação da filial neles, e mostrar as abas só ofereceria caminhos que terminam em "sem permissão". A tela de Pedido da filial entra na Parte B |
+| Anular perda | Lançamento errado (1000 em vez de 10) é **anulado pela matriz, nunca apagado** — o registro fica no histórico marcado, com quem anulou e por quê, e sai de todos os cálculos |
+| Excluir produto | Exige a **senha da loja** (revalidada no Firebase), não só um segundo clique — apaga catálogo compartilhado pelas três lojas |
 | Quem pode receber perda | Qualquer produto que já tenha sido produzido em **alguma** ocasião. Produto nunca produzido não entra (não existe fornada da qual pudesse ter vindo) |
 | Instalação | App instalável (PWA): ícone próprio na tela de início do celular e na área de trabalho do PC — ver seção "Instalar como app" abaixo |
 | Insights de catálogo | Botão "✨ Gerar insights com IA" em Análises (Gemini) — aponta produtos sobrando (perda por sobra alta), produtos ativos parados há muito tempo, ou outros padrões úteis; sempre informativo, nunca altera nada sozinho |
@@ -538,6 +541,81 @@ documento gravado. Removidos do tipo `Produto`, do formulário, dos dois
 repositórios, da importação de planilha e de `data/produtos.seed.json`.
 Precificação é assunto do Sistema de Gestão, não deste app.
 
+### Anulação em vez de exclusão de perdas (ago/2026)
+
+Caso real levantado pelo dono do negócio: um funcionário lança 1000 onde
+eram 10 unidades. Um erro desses sozinho destrói a taxa de perda do mês —
+a verificação `Caso 21` mostra 1010% contra os 10% reais.
+
+A correção é **anulação, não exclusão**. O documento continua existindo
+com `cancelada: true`, `canceladaPor`, `canceladaEm` e
+`motivoCancelamento`. Apagar a linha esconderia que houve um erro de
+lançamento; assim fica registrado o que foi lançado e quem corrigiu.
+
+Todos os cálculos ignoram anulados: `metricas.ts` (taxa de perda e picos
+por dia da semana) e `insightsCatalogo.ts`. A trava está em
+`perdaEstaValida()`, em `src/types/perda.ts` — um cálculo novo que
+esqueça de chamá-la volta a contar o erro, então é por lá que se começa
+ao adicionar métrica.
+
+A regra do Firestore limita a alteração aos quatro campos de anulação:
+
+```
+allow update: if ehMatriz()
+  && request.resource.data.diff(resource.data).affectedKeys()
+       .hasOnly(['cancelada','canceladaPor','canceladaEm','motivoCancelamento'])
+  && request.resource.data.cancelada == true;
+allow delete: if false;
+```
+
+Sem a lista de chaves, uma correção legítima viraria porta para reescrever
+o peso, o motivo ou a data do lançamento original. `delete` continua
+proibido para todos, inclusive a matriz.
+
+### Senha para excluir produto (ago/2026)
+
+`ConfirmarComSenha.tsx` revalida a senha da própria loja no Firebase
+(`reauthenticateWithCredential`) antes de excluir produtos do catálogo.
+
+Não há um segundo segredo para criar e distribuir, e a checagem é real —
+uma senha guardada no código do app seria visível para qualquer um que
+abrisse o navegador e serviria só de teatro. O que isso protege de fato é
+o **celular destravado em cima do balcão**; contra quem sabe a senha da
+loja, a proteção é a regra do Firestore, que já impede a filial de mexer
+no catálogo.
+
+### Ajustes de leitura da tela de Cronograma (ago/2026)
+
+Todos vieram de uso real, e a razão de cada um importa mais que o ajuste:
+
+| Antes | Depois | Por quê |
+|---|---|---|
+| Título "Cronograma de Produção" | Removido | A aba já diz onde o operador está; o título empurrava a DATA para baixo |
+| Data em 16px | 19px + ícone de calendário | É o dado que, se lido errado, estraga a produção inteira. Continua no bege da paleta — presença sem alarme |
+| "limpar esta sessão" dentro do corpo | Ícone de lixeira no cabeçalho, ao lado da contagem | Estava vizinho do "remover" de cada produto e os dois se confundiam |
+| Nome da sessão sempre em 16px/bold | Recua para 13px em maiúsculas quando aberta | Aberto, quem interessa são os nomes dos produtos; um título grande disputa a atenção com a lista |
+| Setas ▲▼ em texto | `IconeSeta` girando 180° | Consistência com os demais ícones |
+
+`src/components/Icones.tsx` guarda os ícones em SVG inline — só traço,
+nunca preenchido, sempre em `currentColor`, para nunca introduzirem cor
+nova na paleta. São inline porque o app precisa abrir numa cozinha com
+wifi ruim e não pode depender de CDN de ícones (mesma razão pela qual não
+há fonte externa em `index.css`).
+
+### Carimbo de versão
+
+O rodapé mostra `<Loja> · versão de 26/08 03:40 · a1b2c3d`.
+
+Existe para responder duas perguntas que apareceram no uso real: para o
+operador, "a atualização já entrou neste celular?"; para quem dá suporte,
+"qual código está rodando aí?" — sem isso, um defeito relatado obrigava a
+adivinhar a versão.
+
+O valor é injetado no build (`define` em `vite.config.ts`), formatado no
+fuso de São Paulo (o build roda em UTC no Vercel, e três horas de
+diferença no rodapé só gerariam dúvida) e inclui o hash curto do commit
+quando `VERCEL_GIT_COMMIT_SHA` existe. Rodando local, fica só a data.
+
 ## Estrutura
 
 ```
@@ -568,6 +646,8 @@ producao-perdas/
       insightsCatalogo.ts                  # Cliente dos insights de catálogo por IA — monta resumo, chama /api
       importarProdutos.ts                  # Mapeamento planilha -> Produto (uso no navegador), já filtra fora de escopo
     components/
+      Icones.tsx               # Ícones SVG inline (só traço, currentColor) — sem CDN
+      ConfirmarComSenha.tsx     # Revalida a senha da loja antes de ação irreversível
       AvisoGlobal.tsx          # Faixa de retorno de gravação (sucesso/erro), acionada só pelo App
       TelaLogin.tsx            # Entrada por LOJA (não por funcionário) — escolhe a loja e digita a senha
       ImportarDadosLocais.tsx   # Migração única de localStorage para a nuvem
@@ -598,7 +678,7 @@ producao-perdas/
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (70 asserções)
+npm run verificar   # roda scripts/verificar_logica.ts (78 asserções)
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```

@@ -276,14 +276,24 @@ button.link {
 .tabela-scroll { overflow-x: auto; border-radius: var(--raio); }
 .tabela-scroll .tabela-simples { min-width: 420px; }
 
+/* A data é o dado mais importante desta tela — o operador monta o
+   cronograma de UM dia específico e confundir o dia estraga a produção
+   inteira. Cresceu de 16px para 19px e ganhou o ícone de calendário,
+   mas continua no bege da paleta, sem cor de alerta: presença sem grito. */
 .destaque-data {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 19px;
   font-weight: 700;
   color: var(--cor-texto);
   background: var(--cor-alerta-fundo);
-  display: inline-block;
-  padding: 6px 12px;
+  border: 1px solid var(--cor-borda);
+  padding: 12px 14px;
   border-radius: var(--raio);
+  margin: 0 0 16px;
 }
+.destaque-data svg { color: var(--cor-acento); flex-shrink: 0; }
 
 /* ---------------- Acordeão de sessões (Cronograma) ---------------- */
 .acordeao-sessao {
@@ -292,27 +302,81 @@ button.link {
   overflow: hidden;
   background: var(--cor-superficie);
 }
+/* O cabeçalho virou uma faixa com dois botões: abrir (ocupa o espaço
+   todo) e limpar (ícone, na ponta). Ficam longe do "remover" de cada
+   produto, que estava sendo confundido com "limpar a sessão". */
 .cabecalho-sessao {
-  width: 100%;
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px;
+}
+.abrir-sessao {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   align-items: center;
   gap: 10px;
   padding: 16px;
   background: none;
   border: none;
-  font-size: 16px;
-  font-weight: 700;
   text-align: left;
   cursor: pointer;
-  min-height: 52px;
+  color: var(--cor-texto);
 }
+.nome-sessao {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  /* A transição acompanha a mudança de peso quando a sessão abre. */
+  transition: font-size 0.15s ease, color 0.15s ease;
+}
+
+/* Sessão ABERTA: o nome recua. Ele é placa de sinalização enquanto está
+   fechado, mas depois de aberto quem interessa são os nomes dos produtos
+   — um título grande ali disputa a atenção com a lista e atrapalha a
+   leitura (ajuste pedido pelo dono do negócio, ago/2026). */
+.acordeao-sessao.aberta .nome-sessao {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cor-texto-suave);
+}
+.acordeao-sessao.aberta .abrir-sessao { padding-bottom: 8px; }
+
 .cabecalho-sessao .contagem-itens {
   font-size: 13px;
   font-weight: 600;
   color: var(--cor-acento);
   white-space: nowrap;
 }
+.seta-sessao {
+  color: var(--cor-texto-suave);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+.acordeao-sessao.aberta .seta-sessao { transform: rotate(180deg); }
+
+.botao-limpar-sessao {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--raio);
+  color: var(--cor-texto-suave);
+  padding: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.botao-limpar-sessao:hover {
+  color: #9b2c2c;
+  border-color: var(--cor-borda);
+  background: var(--cor-fundo);
+}
+
 .corpo-sessao {
   padding: 0 12px 14px;
   display: flex;
@@ -427,6 +491,8 @@ button.link {
    --------------------------------------------------------------- */
 
 .linha-sugestao-ia { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.cabecalho-sessao .confirmar-limpeza { flex-shrink: 0; gap: 6px; }
+.cabecalho-sessao .confirmar-limpeza .perigo { padding: 6px 10px; font-size: 14px; white-space: nowrap; }
 .confirmar-limpeza { display: inline-flex; align-items: center; gap: 10px; }
 
 button.perigo {
@@ -568,4 +634,54 @@ button.perigo:hover { background: #822525; }
   color: inherit;
   padding: 0 4px;
   flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------
+   Caixa de confirmação sobreposta (senha para excluir produto, anulação
+   de perda). Sobreposição em vez de expandir a tela: são ações
+   irreversíveis, e tirar o resto da interface do caminho força o
+   operador a ler o que vai acontecer.
+   --------------------------------------------------------------- */
+
+.fundo-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(36, 31, 24, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+.caixa-modal {
+  background: var(--cor-superficie);
+  border-radius: var(--raio);
+  padding: 20px;
+  width: 100%;
+  max-width: 380px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+.caixa-modal h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+.caixa-modal h3 svg { color: var(--cor-acento); }
+.caixa-modal form { display: flex; flex-direction: column; gap: 12px; }
+.caixa-modal label { margin-top: 8px; }
+.caixa-modal input { width: 100%; }
+.caixa-modal .acoes { margin-top: 16px; gap: 10px; }
+
+/* Lançamento anulado continua visível no histórico, mas claramente fora
+   de conta — ver RegistroPerda.cancelada. */
+.linha-anulada td { opacity: 0.5; text-decoration: line-through; }
+.linha-anulada td:last-child { text-decoration: none; }
+
+/* Carimbo de versão no rodapé — informação de suporte, não de operação:
+   fica legível mas nunca disputa atenção com o conteúdo. */
+.rodape-versao {
+  text-align: center;
+  font-size: 12px;
+  color: var(--cor-texto-suave);
+  opacity: 0.75;
+  padding: 20px 12px 8px;
+  user-select: text;
 }

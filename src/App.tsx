@@ -20,6 +20,33 @@ import { AvisoPerdaPendente } from "./components/AvisoPerdaPendente";
 
 type Aba = "cronograma" | "cadastro" | "perdas" | "analises";
 
+interface DefinicaoAba {
+  chave: Aba;
+  rotulo: string;
+}
+
+/**
+ * Quais abas cada perfil enxerga (ago/2026).
+ *
+ * A filial não produz — ela pede e lança as próprias perdas. Cronograma,
+ * Catálogo e Análises são da matriz, e as regras do Firestore já negariam
+ * gravação vinda da filial nesses lugares; deixar as abas visíveis só
+ * ofereceria caminhos que terminam em "sem permissão".
+ *
+ * Cronograma também sai da filial pelo mesmo motivo: confirmar produção
+ * seria recusado pelo banco. O lugar da filial nesse fluxo é a tela de
+ * Pedido, que entra na Parte B — até lá a filial trabalha só em Perdas.
+ */
+const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
+  matriz: [
+    { chave: "cronograma", rotulo: "Cronograma" },
+    { chave: "cadastro", rotulo: "Produtos" },
+    { chave: "perdas", rotulo: "Perdas" },
+    { chave: "analises", rotulo: "Análises" },
+  ],
+  filial: [{ chave: "perdas", rotulo: "Perdas" }],
+};
+
 /**
  * Quanto esperar a confirmação do servidor antes de assumir que a
  * gravação está apenas enfileirada offline (ver comRetorno). Generoso o
@@ -212,6 +239,30 @@ export default function App() {
     setPlanos((atual) => atual.map((p) => (p.id === planoId ? atualizado : p)));
   }
 
+  /**
+   * Anula um lançamento de perda errado (só a matriz). O registro
+   * continua existindo, marcado — ver RegistroPerda.cancelada.
+   */
+  async function handleAnularPerda(perdaId: string, motivo: string) {
+    await comRetorno(
+      () => repositorio!.cancelarPerda(perdaId, operador, motivo),
+      "Lançamento anulado. Não conta mais nas análises."
+    );
+    setPerdas((atual) =>
+      atual.map((p) =>
+        p.id === perdaId
+          ? {
+              ...p,
+              cancelada: true,
+              canceladaPor: operador,
+              canceladaEm: new Date().toISOString(),
+              motivoCancelamento: motivo,
+            }
+          : p
+      )
+    );
+  }
+
   async function handleCriarProduto(input: NovoProdutoInput) {
     // A lista é atualizada quando a gravação confirmar — imediatamente se
     // houver rede, ou na reconexão se o app estiver offline. Amarrar o
@@ -355,6 +406,12 @@ export default function App() {
     return <TelaIdentificacao onConfirmar={handleDefinirOperador} nomeDaLoja={loja.nome} />;
   }
 
+  const abasVisiveis = ABAS_POR_PAPEL[loja.papel];
+  // A aba guardada no estado pode não existir neste perfil (ex.: sair da
+  // matriz e entrar como filial no mesmo aparelho). Cai na primeira
+  // disponível em vez de renderizar tela em branco.
+  const abaAtual = abasVisiveis.some((a) => a.chave === aba) ? aba : abasVisiveis[0].chave;
+
   return (
     <div className="app">
       <header className="cabecalho-app">
@@ -393,22 +450,20 @@ export default function App() {
       />
 
       <nav className="abas-principais">
-        <button type="button" className={aba === "cronograma" ? "ativa" : ""} onClick={() => setAba("cronograma")}>
-          Cronograma
-        </button>
-        <button type="button" className={aba === "cadastro" ? "ativa" : ""} onClick={() => setAba("cadastro")}>
-          Produtos
-        </button>
-        <button type="button" className={aba === "perdas" ? "ativa" : ""} onClick={() => setAba("perdas")}>
-          Perdas
-        </button>
-        <button type="button" className={aba === "analises" ? "ativa" : ""} onClick={() => setAba("analises")}>
-          Análises
-        </button>
+        {abasVisiveis.map((a) => (
+          <button
+            key={a.chave}
+            type="button"
+            className={abaAtual === a.chave ? "ativa" : ""}
+            onClick={() => setAba(a.chave)}
+          >
+            {a.rotulo}
+          </button>
+        ))}
       </nav>
 
       <main className="conteudo-app">
-        {aba === "cronograma" && (
+        {abaAtual === "cronograma" && (
           <TelaCronograma
             produtos={produtos}
             planos={planos}
@@ -417,7 +472,7 @@ export default function App() {
             onSalvarPlano={handleSalvarPlano}
           />
         )}
-        {aba === "cadastro" && (
+        {abaAtual === "cadastro" && (
           <TelaCadastroProdutos
             produtos={produtos}
             onCriarProduto={handleCriarProduto}
@@ -425,18 +480,29 @@ export default function App() {
             onExcluirProdutos={handleExcluirProdutos}
           />
         )}
-        {aba === "perdas" && (
+        {abaAtual === "perdas" && (
           <TelaPerdas
             produtos={produtos}
             planos={planos}
             perdas={perdas}
             operador={operador}
             onConfirmarProducao={handleConfirmarProducao}
+            podeAnular={loja.papel === "matriz"}
+            onAnularPerda={handleAnularPerda}
             onRegistrarPerda={handleRegistrarPerda}
           />
         )}
-        {aba === "analises" && <TelaAnalises produtos={produtos} planos={planos} perdas={perdas} />}
+        {abaAtual === "analises" && <TelaAnalises produtos={produtos} planos={planos} perdas={perdas} />}
       </main>
+
+      {/* Carimbo de versão (ver vite.config.ts). Existe para dar resposta
+          a duas perguntas que apareceram no uso real: "a atualização já
+          entrou neste celular?" e, quando um defeito é relatado, "qual
+          código está rodando aí?". Discreto de propósito — é informação
+          de suporte, não de operação. */}
+      <footer className="rodape-versao">
+        {loja.nome} · versão de {__VERSAO_APP__}
+      </footer>
     </div>
   );
 }

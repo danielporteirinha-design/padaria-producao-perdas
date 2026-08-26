@@ -30,4 +30,6 @@ export interface Repositorio {
       data: string;
     }
   ): Promise<RegistroPerda>;
+  /** Anula um lançamento errado (só a matriz). Marca, nunca apaga. */
+  cancelarPerda(perdaId: string, canceladaPor: string, motivo: string): Promise<void>;
 }

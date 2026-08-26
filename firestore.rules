@@ -73,9 +73,18 @@ service cloud.firestore {
       allow read: if lojaConhecida();
       allow create: if lojaConhecida()
                     && request.resource.data.lojaId == lojaDoUsuario();
-      // Perda lançada não se reescreve nem se apaga: é registro contábil
-      // de desperdício. Correção se faz com um lançamento novo.
-      allow update, delete: if false;
+      // Só a matriz corrige, e SÓ pelos campos de anulação. A lista de
+      // chaves permitidas é o que impede uma correção legítima virar
+      // porta para reescrever o peso, o motivo ou a data do lançamento —
+      // o número original fica intacto e auditável.
+      allow update: if ehMatriz()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['cancelada', 'canceladaPor', 'canceladaEm', 'motivoCancelamento'])
+                    && request.resource.data.cancelada == true;
+
+      // Apagar continua proibido para todos, inclusive a matriz: um erro
+      // de lançamento vira registro ANULADO, nunca um buraco no histórico.
+      allow delete: if false;
     }
 
     // Qualquer coleção não listada acima fica fechada. Deixar o padrão

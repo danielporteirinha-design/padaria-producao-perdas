@@ -29,7 +29,16 @@
  *   filtrar por data é aqui, não nas telas.
  */
 
-import { collection, deleteDoc, doc, getDocs, query, setDoc, where } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { gerarId } from "../lib/id";
 import type { NovoProdutoInput, Produto } from "../types/produto";
@@ -153,6 +162,20 @@ export class RepositorioFirestore implements Repositorio {
     };
     await setDoc(doc(db, COL_PERDAS, registro.id), limpar(registro));
     return registro;
+  }
+
+  /**
+   * Anula um lançamento de perda (só a matriz — ver firestore.rules).
+   * Não apaga: marca. Ver o comentário em RegistroPerda.cancelada sobre
+   * por que o documento continua existindo.
+   */
+  async cancelarPerda(perdaId: string, canceladaPor: string, motivo: string): Promise<void> {
+    await updateDoc(doc(db, COL_PERDAS, perdaId), {
+      cancelada: true,
+      canceladaPor,
+      canceladaEm: new Date().toISOString(),
+      motivoCancelamento: motivo,
+    });
   }
 
   // ------------------------------------------------------------ migração

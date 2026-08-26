@@ -20,7 +20,7 @@
 
 import type { DiaDaSemana, PlanoDeProducaoDiario } from "../types/producao";
 import { itensProduzidos } from "./producaoRealizada";
-import type { RegistroPerda } from "../types/perda";
+import { perdaEstaValida, type RegistroPerda } from "../types/perda";
 import type { Produto } from "../types/produto";
 
 export interface TaxaPerdaProduto {
@@ -56,6 +56,8 @@ export function calcularTaxaPerdaPorProduto(
   const perdidoPorProduto = new Map<number, number>();
   const perdidoQuilosPorProduto = new Map<number, number>();
   for (const perda of perdas) {
+    // Lançamento anulado pela matriz não entra em conta nenhuma.
+    if (!perdaEstaValida(perda)) continue;
     perdidoPorProduto.set(
       perda.codigoPdv,
       (perdidoPorProduto.get(perda.codigoPdv) ?? 0) + perda.quantidadeUnidadesEstimada
@@ -152,6 +154,7 @@ export function identificarPicosDePerda(
   }
 
   for (const perda of perdas) {
+    if (!perdaEstaValida(perda)) continue;
     const produto = produtoPorCodigo.get(perda.codigoPdv);
     const chave = chaveDe(perda.diaDaSemana, produto?.categoria);
     perdido.set(chave, (perdido.get(chave) ?? 0) + perda.quantidadeUnidadesEstimada);

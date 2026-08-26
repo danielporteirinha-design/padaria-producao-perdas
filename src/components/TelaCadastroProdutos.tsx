@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { NovoProdutoInput, Produto, UnidadeProducao } from "../types/produto";
 import { construirVocabularioPorCategoria, sugerirCategorias } from "../lib/sugestaoCategoria";
+import { ConfirmarComSenha } from "./ConfirmarComSenha";
 import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 
 interface TelaCadastroProdutosProps {
@@ -509,6 +510,7 @@ function LimpezaCatalogo({
   const [selecionados, setSelecionados] = useState<Set<string>>(() => new Set(grupos.map(([categoria]) => categoria)));
   const [confirmando, setConfirmando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
+  const [pedindoSenha, setPedindoSenha] = useState(false);
 
   if (produtos.length === 0) {
     return <p className="mensagem-sucesso">O catálogo já contém só produtos das 5 categorias de produção.</p>;
@@ -585,18 +587,40 @@ function LimpezaCatalogo({
           </button>
           <button
             type="button"
-            className="primario"
+            className="perigo"
             disabled={excluindo}
-            onClick={async () => {
-              setExcluindo(true);
-              await onExcluirProdutos(codigosSelecionados);
-              setExcluindo(false);
-              setConfirmando(false);
-            }}
+            onClick={() => setPedindoSenha(true)}
           >
-            {excluindo ? "Excluindo..." : `Confirmar exclusão de ${codigosSelecionados.length} produtos`}
+            {excluindo ? "Excluindo..." : `Excluir ${codigosSelecionados.length} produtos`}
           </button>
         </div>
+      )}
+
+      {/* Exclusão de produto é irreversível e apaga catálogo compartilhado
+          pelas três lojas — exige a senha da loja, não só um segundo
+          clique (pedido do dono do negócio, ago/2026). */}
+      {pedindoSenha && (
+        <ConfirmarComSenha
+          titulo="Confirmar exclusão"
+          descricao={`${codigosSelecionados.length} ${
+            codigosSelecionados.length === 1 ? "produto será removido" : "produtos serão removidos"
+          } do catálogo das três lojas. Não há como desfazer.`}
+          rotuloConfirmar="Excluir definitivamente"
+          onCancelar={() => setPedindoSenha(false)}
+          onConfirmado={async () => {
+            setPedindoSenha(false);
+            setExcluindo(true);
+            try {
+              await onExcluirProdutos(codigosSelecionados);
+              setConfirmando(false);
+            } catch {
+              // Mensagem vem do aviso global (ver App.tsx); a seleção fica
+              // intacta para o operador tentar de novo.
+            } finally {
+              setExcluindo(false);
+            }
+          }}
+        />
       )}
     </div>
   );
