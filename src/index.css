@@ -804,14 +804,32 @@ button.perigo:hover { background: #822525; }
   border: 1px solid var(--cor-borda);
   border-left: 4px solid var(--cor-acento);
   border-radius: var(--raio);
-  padding: 14px;
   margin-bottom: 16px;
 }
+/* O padding mora no cabeçalho e no corpo, não no painel: fechado, a
+   sanfona precisa encostar na borda como a do forno na matriz. */
+.cabecalho-fornadas {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--cor-texto);
+  text-align: left;
+}
+.cabecalho-fornadas > svg:first-child { color: var(--cor-acento); flex-shrink: 0; }
+.titulo-fornadas { flex: 1; font-size: 16px; font-weight: 700; }
+.painel-fornadas.aberto .seta-sessao { transform: rotate(180deg); }
+.corpo-fornadas { padding: 0 14px 14px; }
 .painel-fornadas h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; }
 .painel-fornadas h3 svg { color: var(--cor-acento); }
 .painel-fornadas.vazio {
   display: flex;
   align-items: center;
+  padding: 14px;
   gap: 10px;
   color: var(--cor-texto-suave);
   font-size: 14px;

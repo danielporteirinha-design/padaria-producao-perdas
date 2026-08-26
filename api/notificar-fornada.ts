@@ -79,7 +79,15 @@ async function carregarAdmin(): Promise<ModulosAdmin> {
   }
 }
 
-const EMAIL_MATRIZ = "matriz@paodemel.local";
+/**
+ * Espelho de src/lib/lojas.ts e de firestore.rules. Entrou uma quarta
+ * loja? Os três mudam juntos.
+ */
+const LOJAS_POR_EMAIL: Record<string, { id: string; nome: string }> = {
+  "matriz@paodemel.local": { id: "MATRIZ", nome: "Matriz" },
+  "arthur@paodemel.local": { id: "FILIAL_ARTHUR_BERNARDES", nome: "Arthur Bernardes" },
+  "benjamin@paodemel.local": { id: "FILIAL_BENJAMIN_CONSTANT", nome: "Benjamin Constant" },
+};
 
 /** Erro de domínio — sempre com mensagem apresentável ao operador. */
 class ErroNotificacao extends Error {
@@ -126,8 +134,13 @@ function aplicativoAdmin(modulos: ModulosAdmin) {
 const CHAVE_WEB = "AIzaSyAWQq1TVzd9ycS8tpwl-lxmj7SPek0Pyuc";
 
 /**
- * Confere que quem chamou é a matriz, pelo endpoint REST do Identity
+ * Descobre QUAL LOJA está chamando, pelo endpoint REST do Identity
  * Toolkit — e NÃO por `firebase-admin/auth`.
+ *
+ * Quem decide o destino do aviso é esta função, a partir do e-mail
+ * verificado pelo Google — nunca um campo mandado pelo app. Se a filial
+ * pudesse declarar "sou a matriz" no corpo da requisição, qualquer conta
+ * conseguiria disparar aviso para todos os celulares da padaria.
  *
  * Motivo, encontrado em produção (ago/2026): `firebase-admin/auth` carrega
  * `jwks-rsa`, que faz `require('jose')`; o `jose` virou pacote só-ESM, e o
@@ -139,7 +152,7 @@ const CHAVE_WEB = "AIzaSyAWQq1TVzd9ycS8tpwl-lxmj7SPek0Pyuc";
  * adulterado, expirado ou de outro projeto é recusado aqui. O que mudou foi
  * a via, não o rigor.
  */
-async function confirmarQueEhAMatriz(cabecalho: string | undefined) {
+async function lojaDeQuemChamou(cabecalho: string | undefined) {
   const token = cabecalho?.startsWith("Bearer ") ? cabecalho.slice(7) : "";
   if (!token) throw new ErroNotificacao("Sem credencial.", 401);
 
@@ -160,10 +173,11 @@ async function confirmarQueEhAMatriz(cabecalho: string | undefined) {
 
   const dados = (await resposta.json()) as { users?: { email?: string }[] };
   const email = (dados.users?.[0]?.email ?? "").toLowerCase();
-  if (!email) throw new ErroNotificacao("Credencial inválida ou expirada.", 401);
-  if (email !== EMAIL_MATRIZ) {
-    throw new ErroNotificacao("Só a matriz avisa que a fornada saiu.", 403);
+  const loja = LOJAS_POR_EMAIL[email];
+  if (!loja) {
+    throw new ErroNotificacao("Esta conta não pertence a nenhuma loja.", 403);
   }
+  return loja;
 }
 
 // Tipagem mínima e deliberadamente solta, igual às outras funções de /api.
@@ -174,29 +188,43 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    await confirmarQueEhAMatriz(req.headers?.authorization);
+    const quemChamou = await lojaDeQuemChamou(req.headers?.authorization);
     const modulos = await carregarAdmin();
 
     const corpoBruto: {
       nomeProduto?: string;
       codigoPdv?: number;
       vezesHoje?: number;
+      quantidade?: number;
       teste?: boolean;
     } = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {});
-    const { nomeProduto, codigoPdv, vezesHoje, teste } = corpoBruto;
+    const { nomeProduto, codigoPdv, vezesHoje, quantidade, teste } = corpoBruto;
     if (!teste && (!nomeProduto || typeof codigoPdv !== "number")) {
       throw new ErroNotificacao("Faltou o produto no pedido de aviso.", 400);
     }
+
+    /**
+     * O aviso corre nos DOIS sentidos, e o remetente nunca é avisado do
+     * que ele mesmo acabou de fazer:
+     *
+     *   matriz  -> filiais : "saiu do forno"
+     *   filial  -> matriz  : "pediu reposição"
+     *
+     * A segunda direção nasceu do uso real: a filial pedia reposição e a
+     * matriz só descobria ao abrir o app. Um pedido de reposição existe
+     * justamente porque é urgente — se ele espera alguém lembrar de
+     * olhar a tela, perdeu a razão de existir.
+     */
+    const ehDaMatriz = quemChamou.id === "MATRIZ";
 
     const app = aplicativoAdmin(modulos);
 
     // Só aparelhos de FILIAL: a matriz não precisa ser avisada do que ela
     // mesma acabou de marcar.
-    const snapshot = await modulos.firestore
-      .getFirestore(app)
-      .collection("dispositivos")
-      .where("lojaId", "!=", "MATRIZ")
-      .get();
+    const colecao = modulos.firestore.getFirestore(app).collection("dispositivos");
+    const snapshot = ehDaMatriz
+      ? await colecao.where("lojaId", "!=", "MATRIZ").get()
+      : await colecao.where("lojaId", "==", "MATRIZ").get();
 
     const tokens = snapshot.docs
       .map((documento) => documento.get("token") as string)
@@ -206,16 +234,39 @@ export default async function handler(req: any, res: any) {
       res.status(200).json({
         enviados: 0,
         registrados: 0,
-        aviso: "Nenhuma filial ativou os avisos ainda.",
+        aviso: ehDaMatriz
+          ? "Nenhuma filial ativou os avisos ainda."
+          : "A matriz ainda não ativou os avisos neste computador.",
       });
       return;
     }
 
-    const corpo = teste
-      ? "Teste de aviso. Se você está vendo isto, as notificações estão funcionando."
-      : vezesHoje && vezesHoje > 1
-        ? `${vezesHoje}ª fornada de hoje. Está sem no balcão? Peça reposição.`
-        : "Acabou de sair do forno. Está sem no balcão? Peça reposição.";
+    let titulo: string;
+    let corpo: string;
+    let etiqueta: string;
+
+    if (teste) {
+      titulo = "Padaria Pão de Mel";
+      corpo = "Teste de aviso. Se você está vendo isto, as notificações estão funcionando.";
+      etiqueta = "teste-aviso";
+    } else if (ehDaMatriz) {
+      titulo = nomeProduto!;
+      corpo =
+        vezesHoje && vezesHoje > 1
+          ? `${vezesHoje}ª fornada de hoje. Está sem no balcão? Peça reposição.`
+          : "Acabou de sair do forno. Está sem no balcão? Peça reposição.";
+      etiqueta = `fornada-${codigoPdv}`;
+    } else {
+      // O nome da loja vai no TÍTULO: é a primeira coisa que a matriz
+      // precisa saber para decidir o que separar e para onde mandar.
+      titulo = `${quemChamou.nome} pediu reposição`;
+      corpo = quantidade
+        ? `${nomeProduto} · ${quantidade} un`
+        : `${nomeProduto}`;
+      // Uma etiqueta por loja E produto: pedido repetido do mesmo item
+      // substitui o anterior, mas produtos diferentes continuam somando.
+      etiqueta = `reposicao-${quemChamou.id}-${codigoPdv}`;
+    }
 
     /**
      * Payload só de `data`, sem o bloco `notification`: assim o service
@@ -226,11 +277,7 @@ export default async function handler(req: any, res: any) {
      */
     const resultado = await modulos.messaging.getMessaging(app).sendEachForMulticast({
       tokens,
-      data: {
-        titulo: teste ? "Padaria Pão de Mel" : nomeProduto!,
-        corpo,
-        tag: teste ? "teste-aviso" : `fornada-${codigoPdv}`,
-      },
+      data: { titulo, corpo, tag: etiqueta },
       /**
        * Sem `fcmOptions.link` de propósito. O FCM exige que esse campo,
        * quando presente, seja uma URL HTTPS COMPLETA — um caminho relativo

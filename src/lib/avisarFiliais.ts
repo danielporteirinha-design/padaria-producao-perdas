@@ -62,6 +62,19 @@ export async function avisarFiliais(
 }
 
 /**
+ * Avisa a MATRIZ que esta filial acabou de pedir reposição. Quem decide o
+ * destino é o servidor, a partir do e-mail verificado da conta — o app não
+ * escolhe para quem o aviso vai, só informa o que aconteceu.
+ */
+export async function avisarMatriz(
+  nomeProduto: string,
+  codigoPdv: number,
+  quantidade: number
+): Promise<ResultadoAviso> {
+  return enviar({ nomeProduto, codigoPdv, quantidade });
+}
+
+/**
  * Dispara um aviso de teste para os aparelhos das filiais, sem marcar
  * fornada nenhuma. Existe porque a alternativa para conferir se o push
  * funciona é marcar uma fornada de mentira — que entra no histórico do dia

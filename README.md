@@ -903,6 +903,29 @@ que precisa marcar de novo.
 app ou limpou os dados devolve `registration-token-not-registered`; o
 documento é apagado no mesmo envio, para a lista não crescer com lixo.
 
+#### O aviso corre nos dois sentidos (ago/2026)
+
+| Quem marca | Quem é avisado | Conteúdo |
+|---|---|---|
+| Matriz marca fornada | Filiais | Nome do produto + "acabou de sair do forno" |
+| Filial pede reposição | Matriz | "<Loja> pediu reposição" + produto e quantidade |
+
+O remetente nunca recebe o próprio aviso, e **quem decide o destino é o
+servidor**, a partir do e-mail verificado da conta — nunca um campo mandado
+pelo app. Se a filial pudesse declarar "sou a matriz" no corpo da
+requisição, qualquer conta dispararia aviso para todos os celulares.
+
+Só REPOSIÇÃO avisa a matriz. O pedido diário é planejamento: a matriz o
+consolida no fim do expediente e não precisa ser interrompida por ele.
+Reposição é o contrário — existe porque o produto está faltando no balcão
+AGORA, e um aviso que espera alguém lembrar de abrir a tela perdeu a razão
+de existir.
+
+Defeito que isso corrigiu: o convite para ativar os avisos vivia só na tela
+da filial, então o computador da matriz nunca chegava a ser registrado. A
+matriz não recebia nada e não havia como perceber por quê — a coleção
+`dispositivos` simplesmente não tinha documento com `lojaId: "MATRIZ"`.
+
 #### Restrições de aparelho que moldaram a tela
 
 | Restrição | Consequência no desenho |

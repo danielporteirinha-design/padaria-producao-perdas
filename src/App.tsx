@@ -18,11 +18,12 @@ import { TelaAnalises } from "./components/TelaAnalises";
 import { BannerInstalar } from "./components/BannerInstalar";
 import { AvisoPerdaPendente } from "./components/AvisoPerdaPendente";
 import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
-import type { PedidoFilial } from "./types/pedido";
+import { ehReposicao, type PedidoFilial } from "./types/pedido";
 import { base64DoDataUrl, type TrabalhoImpressao } from "./types/impressao";
 import { idDaFornada, type FornadaPronta } from "./types/fornada";
-import { avisarFiliais, ErroAviso, explicarFalhaDeEnvio } from "./lib/avisarFiliais";
+import { avisarFiliais, avisarMatriz, ErroAviso, explicarFalhaDeEnvio } from "./lib/avisarFiliais";
 import { ouvirAvisosEmPrimeiroPlano } from "./lib/notificacoes";
+import { AtivarAvisos } from "./components/AtivarAvisos";
 
 type Aba = "cronograma" | "cadastro" | "perdas" | "analises" | "pedido";
 
@@ -428,6 +429,28 @@ export default function App() {
       "Pedido enviado para a matriz."
     );
     setPedidos((atual) => [...atual.filter((p) => p.id !== pedido.id), pedido]);
+
+    /**
+     * Só REPOSIÇÃO avisa a matriz por push. O pedido diário é planejamento
+     * — a matriz o consolida no fim do expediente e não precisa ser
+     * interrompida por ele. Reposição é o contrário: existe porque o
+     * produto está faltando no balcão AGORA, e um aviso que espera alguém
+     * lembrar de abrir a tela perdeu a razão de existir.
+     *
+     * Como no aviso de fornada, falhar aqui não desfaz o pedido: ele já
+     * está gravado e a matriz o vê na tela de qualquer forma.
+     */
+    if (ehReposicao(pedido)) {
+      try {
+        const item = pedido.itens[0];
+        if (item) {
+          const nome = produtos.find((p) => p.codigoPdv === item.codigoPdv)?.nome ?? "Produto";
+          await avisarMatriz(nome, item.codigoPdv, item.quantidadeUnidades);
+        }
+      } catch (erro) {
+        console.warn("Reposição gravada, mas o aviso à matriz não saiu:", erro);
+      }
+    }
   }
 
   async function handleCriarProduto(input: NovoProdutoInput) {
@@ -615,6 +638,12 @@ export default function App() {
         visivel={aba !== "perdas"}
         onIrParaPerdas={() => setAba("perdas")}
       />
+
+      {/* A matriz também precisa registrar o aparelho: é ela quem recebe o
+          aviso de reposição das filiais. Ficava só na tela da filial, e por
+          isso o PC do caixa nunca chegou a ser registrado — a matriz não
+          recebia nada e não havia como perceber por quê. */}
+      {loja.papel === "matriz" && <AtivarAvisos loja={loja} operador={operador} />}
 
       <nav className="abas-principais">
         {abasVisiveis.map((a) => (

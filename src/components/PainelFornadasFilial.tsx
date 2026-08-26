@@ -26,7 +26,7 @@ import { ehReposicao, idDaReposicao } from "../types/pedido";
 import type { Loja } from "../lib/lojas";
 import { dataDeHojeIso } from "../lib/data";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
-import { IconeConfere, IconeForno } from "./Icones";
+import { IconeConfere, IconeForno, IconeSeta } from "./Icones";
 
 interface PainelFornadasFilialProps {
   loja: Loja;
@@ -46,6 +46,7 @@ export function PainelFornadasFilial({
   onSalvarPedido,
 }: PainelFornadasFilialProps) {
   const hoje = dataDeHojeIso();
+  const [aberto, setAberto] = useState(true);
   const [codigoPedindo, setCodigoPedindo] = useState<number | null>(null);
   const [quantidade, setQuantidade] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -108,11 +109,31 @@ export function PainelFornadasFilial({
     );
   }
 
+  /**
+   * Sanfona, igual ao painel do forno na matriz. Ao longo do dia esta
+   * lista cresce — no fim do expediente são dezenas de itens, e a filial
+   * passa a rolar tudo isso para chegar no que está embaixo. Fechada, a
+   * contagem no cabeçalho já diz se vale a pena abrir.
+   *
+   * Abre por padrão: durante a produção, o que saiu do forno é
+   * exatamente o que a filial veio ver.
+   */
   return (
-    <div className="painel-fornadas">
-      <h3>
-        <IconeForno tamanho={18} /> Saiu do forno hoje
-      </h3>
+    <div className={`painel-fornadas ${aberto ? "aberto" : ""}`}>
+      <button
+        type="button"
+        className="cabecalho-fornadas"
+        aria-expanded={aberto}
+        onClick={() => setAberto((v) => !v)}
+      >
+        <IconeForno tamanho={18} />
+        <span className="titulo-fornadas">Saiu do forno hoje</span>
+        <span className="contagem-itens">{prontosHoje.length}</span>
+        <IconeSeta className="seta-sessao" />
+      </button>
+
+      {!aberto ? null : (
+        <div className="corpo-fornadas">
       <p className="nota-rodape">
         Está sem no balcão? Peça reposição — a matriz recebe na hora e separa na próxima entrega.
       </p>
@@ -184,6 +205,8 @@ export function PainelFornadasFilial({
           </div>
         );
       })}
+        </div>
+      )}
     </div>
   );
 }
