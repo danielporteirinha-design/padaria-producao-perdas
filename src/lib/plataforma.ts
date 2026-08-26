@@ -103,12 +103,19 @@ export function comoLiberarNotificacao(): CaminhoDaPermissao {
           };
 
     case "desktop":
+      /**
+       * "Clique no ícone" era ambíguo e mandou um usuário procurar atalho
+       * na ÁREA DE TRABALHO (ago/2026) — que nem existe quando o app é
+       * aberto pelo link, que é o caso do computador do caixa. Agora o
+       * passo diz onde fica e o que tem escrito ao lado.
+       */
       return {
-        titulo: "No computador",
+        titulo: "No computador, pelo navegador",
         passos: [
-          "Clique no ícone à esquerda do endereço, na barra do navegador",
-          "Em Notificações, escolha Permitir",
-          "Recarregue a página e toque em Ativar de novo",
+          "Na barra de endereço do Chrome, clique no ícone logo ANTES do endereço do app (um cadeado ou uns controles deslizantes) — é na barra do navegador, não na área de trabalho",
+          'Clique em "Configurações do site"',
+          'Em Notificações, troque para "Permitir"',
+          "Recarregue a página (F5) e clique em Ativar de novo",
         ],
         atalho: "chrome://settings/content/notifications",
       };
