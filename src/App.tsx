@@ -21,6 +21,8 @@ import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
 import type { PedidoFilial } from "./types/pedido";
 import { base64DoDataUrl, type TrabalhoImpressao } from "./types/impressao";
 import { idDaFornada, type FornadaPronta } from "./types/fornada";
+import { avisarFiliais } from "./lib/avisarFiliais";
+import { ouvirAvisosEmPrimeiroPlano } from "./lib/notificacoes";
 
 type Aba = "cronograma" | "cadastro" | "perdas" | "analises" | "pedido";
 
@@ -88,6 +90,18 @@ export default function App() {
     () => (loja ? new RepositorioFirestore(loja.id) : null),
     [loja]
   );
+
+  /**
+   * Aviso que chega com o app ABERTO. O service worker não é chamado
+   * nesse caso, então sem isto quem está justamente usando o app não
+   * veria o aviso de fornada pronta.
+   */
+  useEffect(() => {
+    if (!loja || loja.papel !== "filial") return;
+    return ouvirAvisosEmPrimeiroPlano((titulo, corpo) =>
+      setAviso({ tipo: "sucesso", texto: `${titulo} — ${corpo}` })
+    );
+  }, [loja]);
 
   useEffect(() => {
     // onAuthStateChanged dispara também na abertura do app, restaurando a
@@ -334,6 +348,19 @@ export default function App() {
     const nome = produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? "Produto";
     await comRetorno(() => repositorio!.marcarFornada(fornada), `${nome} saiu do forno.`);
     setFornadas((atual) => [...atual, fornada]);
+
+    /**
+     * Avisar as filiais é EFEITO, não a operação. Se o push falhar (chave
+     * não configurada, servidor fora do ar, nenhuma filial ativou), a
+     * fornada já está gravada e as filiais veem ao abrir o app. Falhar
+     * aqui em vermelho faria o operador achar que precisa marcar de novo.
+     */
+    try {
+      const vezesHoje = fornadas.filter((f) => f.data === hoje && f.codigoPdv === codigoPdv).length + 1;
+      await avisarFiliais(nome, codigoPdv, vezesHoje);
+    } catch (erro) {
+      console.warn("Fornada marcada, mas o aviso às filiais não saiu:", erro);
+    }
   }
 
   async function handleSalvarPedido(pedido: PedidoFilial) {

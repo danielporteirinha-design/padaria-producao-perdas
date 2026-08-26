@@ -26,6 +26,7 @@ import type { PedidoFilial } from "../types/pedido";
 import { ehPedidoDiario, idDoPedido } from "../types/pedido";
 import type { FornadaPronta } from "../types/fornada";
 import { PainelFornadasFilial } from "./PainelFornadasFilial";
+import { AtivarAvisos } from "./AtivarAvisos";
 import type { Loja } from "../lib/lojas";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
@@ -148,6 +149,8 @@ export function TelaPedidoFilial({
 
   return (
     <div className="tela">
+      <AtivarAvisos loja={loja} operador={operador} />
+
       {/* O que já saiu do forno hoje vem PRIMEIRO: é a informação
           perecível da tela — dá para agir sobre ela ainda hoje, ao
           contrário do pedido de amanhã. */}

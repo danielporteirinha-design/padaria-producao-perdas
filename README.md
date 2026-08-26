@@ -43,7 +43,7 @@ inicial do documento de arquitetura:
 | Limpar sessão | Botão "limpar esta sessão" por acordeão, com confirmação em dois toques. **Nunca existe um "limpar tudo" global** — um toque errado apagaria o cronograma inteiro montado no fim do expediente, sem desfazer |
 | Assinatura da fita | "Montado por" sai no rodapé de **cada sessão**, não uma vez só no fim: a fita é cortada e cada pedaço vai para o quadro de um setor — pedaço sem nome é pedaço sem responsável |
 | Perda no mesmo dia | Fornada queimada ou fora do padrão deve ser pesada e lançada no dia, nunca no dia seguinte. O app sempre aceitou isso; o que faltava era chamar o operador — ver "Perda no mesmo dia" abaixo |
-| Fornada pronta | A matriz marca cada fornada ao longo do dia, num toque, no painel "Forno de hoje". Produto não é "produzido ou não": pão francês e biscoito de queijo saem **várias vezes por dia**, e cada fornada é um evento com hora própria |
+| Fornada pronta | A matriz marca cada fornada ao longo do dia, num toque, no painel "Forno de hoje" — e as filiais recebem aviso no celular (ver "Avisos de fornada"). Produto não é "produzido ou não": pão francês e biscoito de queijo saem **várias vezes por dia**, e cada fornada é um evento com hora própria |
 | Reposição | A filial vê o que saiu do forno hoje e pede o item extra para HOJE, separado do pedido de amanhã — reposição **nunca** entra no planejamento do dia seguinte |
 | Produção realizada | No fim do expediente, na tela de **Cronograma**, confirma-se o que REALMENTE saiu do forno — já vem pré-marcado pelas fornadas do dia — comparando com o total PEDIDO (matriz + filiais), que é o que revela o gargalo. Marcação binária ("não saiu"), porque é assim que acontece na prática — não sai em quantidade menor. O plano nunca é reescrito |
 | Abas por perfil | A filial vê **Pedido e Perdas**. Catálogo, Cronograma e Análises são da matriz — as regras do Firestore já negariam gravação da filial neles, e mostrar as abas só ofereceria caminhos que terminam em "sem permissão". |
@@ -869,11 +869,64 @@ O id da reposição leva o instante do envio, porque a filial pode ficar sem
 pão às 9h e sem biscoito às 15h — dois pedidos no mesmo dia, e o segundo
 não pode apagar o primeiro.
 
-### Ainda falta o push
+### Avisos de fornada (push)
 
-Esta entrega é a **metade que não depende de configuração**: a filial vê
-as fornadas ao abrir o app. O aviso proativo (push) precisa de duas
-chaves que só o dono da conta gera — vem na entrega seguinte.
+Cada fornada marcada dispara um aviso nos celulares das filiais, via
+Firebase Cloud Messaging — gratuito e ilimitado, sem serviço novo.
+
+**Aviso do mesmo produto SUBSTITUI o anterior.** Pão francês sai seis
+vezes por dia; sem isso a filial receberia seis avisos empilhados do mesmo
+item e aprenderia a ignorar todos — que é exatamente como uma notificação
+perde a função. O `firebase-messaging-sw.js` usa a `tag` do produto para
+que o novo aviso ocupe o lugar do velho, mostrando sempre "3ª fornada de
+hoje" em vez de três balões.
+
+**O envio roda no servidor** (`api/notificar-fornada.ts`), nunca no
+navegador, por dois motivos que não são negociáveis:
+
+1. Enviar pelo FCM exige uma **chave de serviço**, que ignora todas as
+   regras do banco. No bundle do app, qualquer pessoa que abrisse o
+   DevTools teria acesso total aos dados das três lojas.
+2. O celular da matriz não conhece os tokens dos aparelhos das filiais.
+
+Quem chama o endpoint precisa mandar o token de identidade do Firebase, e
+o servidor **verifica de verdade** (assinatura e validade) que é a matriz.
+Sem isso, um endereço público conseguiria disparar notificação para os
+celulares da padaria inteira.
+
+**Avisar é efeito, não a operação.** Se o push falhar — chave ausente,
+servidor fora do ar, nenhuma filial ativou — a fornada já está gravada e
+as filiais veem ao abrir o app. Falhar em vermelho faria o operador achar
+que precisa marcar de novo.
+
+**Token de aparelho morto é removido sozinho.** Celular que desinstalou o
+app ou limpou os dados devolve `registration-token-not-registered`; o
+documento é apagado no mesmo envio, para a lista não crescer com lixo.
+
+#### Restrições de aparelho que moldaram a tela
+
+| Restrição | Consequência no desenho |
+|---|---|
+| No iPhone, push só funciona com o app **instalado na tela de início** (iOS 16.4+) | A tela detecta isso e explica o que fazer, em vez de pedir permissão e falhar em silêncio |
+| A permissão exige um **toque** do usuário | É um botão "Ativar", não um pedido ao abrir o app — que criaria o reflexo de negar sem ler |
+| Permissão negada **não se pergunta de novo** | O texto diz que a reversão é nas configurações do celular, o único caminho que resta |
+
+#### Configuração (duas chaves, uma vez)
+
+1. **Chave de push.** Console do Firebase → Configurações do projeto →
+   **Cloud Messaging** → Certificados push da Web → **Gerar par de
+   chaves**. Copie a chave e cole em `CHAVE_VAPID`, em
+   `src/lib/notificacoes.ts`. É pública, como o resto da configuração.
+
+2. **Chave de serviço.** Configurações do projeto → **Contas de serviço**
+   → **Gerar nova chave privada** (baixa um JSON). No painel do Vercel →
+   Settings → Environment Variables, crie `FIREBASE_SERVICE_ACCOUNT` com
+   o JSON inteiro colado numa linha. **Esta é secreta de verdade** — não
+   vai para o repositório nem para o bundle.
+
+Enquanto a `CHAVE_VAPID` estiver vazia, o app não quebra: a tela da filial
+mostra "avisos ainda não configurados" e as fornadas continuam aparecendo
+ao abrir o app.
 
 ## Estrutura
 
@@ -890,6 +943,7 @@ producao-perdas/
   api/
     sugestao-producao.ts       # Função serverless — sugestão de quantidades de produção
     insights-catalogo.ts        # Função serverless — insights de catálogo (sobra, produto parado, etc.)
+    notificar-fornada.ts         # Função serverless — avisa as filiais que a fornada saiu (FCM)
   src/
     types/
       produto.ts                # Modelo de Produto
@@ -900,6 +954,8 @@ producao-perdas/
       perda.ts                     # Registro de Perda — peso em kg + peso unitário informado + unidades estimadas
     lib/
       errosFirestore.ts              # Traduz falha de gravação para linguagem de padaria
+      notificacoes.ts                 # Avisos de fornada no celular (permissão, token, estados)
+      avisarFiliais.ts                 # Cliente do endpoint que dispara o aviso
       consolidacao.ts                # Junta produção da matriz + pedidos das filiais (totais e romaneios)
       lojas.ts                      # As 3 lojas (matriz + 2 filiais) e o mapeamento conta -> loja
       firebase.ts                    # Inicialização do Firestore (com cache offline) e do Auth
@@ -917,6 +973,7 @@ producao-perdas/
     components/
       Icones.tsx               # Ícones SVG inline (só traço, currentColor) — sem CDN
       ConfirmarComSenha.tsx     # Revalida a senha da loja antes de ação irreversível
+      AtivarAvisos.tsx         # Liga os avisos neste aparelho, com texto por estado
       AvisoGlobal.tsx          # Faixa de retorno de gravação (sucesso/erro), acionada só pelo App
       TelaPedidoFilial.tsx     # Tela principal da filial: quanto ela vai precisar amanhã
       PainelPedidosFiliais.tsx  # Indicador "enviado / aguardando" + reposições chegando
@@ -939,6 +996,7 @@ producao-perdas/
   data/
     produtos.seed.json            # 89 produtos das 5 categorias de produção, já convertidos para o schema do app
   public/
+    firebase-messaging-sw.js      # Service worker que recebe o aviso com o app fechado
     pwa-192x192.png               # Ícones do app instalado (gerados por script — ver "Instalar como app")
     pwa-512x512.png
     pwa-maskable-512x512.png      # Variante maskable exigida pelo Android

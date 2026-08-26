@@ -100,6 +100,21 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Aparelhos registrados para receber aviso de fornada pronta
+    // (ago/2026). O id do documento é o próprio token do aparelho.
+    //
+    // Quem LÊ esta coleção é o servidor (api/notificar-fornada.ts), com
+    // chave de serviço, que ignora estas regras. Por isso aqui a leitura
+    // fica fechada para todo mundo: nenhum app precisa listar os
+    // aparelhos das outras lojas.
+    match /dispositivos/{token} {
+      allow read: if false;
+      allow create, update: if lojaConhecida()
+                            && request.resource.data.lojaId == lojaDoUsuario();
+      // A loja pode desligar o aviso removendo o próprio registro.
+      allow delete: if lojaConhecida() && resource.data.lojaId == lojaDoUsuario();
+    }
+
     // Fornadas prontas (ago/2026). Só a matriz marca — é ela que produz.
     // As filiais LEEM para saber que o item saiu do forno e pedir
     // reposição enquanto ainda dá tempo de entregar hoje.

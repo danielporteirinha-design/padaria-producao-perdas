@@ -914,3 +914,23 @@ button.perigo:hover { background: #822525; }
 }
 .linha-forno.saiu .marca-forno { color: var(--cor-sucesso); }
 .linha-forno:disabled { opacity: 0.6; cursor: default; }
+
+/* Convite para ativar os avisos de fornada (AtivarAvisos.tsx). Só
+   aparece quando exige ação — avisos funcionando são silenciosos. */
+.cartao-avisos {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-left: 4px solid var(--cor-acento);
+  border-radius: var(--raio);
+}
+.cartao-avisos > svg { color: var(--cor-acento); flex-shrink: 0; margin-top: 2px; }
+.cartao-avisos.alerta { background: var(--cor-alerta-fundo); border-left-color: var(--cor-alerta); }
+.cartao-avisos.alerta > svg { color: var(--cor-alerta); }
+.texto-avisos { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.texto-avisos span { font-size: 14px; color: var(--cor-texto-suave); }
+.acoes-avisos { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
