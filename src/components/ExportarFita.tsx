@@ -29,6 +29,7 @@ import {
   ErroGeracaoImagem,
   gerarCanvasesFita,
 } from "../lib/gerarImagemLista";
+import { IconeImpressora } from "./Icones";
 
 interface ExportarFitaProps {
   /** Blocos já prontos: rótulo do bloco + itens. Serve tanto para a fita
@@ -42,6 +43,12 @@ interface ExportarFitaProps {
   produtos: Produto[];
   nomeArquivoBase: string;
   montadoPor?: string;
+  /**
+   * Envia direto para a impressora do caixa. Ausente quando o perfil não
+   * pode imprimir (a impressora fica na matriz) — nesse caso o botão nem
+   * aparece, em vez de aparecer e falhar.
+   */
+  onImprimirNoCaixa?: (canvases: HTMLCanvasElement[], documento: string) => Promise<void>;
 }
 
 export function ExportarFita({
@@ -52,7 +59,9 @@ export function ExportarFita({
   produtos,
   nomeArquivoBase,
   montadoPor,
+  onImprimirNoCaixa,
 }: ExportarFitaProps) {
+  const [imprimindo, setImprimindo] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"" | "gerando" | "ok" | "erro">("");
   const [mensagem, setMensagem] = useState("");
@@ -122,7 +131,40 @@ export function ExportarFita({
       </h3>
       <p className="nota-rodape">{instrucao}</p>
       <div className="preview-lista" ref={previewRef} />
-      <button type="button" className="primario" onClick={handleAcao} disabled={status === "gerando"}>
+      {onImprimirNoCaixa && (
+        <button
+          type="button"
+          className="primario largura-cheia"
+          disabled={imprimindo}
+          onClick={async () => {
+            setImprimindo(true);
+            try {
+              const canvases = gerarCanvasesFita({
+                sessoes: blocos,
+                titulo,
+                dataFormatada,
+                produtos,
+                montadoPor,
+              });
+              await onImprimirNoCaixa(canvases, titulo);
+            } catch (erro) {
+              console.error("Falha ao enviar para a impressora do caixa:", erro);
+            } finally {
+              setImprimindo(false);
+            }
+          }}
+        >
+          <IconeImpressora tamanho={18} />
+          {imprimindo ? "Enviando..." : "Imprimir no caixa"}
+        </button>
+      )}
+
+      <button
+        type="button"
+        className="secundario largura-cheia"
+        onClick={handleAcao}
+        disabled={status === "gerando"}
+      >
         {status === "gerando" ? "Gerando..." : "Compartilhar / Baixar imagem"}
       </button>
       {mensagem && <p className={status === "erro" ? "erro-conversao" : "mensagem-sucesso"}>{mensagem}</p>}

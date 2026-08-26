@@ -40,6 +40,13 @@ interface ConfirmarProducaoProps {
    * para a matriz. Ausente para um produto = cai na quantidade do plano.
    */
   totaisPedidos?: Map<number, number>;
+  /**
+   * Itens que tiveram fornada marcada hoje. Quando existe marcação ao
+   * longo do dia, ela é a melhor fonte sobre o que saiu do forno — mais
+   * confiável que a memória de quem fecha o expediente. O que não teve
+   * nenhuma fornada já vem desmarcado, e o operador só confere.
+   */
+  codigosComFornada?: Set<number>;
   onConfirmar: (codigosNaoProduzidos: number[]) => Promise<void>;
 }
 
@@ -48,13 +55,23 @@ export function ConfirmarProducao({
   produtos,
   operador,
   totaisPedidos,
+  codigosComFornada,
   onConfirmar,
 }: ConfirmarProducaoProps) {
   const jaConfirmado = producaoFoiConfirmada(plano);
   const [editando, setEditando] = useState(!jaConfirmado);
-  const [naoProduzidos, setNaoProduzidos] = useState<Set<number>>(
-    () => new Set(plano.producaoRealizada?.codigosNaoProduzidos ?? [])
-  );
+  const [naoProduzidos, setNaoProduzidos] = useState<Set<number>>(() => {
+    // Confirmação já feita antes vence: o operador pode ter corrigido
+    // à mão algo que a marcação de fornada não pegou.
+    if (plano.producaoRealizada) return new Set(plano.producaoRealizada.codigosNaoProduzidos);
+    if (!codigosComFornada || codigosComFornada.size === 0) return new Set();
+    return new Set(
+      plano.sessoes
+        .flatMap((sessao) => sessao.itens)
+        .map((item) => item.codigoPdv)
+        .filter((codigo) => !codigosComFornada.has(codigo))
+    );
+  });
   const [salvando, setSalvando] = useState(false);
 
   const nomePorCodigo = new Map(produtos.map((p) => [p.codigoPdv, p.nome]));
@@ -109,8 +126,10 @@ export function ConfirmarProducao({
     <div className="cartao-confirmar-producao">
       <h3>O que saiu do forno hoje?</h3>
       <p className="nota-rodape">
-        Tudo já vem marcado como produzido. Desmarque apenas o que não saiu — é isso que faz a taxa
-        de perda ser calculada sobre a produção real, e não sobre a lista.
+        {codigosComFornada && codigosComFornada.size > 0
+          ? "Já vem preenchido pelas fornadas marcadas durante o dia. Confira e corrija o que estiver errado."
+          : "Tudo já vem marcado como produzido. Desmarque apenas o que não saiu."}{" "}
+        É isso que faz a taxa de perda ser calculada sobre a produção real, e não sobre a lista.
       </p>
       <p className="nota-rodape">
         Feito no fim do expediente, de uma vez: é o momento em que dá para comparar tudo o que foi

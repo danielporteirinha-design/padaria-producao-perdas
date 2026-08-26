@@ -93,21 +93,30 @@ export function TelaPerdas({
   const diaDaSemana = diaDaSemanaDeData(hoje);
 
   /**
-   * Na MATRIZ a perda é atribuída a uma fornada: ela produziu, então dá
-   * para saber de qual lote veio (ver src/lib/janelaValidade.ts).
+   * TODO produto ativo do catálogo pode receber perda, nas três lojas
+   * (ago/2026 — pedido do dono do negócio, depois de a matriz ficar sem
+   * conseguir lançar itens que não estavam na fornada do dia).
    *
-   * Na FILIAL não se amarra nem à produção do dia nem à validade
-   * (ago/2026): a loja recebe mercadoria da matriz, tem no balcão estoque
-   * de dias diferentes, e o que ela precisa é registrar o que jogou fora.
-   * Qualquer produto ativo do catálogo pode receber perda ali.
+   * A janela de validade não sumiu: ela continua sendo consultada para
+   * ATRIBUIR a perda a uma fornada quando existe uma (o seletor "Produzido
+   * em", FIFO, em TelaRegistroPerda). O que ela deixou de fazer é decidir
+   * QUEM aparece na lista — isso era uma trava, e perda não é vencimento.
+   *
+   * Na prática: a matriz produz e costuma ter fornada atribuível; a filial
+   * recebe da matriz e quase nunca tem. As duas lançam do mesmo jeito.
    */
   const candidatos = useMemo(() => {
-    if (ehMatriz) return calcularCandidatosPerda(hoje, produtos, planos);
+    const comFornada = new Map(
+      calcularCandidatosPerda(hoje, produtos, planos).map((c) => [c.produto.codigoPdv, c])
+    );
     return produtos
       .filter((p) => p.ativoNaProducao)
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
-      .map((produto) => ({ produto, origens: [], ultimaProducao: "" }));
-  }, [hoje, produtos, planos, ehMatriz]);
+      .map(
+        (produto) =>
+          comFornada.get(produto.codigoPdv) ?? { produto, origens: [], ultimaProducao: "" }
+      );
+  }, [hoje, produtos, planos]);
 
 
 
@@ -143,19 +152,13 @@ export function TelaPerdas({
 
 
       {candidatos.length === 0 ? (
-        /* Sem fornada disponível ainda não pode esconder o resto da tela:
-           o histórico do dia e a anulação de lançamento errado precisam
-           continuar acessíveis (defeito encontrado em teste, ago/2026). */
+        /* Agora só cai aqui se o catálogo estiver vazio de verdade — a
+           lista deixou de depender de fornada. O histórico do dia continua
+           renderizado abaixo de qualquer forma, para não travar a anulação
+           de um lançamento errado (defeito encontrado em teste, ago/2026). */
         <p className="callout-inline">
-          Ainda não há nenhuma fornada confirmada no app, então não existe produção à qual atribuir
-          uma perda. Isso não tem relação com prazo de validade — assim que existir um cronograma
-          confirmado, qualquer item dele pode ser lançado como perda, inclusive no mesmo dia em que
-          foi produzido.
-          <br />
-          <br />
-          Se a padaria já produziu hoje ({rotuloDoDia(diaDaSemana)}) sem passar pelo app, vá em{" "}
-          <strong>Cronograma</strong> → <strong>planejar para outra data</strong>, escolha hoje,
-          registre o que foi produzido e confirme. Os itens passam a aparecer aqui.
+          Nenhum produto ativo no catálogo. Cadastre em <strong>Produtos</strong> para poder lançar
+          perdas.
         </p>
       ) : !candidatoSelecionado ? (
         <div>

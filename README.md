@@ -43,13 +43,15 @@ inicial do documento de arquitetura:
 | Limpar sessão | Botão "limpar esta sessão" por acordeão, com confirmação em dois toques. **Nunca existe um "limpar tudo" global** — um toque errado apagaria o cronograma inteiro montado no fim do expediente, sem desfazer |
 | Assinatura da fita | "Montado por" sai no rodapé de **cada sessão**, não uma vez só no fim: a fita é cortada e cada pedaço vai para o quadro de um setor — pedaço sem nome é pedaço sem responsável |
 | Perda no mesmo dia | Fornada queimada ou fora do padrão deve ser pesada e lançada no dia, nunca no dia seguinte. O app sempre aceitou isso; o que faltava era chamar o operador — ver "Perda no mesmo dia" abaixo |
-| Produção realizada | No fim do expediente, na tela de **Cronograma**, confirma-se o que REALMENTE saiu do forno — comparando com o total PEDIDO (matriz + filiais), que é o que revela o gargalo. Marcação binária ("não saiu"), porque é assim que acontece na prática — não sai em quantidade menor. O plano nunca é reescrito |
+| Fornada pronta | A matriz marca cada fornada ao longo do dia, num toque, no painel "Forno de hoje". Produto não é "produzido ou não": pão francês e biscoito de queijo saem **várias vezes por dia**, e cada fornada é um evento com hora própria |
+| Reposição | A filial vê o que saiu do forno hoje e pede o item extra para HOJE, separado do pedido de amanhã — reposição **nunca** entra no planejamento do dia seguinte |
+| Produção realizada | No fim do expediente, na tela de **Cronograma**, confirma-se o que REALMENTE saiu do forno — já vem pré-marcado pelas fornadas do dia — comparando com o total PEDIDO (matriz + filiais), que é o que revela o gargalo. Marcação binária ("não saiu"), porque é assim que acontece na prática — não sai em quantidade menor. O plano nunca é reescrito |
 | Abas por perfil | A filial vê **Pedido e Perdas**. Catálogo, Cronograma e Análises são da matriz — as regras do Firestore já negariam gravação da filial neles, e mostrar as abas só ofereceria caminhos que terminam em "sem permissão". |
-| Escopo das perdas | A filial vê e lança só as perdas dela, sobre **qualquer produto ativo** — ela recebe da matriz, tem estoque de dias diferentes no balcão e não produz. A matriz vê as três lojas, com a origem em cada linha, e continua atribuindo a perda a uma fornada |
+| Escopo das perdas | **Qualquer produto ativo** pode receber perda, nas três lojas — a janela de validade só ATRIBUI a fornada quando existe uma, nunca decide quem aparece na lista. A filial vê só as perdas dela; a matriz vê as três, com a origem em cada linha |
 | Cadastro de produto | Três campos: nome, categoria (obrigatória) e peso médio (opcional). Unidade é sempre "un" e o prazo vem da categoria — ambos editáveis depois, na linha do Catálogo |
 | Anular perda | Lançamento errado (1000 em vez de 10) é **anulado pela matriz, nunca apagado** — o registro fica no histórico marcado, com quem anulou e por quê, e sai de todos os cálculos |
 | Excluir produto | Exige a **senha da loja** (revalidada no Firebase), não só um segundo clique — apaga catálogo compartilhado pelas três lojas |
-| Quem pode receber perda | Qualquer produto que já tenha sido produzido em **alguma** ocasião. Produto nunca produzido não entra (não existe fornada da qual pudesse ter vindo) |
+| Impressão no caixa | Botão "Imprimir no caixa" enfileira as imagens no Firestore; um agente Python no PC do caixa busca a cada 15s e imprime na térmica USB — ver `agente-impressao/`. O caminho antigo (WhatsApp) continua existindo |
 | Instalação | App instalável (PWA): ícone próprio na tela de início do celular e na área de trabalho do PC — ver seção "Instalar como app" abaixo |
 | Insights de catálogo | Botão "✨ Gerar insights com IA" em Análises (Gemini) — aponta produtos sobrando (perda por sobra alta), produtos ativos parados há muito tempo, ou outros padrões úteis; sempre informativo, nunca altera nada sozinho |
 
@@ -465,7 +467,7 @@ separação, uma correção de tela faz o aparelho baixar ~20KB.
 O emulador do Firestore não roda no ambiente onde este código foi
 construído (o download do emulador é bloqueado pela rede), então a camada
 Firestore e as regras de segurança **não têm teste automatizado**. O que foi
-verificado: tipagem estrita, build, as 59 asserções de lógica de negócio e o
+verificado: tipagem estrita, build, as asserções de lógica de negócio e o
 fluxo de login em navegador real (incluindo o comportamento sem conexão).
 A primeira execução contra o projeto real precisa de conferência manual —
 ver "Conferência pós-migração" abaixo.
@@ -744,10 +746,145 @@ misturar o pedido de uma loja com o da outra é um erro caro e silencioso.
 Só o primeiro bloco de cada loja carrega o marcador — os seguintes são
 categorias da mesma loja e continuam com a faixa de corte comum.
 
+## Impressão na térmica do caixa (ago/2026)
+
+A impressora é USB, ligada ao PC do caixa, e não tem rede. O celular não
+consegue falar com ela direto: o **Safari do iPhone bloqueia** uma página
+HTTPS de chamar um endereço `http://192.168.x.x` da rede local, sem
+contorno confiável (o Chrome 142+ tem um prompt de permissão; o Safari não
+tem equivalente). Depender disso seria construir algo que não funciona em
+metade dos aparelhos.
+
+O caminho é indireto:
+
+```
+Celular ──> fila no Firestore ──> agente no PC ──> impressora USB
+```
+
+### Por que a fila mora no Firestore
+
+O plano original previa Upstash Redis, porque na época não havia backend.
+Com o Firestore já no ar para as três lojas, a fila é só mais uma coleção
+— **nenhum serviço novo para contratar, configurar ou manter**. É o efeito
+colateral bom de ter feito as filiais antes da impressora.
+
+### Por que conta de usuário, e não chave de serviço
+
+O agente entra com `impressora@paodemel.local`. Uma chave de serviço do
+Firebase **ignora as regras de segurança** e daria ao PC do caixa acesso
+total ao banco das três lojas. Com conta comum, as regras limitam o agente
+a ler a fila e alterar apenas `status`, `impressoEm` e `erro` — se aquele
+PC for comprometido, o estrago fica contido nisso.
+
+### Por que consulta periódica, e não escuta em tempo real
+
+Escuta em tempo real exigiria a biblioteca oficial do Google e, com ela, a
+chave de serviço. A consulta a cada 15s usa só a API REST com a conta
+comum: **~5.760 leituras/dia contra 50.000 gratuitas** — folga de quase 9x
+mesmo somando o uso normal do app.
+
+### Um documento por imagem
+
+O Firestore limita cada documento a 1 MiB e o base64 engorda a imagem em
+~33%. Uma fita de 260KB vira ~350KB (cabe), mas uma fita dividida em três
+partes estouraria se fosse tudo num documento. Separando, cada parte ainda
+imprime e falha por conta própria. `base64DoDataUrl` recusa acima de 700KB
+com mensagem clara — melhor que o Firestore recusar com erro genérico
+depois que o operador achou que mandou imprimir.
+
+### Trabalho que falha não é repetido
+
+Um erro marca o documento como `erro` e o agente segue adiante. Repetir
+automaticamente viraria laço infinito gastando papel e quota. O operador
+reenvia pelo celular depois de resolver.
+
+### O que não foi testado aqui
+
+A impressão em si — Windows, driver e térmica — **não roda neste
+ambiente**. O que foi verificado automaticamente: leitura da resposta do
+Firestore, preparo da imagem (redimensionamento para 576 e 384 pontos,
+conversão para tons de cinza, e transparência virando branco em vez de
+mancha preta), e a validação de tamanho no app.
+
+A primeira impressão real precisa de conferência no PC do caixa —
+`agente-impressao/LEIA-ME.md` tem a tabela de erros comuns e o que cada um
+significa.
+
+## Fornadas e reposição (ago/2026)
+
+Correção de modelo do dono do negócio, e das mais importantes até aqui:
+
+> A matriz marca fornada o dia inteiro, e alguns produtos como pão francês
+> e biscoito de queijo saem várias fornadas durante o dia.
+
+Produto não é "produzido ou não" no dia. **Cada fornada é um evento com
+hora própria.** Isso destrava a comunicação entre as lojas, que era o
+objetivo: a filial fica sabendo que o item saiu do forno AGORA e pede
+reposição enquanto ainda dá tempo de entregar hoje — informação que a
+conferência do fim do expediente chega tarde demais para dar.
+
+### Marcar é UM TOQUE, sem quantidade
+
+`FornadaPronta` não tem quantidade de propósito. Um item que sai seis
+vezes por dia viraria seis digitações e ninguém marcaria. O que a filial
+precisa saber é que saiu e a que horas; quanto ela quer, ela mesma
+informa no pedido de reposição.
+
+### Painel próprio, não um botão na lista
+
+Defeito encontrado em teste **antes da entrega**, e vale registrar porque
+teria matado o recurso em silêncio: na primeira versão o botão ficava em
+cada item da lista do Cronograma. Mas essa tela abre no **dia seguinte** —
+ela existe para planejar. O padeiro teria que trocar a data para hoje toda
+vez que uma fornada saísse, seis vezes ao dia só de pão francês.
+
+`PainelFornoDeHoje.tsx` fica no topo, sempre sobre HOJE, independente da
+data que o operador esteja planejando embaixo. Abriu o app, marcou,
+fechou. O cabeçalho resume o progresso ("Forno de hoje · 2 de 3").
+
+### O fechamento sai quase pronto
+
+Marcando o dia todo, a confirmação do fim do expediente já vem
+preenchida: item com fornada aparece como produzido, item sem nenhuma
+aparece como "não saiu". O operador só confere.
+
+Uma confirmação já feita à mão **vence** a pré-marcação — ele pode ter
+corrigido algo que a marcação não pegou.
+
+### Reposição é outra lista
+
+| | Pedido diário | Reposição |
+|---|---|---|
+| Para quando | Amanhã | Hoje |
+| Quantos por dia | Um, sobrescreve | Vários, cada um é um documento |
+| Entra no planejamento | Sim | **Não** |
+
+Misturar as duas esconderia a urgência: a matriz precisa ver que uma loja
+está pedindo AGORA, não descobrir junto com o planejamento do dia
+seguinte. `consolidarProducao` ignora reposição explicitamente — somá-la
+faria produzir de novo amanhã algo que já foi entregue hoje. A verificação
+`Caso 25` trava isso.
+
+O id da reposição leva o instante do envio, porque a filial pode ficar sem
+pão às 9h e sem biscoito às 15h — dois pedidos no mesmo dia, e o segundo
+não pode apagar o primeiro.
+
+### Ainda falta o push
+
+Esta entrega é a **metade que não depende de configuração**: a filial vê
+as fornadas ao abrir o app. O aviso proativo (push) precisa de duas
+chaves que só o dono da conta gera — vem na entrega seguinte.
+
 ## Estrutura
 
 ```
 producao-perdas/
+  agente-impressao/               # Programa que roda no PC do caixa e imprime na térmica
+    agente.py                      # Busca a fila, prepara a imagem e imprime (ESC/POS via driver do Windows)
+    LEIA-ME.md                      # Instalação passo a passo e tabela de erros
+    config.exemplo.ini               # Modelo de configuração (o config.ini real fica fora do Git)
+    instalar.bat / iniciar.bat        # Atalhos de dois cliques para quem não usa terminal
+    listar-impressoras.py             # Mostra o nome exato da impressora para o config.ini
   firestore.rules                 # REGRAS DE ACESSO — a única coisa que protege os dados
   firebase.json                   # Aponta onde ficam as regras (uso opcional pela CLI)
   api/
@@ -757,6 +894,8 @@ producao-perdas/
     types/
       produto.ts                # Modelo de Produto
       pedido.ts                  # Pedido de filial (um por loja por dia)
+      impressao.ts                # Trabalho na fila de impressão do caixa
+      fornada.ts                   # Fornada pronta — evento com hora, várias por dia
       producao.ts                 # Sessão de Produção (por categoria), Plano Diário — quantidade em unidades
       perda.ts                     # Registro de Perda — peso em kg + peso unitário informado + unidades estimadas
     lib/
@@ -780,7 +919,9 @@ producao-perdas/
       ConfirmarComSenha.tsx     # Revalida a senha da loja antes de ação irreversível
       AvisoGlobal.tsx          # Faixa de retorno de gravação (sucesso/erro), acionada só pelo App
       TelaPedidoFilial.tsx     # Tela principal da filial: quanto ela vai precisar amanhã
-      PainelPedidosFiliais.tsx  # Indicador "enviado / aguardando" no topo do Cronograma
+      PainelPedidosFiliais.tsx  # Indicador "enviado / aguardando" + reposições chegando
+      PainelFornoDeHoje.tsx      # Marcação de fornada pronta (matriz), sempre sobre HOJE
+      PainelFornadasFilial.tsx    # O que saiu do forno hoje + pedido de reposição (filial)
       TelaLogin.tsx            # Entrada por LOJA (não por funcionário) — escolhe a loja e digita a senha
       ImportarDadosLocais.tsx   # Migração única de localStorage para a nuvem
       BannerInstalar.tsx       # Convite para instalar o app (botão no Chrome/Android, instruções no iPhone)
@@ -810,7 +951,7 @@ producao-perdas/
 ## Verificação
 
 ```
-npm run verificar   # roda scripts/verificar_logica.ts (99 asserções)
+npm run verificar   # roda scripts/verificar_logica.ts (118 asserções)
 npx tsc --noEmit     # typecheck estrito, sem gerar arquivos
 npm run build        # build de produção completo
 ```

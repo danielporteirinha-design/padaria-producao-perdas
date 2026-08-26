@@ -23,7 +23,9 @@ import { useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { ItemPlanoProducao } from "../types/producao";
 import type { PedidoFilial } from "../types/pedido";
-import { idDoPedido } from "../types/pedido";
+import { ehPedidoDiario, idDoPedido } from "../types/pedido";
+import type { FornadaPronta } from "../types/fornada";
+import { PainelFornadasFilial } from "./PainelFornadasFilial";
 import type { Loja } from "../lib/lojas";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
@@ -35,6 +37,8 @@ interface TelaPedidoFilialProps {
   produtos: Produto[];
   pedidos: PedidoFilial[];
   operador: string;
+  /** Fornadas prontas hoje na matriz — base do pedido de reposição. */
+  fornadas: FornadaPronta[];
   onSalvarPedido: (pedido: PedidoFilial) => Promise<void>;
 }
 
@@ -43,6 +47,7 @@ export function TelaPedidoFilial({
   produtos,
   pedidos,
   operador,
+  fornadas,
   onSalvarPedido,
 }: TelaPedidoFilialProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
@@ -54,7 +59,9 @@ export function TelaPedidoFilial({
   const [enviando, setEnviando] = useState(false);
 
   const pedidoExistente = useMemo(
-    () => pedidos.find((p) => p.data === dataAlvo && p.lojaId === loja.id),
+    // Só o pedido DIÁRIO: a reposição é outra lista, com outra urgência,
+    // e não pode ser confundida com o planejamento de amanhã.
+    () => pedidos.find((p) => p.data === dataAlvo && p.lojaId === loja.id && ehPedidoDiario(p)),
     [pedidos, dataAlvo, loja.id]
   );
 
@@ -141,6 +148,18 @@ export function TelaPedidoFilial({
 
   return (
     <div className="tela">
+      {/* O que já saiu do forno hoje vem PRIMEIRO: é a informação
+          perecível da tela — dá para agir sobre ela ainda hoje, ao
+          contrário do pedido de amanhã. */}
+      <PainelFornadasFilial
+        loja={loja}
+        produtos={produtos}
+        fornadas={fornadas}
+        pedidos={pedidos}
+        operador={operador}
+        onSalvarPedido={onSalvarPedido}
+      />
+
       <p className="destaque-data">
         <IconeCalendario tamanho={20} />
         <span>

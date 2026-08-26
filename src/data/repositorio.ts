@@ -11,6 +11,8 @@ import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
 import type { PedidoFilial } from "../types/pedido";
+import type { TrabalhoImpressao } from "../types/impressao";
+import type { FornadaPronta } from "../types/fornada";
 
 export interface Repositorio {
   listarProdutos(): Promise<Produto[]>;
@@ -41,4 +43,16 @@ export interface Repositorio {
    */
   listarPedidos(lojaId?: string): Promise<PedidoFilial[]>;
   salvarPedido(pedido: PedidoFilial): Promise<PedidoFilial>;
+
+  /**
+   * Enfileira imagens para a impressora térmica do caixa. Um documento
+   * por imagem — ver src/types/impressao.ts.
+   */
+  enviarParaImpressao(trabalhos: TrabalhoImpressao[]): Promise<void>;
+
+  /** Fornadas prontas do dia — marcadas pela matriz ao longo do expediente. */
+  listarFornadas(data: string): Promise<FornadaPronta[]>;
+  marcarFornada(fornada: FornadaPronta): Promise<void>;
+  /** Desfaz uma marcação feita por engano. */
+  desmarcarFornada(fornadaId: string): Promise<void>;
 }

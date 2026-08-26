@@ -109,3 +109,25 @@ export function IconeCadeado(props: IconeProps) {
     </Svg>
   );
 }
+
+export function IconeImpressora(props: IconeProps) {
+  return (
+    <Svg {...props}>
+      <path d="M6 9V3h12v6" />
+      <rect x="3" y="9" width="18" height="8" rx="2" />
+      <path d="M6 14h12v7H6z" />
+    </Svg>
+  );
+}
+
+/** Forno — usado na marcação de fornada pronta. */
+export function IconeForno(props: IconeProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="4" width="18" height="17" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M7 6.5h.01M10 6.5h.01" />
+      <rect x="7" y="12" width="10" height="6" rx="1" />
+    </Svg>
+  );
+}

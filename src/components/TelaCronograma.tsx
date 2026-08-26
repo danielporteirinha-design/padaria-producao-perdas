@@ -30,7 +30,10 @@ import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProduc
 import { ExportarFita } from "./ExportarFita";
 import { PainelPedidosFiliais } from "./PainelPedidosFiliais";
 import { ConfirmarProducao } from "./ConfirmarProducao";
+import { PainelFornoDeHoje } from "./PainelFornoDeHoje";
 import type { PedidoFilial } from "../types/pedido";
+import type { FornadaPronta } from "../types/fornada";
+import { codigosComFornadaNoDia } from "../types/fornada";
 import { FILIAIS, LOJA_MATRIZ, nomeDaLoja } from "../lib/lojas";
 import { consolidarProducao, itensParaLoja, type ItemConsolidado } from "../lib/consolidacao";
 import { IconeCalendario, IconeLixeira, IconeSeta } from "./Icones";
@@ -41,6 +44,11 @@ interface TelaCronogramaProps {
   pedidos: PedidoFilial[];
   /** Confirma, no fim do expediente, o que realmente saiu do forno. */
   onConfirmarProducao: (planoId: string, codigosNaoProduzidos: number[]) => Promise<void>;
+  /** Envia as imagens para a impressora térmica do caixa (ver types/impressao.ts). */
+  onImprimirNoCaixa: (canvases: HTMLCanvasElement[], documento: string, nomeBase: string) => Promise<void>;
+  /** Fornadas já marcadas hoje (ver types/fornada.ts). */
+  fornadas: FornadaPronta[];
+  onMarcarFornada: (codigoPdv: number) => Promise<void>;
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   operador: string;
@@ -64,6 +72,9 @@ export function TelaCronograma({
   produtos,
   pedidos,
   onConfirmarProducao,
+  onImprimirNoCaixa,
+  fornadas,
+  onMarcarFornada,
   planos,
   perdas,
   operador,
@@ -363,6 +374,9 @@ export function TelaCronograma({
             produtos={produtos}
             montadoPor={planoConfirmado.criadoPor}
             nomeArquivoBase={`separacao-filiais-${dataAlvo}`}
+            onImprimirNoCaixa={(canvases, titulo) =>
+              onImprimirNoCaixa(canvases, titulo, `separacao-filiais-${dataAlvo}`)
+            }
           />
         ) : documentoSelecionado.id === "producao" ? (
           <ExportarFita
@@ -373,6 +387,9 @@ export function TelaCronograma({
             produtos={produtos}
             montadoPor={planoConfirmado.criadoPor}
             nomeArquivoBase={`producao-${dataAlvo}`}
+            onImprimirNoCaixa={(canvases, titulo) =>
+              onImprimirNoCaixa(canvases, titulo, `producao-${dataAlvo}`)
+            }
           />
         ) : (
           <ExportarFita
@@ -383,6 +400,9 @@ export function TelaCronograma({
             produtos={produtos}
             montadoPor={planoConfirmado.criadoPor}
             nomeArquivoBase={`separacao-${documentoSelecionado.id.toLowerCase()}-${dataAlvo}`}
+            onImprimirNoCaixa={(canvases, titulo) =>
+              onImprimirNoCaixa(canvases, titulo, `separacao-${documentoSelecionado.id.toLowerCase()}-${dataAlvo}`)
+            }
           />
         )}
 
@@ -462,17 +482,36 @@ export function TelaCronograma({
         <span>Produção de {dataFormatada}</span>
       </p>
 
+      {/* Marcar fornada é sobre HOJE; a lista de baixo planeja AMANHÃ.
+          Por isso o painel fica aqui em cima, independente da data que o
+          operador estiver planejando — ver PainelFornoDeHoje.tsx. */}
+      {planoDeHoje && (
+        <PainelFornoDeHoje
+          plano={planoDeHoje}
+          produtos={produtos}
+          fornadas={fornadas}
+          dataHoje={hojeIso}
+          onMarcarFornada={onMarcarFornada}
+        />
+      )}
+
       {planoDeHoje && (
         <ConfirmarProducao
           plano={planoDeHoje}
           produtos={produtos}
           operador={operador}
           totaisPedidos={totaisPedidosDeHoje}
+          codigosComFornada={codigosComFornadaNoDia(fornadas, hojeIso)}
           onConfirmar={(codigos) => onConfirmarProducao(planoDeHoje.id, codigos)}
         />
       )}
 
-      <PainelPedidosFiliais pedidos={pedidos} data={dataAlvo} />
+      <PainelPedidosFiliais
+        pedidos={pedidos}
+        data={dataAlvo}
+        reposicoesDeHoje={pedidos.filter((p) => p.data === hojeIso && p.tipo === "reposicao")}
+        nomeDoProduto={nomeDoProduto}
+      />
 
       {planoExistente && (
         <p className="callout-inline">
@@ -618,7 +657,11 @@ export function TelaCronograma({
                       )}
 
                       {itemSalvo && !editando && (
-                        <button type="button" className="link" onClick={() => removerItem(chave, produto.codigoPdv)}>
+                        <button
+                          type="button"
+                          className="link"
+                          onClick={() => removerItem(chave, produto.codigoPdv)}
+                        >
                           remover
                         </button>
                       )}

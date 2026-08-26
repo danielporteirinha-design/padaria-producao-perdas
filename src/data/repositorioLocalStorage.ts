@@ -13,6 +13,7 @@ import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
 import type { PedidoFilial } from "../types/pedido";
+import type { FornadaPronta } from "../types/fornada";
 import produtosSeed from "../../data/produtos.seed.json";
 import type { Repositorio } from "./repositorio";
 
@@ -125,6 +126,26 @@ export class RepositorioLocalStorage implements Repositorio {
     const todos = await this.listarPedidos();
     escrever("padaria:pedidos", [...todos.filter((p) => p.id !== pedido.id), pedido]);
     return pedido;
+  }
+
+  async listarFornadas(data: string): Promise<FornadaPronta[]> {
+    return ler<FornadaPronta[]>("padaria:fornadas", []).filter((f) => f.data === data);
+  }
+
+  async marcarFornada(fornada: FornadaPronta): Promise<void> {
+    const todas = ler<FornadaPronta[]>("padaria:fornadas", []);
+    escrever("padaria:fornadas", [...todas.filter((f) => f.id !== fornada.id), fornada]);
+  }
+
+  async desmarcarFornada(fornadaId: string): Promise<void> {
+    const todas = ler<FornadaPronta[]>("padaria:fornadas", []);
+    escrever("padaria:fornadas", todas.filter((f) => f.id !== fornadaId));
+  }
+
+  async enviarParaImpressao(): Promise<void> {
+    // Sem Firestore não há agente do outro lado — o caminho de impressão
+    // no caixa só existe na implementação de produção.
+    throw new Error("A impressão no caixa exige o backend na nuvem.");
   }
 
   async cancelarPerda(perdaId: string, canceladaPor: string, motivo: string): Promise<void> {

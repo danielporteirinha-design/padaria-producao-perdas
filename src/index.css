@@ -773,3 +773,144 @@ button.perigo:hover { background: #822525; }
   border-radius: 999px;
   white-space: nowrap;
 }
+
+/* Marcação de fornada pronta (ver types/fornada.ts). Fica discreto
+   enquanto o item não saiu e ganha cor depois — o operador precisa
+   distinguir de relance o que já foi para o balcão. */
+.acoes-item-cronograma { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.botao-fornada {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--cor-borda);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cor-texto-suave);
+  cursor: pointer;
+}
+.botao-fornada:hover { border-color: var(--cor-acento); color: var(--cor-acento); }
+.botao-fornada.com-fornada {
+  background: var(--cor-sucesso-fundo);
+  border-color: var(--cor-sucesso);
+  color: var(--cor-sucesso);
+}
+.botao-fornada:disabled { opacity: 0.5; cursor: default; }
+
+/* Fornadas prontas vistas da filial (PainelFornadasFilial.tsx) e as
+   reposições chegando na matriz. */
+.painel-fornadas {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-left: 4px solid var(--cor-acento);
+  border-radius: var(--raio);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.painel-fornadas h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; }
+.painel-fornadas h3 svg { color: var(--cor-acento); }
+.painel-fornadas.vazio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--cor-texto-suave);
+  font-size: 14px;
+  border-left-color: var(--cor-borda);
+}
+.painel-fornadas.vazio svg { color: var(--cor-texto-suave); flex-shrink: 0; }
+
+.linha-fornada {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--cor-borda);
+}
+.linha-fornada:last-child { border-bottom: none; }
+.info-fornada { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.ja-pedido { color: var(--cor-sucesso); white-space: nowrap; }
+.ja-pedido svg { vertical-align: -2px; }
+.linha-fornada .editor-quantidade { width: 100%; }
+
+.cartao-reposicoes {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--cor-alerta-fundo);
+  border: 1px solid var(--cor-alerta);
+  border-radius: var(--raio);
+  font-size: 14px;
+}
+.cartao-reposicoes strong { display: block; margin-bottom: 6px; }
+.linha-reposicao { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; }
+
+/* ---------------------------------------------------------------
+   Forno de hoje (PainelFornoDeHoje.tsx). Fica no topo do Cronograma,
+   sempre sobre a produção de HOJE — a lista de baixo planeja amanhã.
+   Cada item é um alvo de toque grande: o padeiro marca com a mão suja
+   de farinha, muitas vezes ao dia.
+   --------------------------------------------------------------- */
+
+.painel-forno {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-left: 4px solid var(--cor-acento);
+  border-radius: var(--raio);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.cabecalho-forno {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--cor-texto);
+  text-align: left;
+}
+.cabecalho-forno > svg:first-child { color: var(--cor-acento); flex-shrink: 0; }
+.titulo-forno { flex: 1; font-size: 16px; font-weight: 700; }
+.painel-forno.aberto .seta-sessao { transform: rotate(180deg); }
+.corpo-forno { padding: 0 14px 14px; }
+.grupo-forno h4 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cor-texto-suave);
+}
+
+.linha-forno {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 14px;
+  margin-bottom: 6px;
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  font-size: 15px;
+  cursor: pointer;
+  text-align: left;
+}
+.linha-forno .nome-forno { font-weight: 600; flex: 1; min-width: 0; }
+.linha-forno .marca-forno {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cor-texto-suave);
+  white-space: nowrap;
+}
+.linha-forno.saiu {
+  background: var(--cor-sucesso-fundo);
+  border-color: var(--cor-sucesso);
+}
+.linha-forno.saiu .marca-forno { color: var(--cor-sucesso); }
+.linha-forno:disabled { opacity: 0.6; cursor: default; }

@@ -100,6 +100,44 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Fornadas prontas (ago/2026). Só a matriz marca — é ela que produz.
+    // As filiais LEEM para saber que o item saiu do forno e pedir
+    // reposição enquanto ainda dá tempo de entregar hoje.
+    match /fornadas/{fornadaId} {
+      allow read: if lojaConhecida();
+      allow create: if ehMatriz();
+      // Marcação errada se apaga (foi só um toque), mas não se reescreve:
+      // mudar a hora depois falsearia quando o produto ficou pronto.
+      allow update: if false;
+      allow delete: if ehMatriz();
+    }
+
+    // Fila de impressão no caixa (ago/2026). O celular grava o trabalho
+    // aqui e o agente que roda no PC do caixa busca, imprime e marca.
+    //
+    // O agente entra com uma conta PRÓPRIA (impressora@paodemel.local) em
+    // vez de uma chave de serviço: chave de serviço ignora estas regras e
+    // daria ao PC do caixa acesso total ao banco. Assim ele só enxerga a
+    // fila, e só pode mudar o status do que já existe.
+    function ehImpressora() {
+      return request.auth != null && email() == 'impressora@paodemel.local';
+    }
+
+    match /fila_impressao/{trabalhoId} {
+      allow read: if lojaConhecida() || ehImpressora();
+      allow create: if lojaConhecida()
+                    && request.resource.data.lojaId == lojaDoUsuario()
+                    && request.resource.data.status == 'pendente';
+      // O agente só mexe no resultado da impressão — nunca na imagem, no
+      // documento nem em quem mandou imprimir.
+      allow update: if ehImpressora()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'impressoEm', 'erro']);
+      // Trabalho já impresso pode ser removido para a coleção não crescer
+      // sem limite — pela matriz ou pelo próprio agente.
+      allow delete: if ehMatriz() || ehImpressora();
+    }
+
     // Qualquer coleção não listada acima fica fechada. Deixar o padrão
     // fechado é o que impede uma coleção nova nascer aberta por
     // esquecimento — a regra dela tem que ser escrita de propósito.

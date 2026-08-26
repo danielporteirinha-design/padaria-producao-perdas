@@ -45,12 +45,16 @@ import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
 import type { PedidoFilial } from "../types/pedido";
+import type { TrabalhoImpressao } from "../types/impressao";
+import type { FornadaPronta } from "../types/fornada";
 import type { Repositorio } from "./repositorio";
 
 const COL_PRODUTOS = "produtos";
 const COL_PLANOS = "planos";
 const COL_PERDAS = "perdas";
 const COL_PEDIDOS = "pedidos";
+const COL_IMPRESSAO = "fila_impressao";
+const COL_FORNADAS = "fornadas";
 
 /** Erro de domínio — sempre com mensagem apresentável ao operador. */
 export class ErroRepositorio extends Error {}
@@ -201,6 +205,39 @@ export class RepositorioFirestore implements Repositorio {
   async salvarPedido(pedido: PedidoFilial): Promise<PedidoFilial> {
     await setDoc(doc(db, COL_PEDIDOS, pedido.id), limpar(pedido));
     return pedido;
+  }
+
+  // ---------------------------------------------------------- impressão
+
+  async enviarParaImpressao(trabalhos: TrabalhoImpressao[]): Promise<void> {
+    // Sequencial de propósito: são no máximo três imagens, e gravar em
+    // ordem faz a impressora receber as partes na ordem certa.
+    for (const trabalho of trabalhos) {
+      await setDoc(doc(db, COL_IMPRESSAO, trabalho.id), limpar(trabalho));
+    }
+  }
+
+  // ----------------------------------------------------------- fornadas
+
+  /**
+   * Consulta por DIA, não a coleção inteira: fornadas acumulam rápido
+   * (um produto que sai 6 vezes ao dia, vezes dezenas de produtos, vezes
+   * 30 dias) e carregar tudo a cada abertura do app queimaria leituras
+   * sem servir para nada — a tela só olha o dia corrente.
+   */
+  async listarFornadas(data: string): Promise<FornadaPronta[]> {
+    const snap = await getDocs(query(collection(db, COL_FORNADAS), where("data", "==", data)));
+    return snap.docs
+      .map((d) => d.data() as FornadaPronta)
+      .sort((a, b) => a.marcadaEm.localeCompare(b.marcadaEm));
+  }
+
+  async marcarFornada(fornada: FornadaPronta): Promise<void> {
+    await setDoc(doc(db, COL_FORNADAS, fornada.id), limpar(fornada));
+  }
+
+  async desmarcarFornada(fornadaId: string): Promise<void> {
+    await deleteDoc(doc(db, COL_FORNADAS, fornadaId));
   }
 
   // ------------------------------------------------------------ migração

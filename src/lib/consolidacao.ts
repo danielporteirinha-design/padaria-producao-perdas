@@ -19,6 +19,7 @@
 
 import type { ItemPlanoProducao } from "../types/producao";
 import type { PedidoFilial } from "../types/pedido";
+import { ehPedidoDiario } from "../types/pedido";
 
 export interface DestinoDoItem {
   lojaId: string;
@@ -37,9 +38,13 @@ export interface ItemConsolidado {
  * Consolida a produção própria da matriz com os pedidos JÁ ENVIADOS das
  * filiais para uma data.
  *
- * Pedido em rascunho é ignorado de propósito: a filial ainda está mexendo
- * nele, e produzir com base num número que ela não confirmou seria pior
- * que produzir sem ele. O indicador "enviado/aguardando" na tela da
+ * Dois tipos de pedido são ignorados de propósito:
+ *
+ * - **rascunho** — a filial ainda está mexendo nele, e produzir com base
+ *   num número que ela não confirmou é pior que produzir sem ele.
+ * - **reposição** — é pedido de HOJE, feito depois que o item já saiu do
+ *   forno. Somá-la ao planejamento faria produzir de novo amanhã algo que
+ *   já foi entregue. O indicador "enviado/aguardando" na tela da
  * matriz existe justamente para isso ficar visível antes de confirmar.
  */
 export function consolidarProducao(
@@ -61,6 +66,11 @@ export function consolidarProducao(
   }
   for (const pedido of pedidos) {
     if (pedido.status !== "enviado") continue;
+    // Reposição é pedido de HOJE, feito depois que o item já saiu do
+    // forno — somá-la ao planejamento faria a matriz produzir de novo
+    // amanhã algo que já foi entregue. São listas com urgências
+    // diferentes de propósito (ver src/types/pedido.ts).
+    if (!ehPedidoDiario(pedido)) continue;
     for (const item of pedido.itens) {
       somar(item.codigoPdv, pedido.lojaId, item.quantidadeUnidades);
     }

@@ -19,6 +19,8 @@ import { BannerInstalar } from "./components/BannerInstalar";
 import { AvisoPerdaPendente } from "./components/AvisoPerdaPendente";
 import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
 import type { PedidoFilial } from "./types/pedido";
+import { base64DoDataUrl, type TrabalhoImpressao } from "./types/impressao";
+import { idDaFornada, type FornadaPronta } from "./types/fornada";
 
 type Aba = "cronograma" | "cadastro" | "perdas" | "analises" | "pedido";
 
@@ -108,6 +110,7 @@ export default function App() {
   const [planos, setPlanos] = useState<PlanoDeProducaoDiario[]>([]);
   const [perdas, setPerdas] = useState<RegistroPerda[]>([]);
   const [pedidos, setPedidos] = useState<PedidoFilial[]>([]);
+  const [fornadas, setFornadas] = useState<FornadaPronta[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   const [erroCarregamento, setErroCarregamento] = useState("");
@@ -193,13 +196,17 @@ export default function App() {
       // A filial só pode ler os próprios pedidos (ver firestore.rules) —
       // sem o filtro, a consulta dela seria recusada inteira.
       repositorio.listarPedidos(loja?.papel === "filial" ? loja.id : undefined),
+      // Só as fornadas de HOJE: elas acumulam rápido (um item que sai 6
+      // vezes ao dia, vezes dezenas de itens) e a tela só olha o dia.
+      repositorio.listarFornadas(dataDeHojeIso()),
     ])
-      .then(([p, pl, pe, pd]) => {
+      .then(([p, pl, pe, pd, fo]) => {
         if (cancelado) return;
         setProdutos(p);
         setPlanos(pl);
         setPerdas(pe);
         setPedidos(pd);
+        setFornadas(fo);
         setCarregando(false);
       })
       .catch((erro) => {
@@ -275,6 +282,58 @@ export default function App() {
           : p
       )
     );
+  }
+
+  /**
+   * Enfileira as imagens para a impressora térmica do caixa. Uma imagem
+   * por documento no Firestore — ver src/types/impressao.ts sobre por que
+   * não vai tudo num só, e agente-impressao/ sobre quem imprime do outro
+   * lado.
+   */
+  async function handleImprimirNoCaixa(
+    canvases: HTMLCanvasElement[],
+    documento: string,
+    nomeBase: string
+  ) {
+    const agora = new Date().toISOString();
+    const trabalhos: TrabalhoImpressao[] = canvases.map((canvas, indice) => ({
+      id: `${nomeBase}-${indice + 1}-${Date.now()}`,
+      lojaId: loja!.id,
+      documento,
+      nomeArquivo: canvases.length > 1 ? `${nomeBase}-parte${indice + 1}.png` : `${nomeBase}.png`,
+      parte: indice + 1,
+      totalPartes: canvases.length,
+      imagemBase64: base64DoDataUrl(canvas.toDataURL("image/png"), nomeBase),
+      status: "pendente",
+      criadoPor: operador,
+      criadoEm: agora,
+    }));
+
+    await comRetorno(
+      () => repositorio!.enviarParaImpressao(trabalhos),
+      canvases.length > 1
+        ? `Enviado para a impressora do caixa — ${canvases.length} partes.`
+        : "Enviado para a impressora do caixa."
+    );
+  }
+
+  /**
+   * Marca que uma fornada do produto acabou de sair do forno. Um toque,
+   * sem quantidade — ver src/types/fornada.ts sobre por quê.
+   */
+  async function handleMarcarFornada(codigoPdv: number) {
+    const agora = new Date().toISOString();
+    const hoje = dataDeHojeIso();
+    const fornada: FornadaPronta = {
+      id: idDaFornada(hoje, codigoPdv, agora),
+      data: hoje,
+      codigoPdv,
+      marcadaPor: operador,
+      marcadaEm: agora,
+    };
+    const nome = produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? "Produto";
+    await comRetorno(() => repositorio!.marcarFornada(fornada), `${nome} saiu do forno.`);
+    setFornadas((atual) => [...atual, fornada]);
   }
 
   async function handleSalvarPedido(pedido: PedidoFilial) {
@@ -490,6 +549,9 @@ export default function App() {
             produtos={produtos}
             pedidos={pedidos}
             onConfirmarProducao={handleConfirmarProducao}
+            onImprimirNoCaixa={handleImprimirNoCaixa}
+            fornadas={fornadas}
+            onMarcarFornada={handleMarcarFornada}
             planos={planos}
             perdas={perdas}
             operador={operador}
@@ -502,6 +564,7 @@ export default function App() {
             produtos={produtos}
             pedidos={pedidos}
             operador={operador}
+            fornadas={fornadas}
             onSalvarPedido={handleSalvarPedido}
           />
         )}

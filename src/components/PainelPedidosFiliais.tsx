@@ -36,11 +36,21 @@ import { IconeAtencao, IconeConfere } from "./Icones";
 interface PainelPedidosFiliaisProps {
   pedidos: PedidoFilial[];
   data: string;
+  /** Reposições pedidas HOJE — urgentes, aparecem em destaque à parte. */
+  reposicoesDeHoje?: PedidoFilial[];
+  nomeDoProduto?: (codigoPdv: number) => string;
 }
 
-export function PainelPedidosFiliais({ pedidos, data }: PainelPedidosFiliaisProps) {
+export function PainelPedidosFiliais({
+  pedidos,
+  data,
+  reposicoesDeHoje = [],
+  nomeDoProduto,
+}: PainelPedidosFiliaisProps) {
   const situacao = FILIAIS.map((filial) => {
-    const pedido = pedidos.find((p) => p.data === data && p.lojaId === filial.id);
+    const pedido = pedidos.find(
+      (p) => p.data === data && p.lojaId === filial.id && p.tipo !== "reposicao"
+    );
     return { filial, pedido, enviado: pedido?.status === "enviado" };
   });
 
@@ -65,6 +75,29 @@ export function PainelPedidosFiliais({ pedidos, data }: PainelPedidosFiliaisProp
         <p className="nota-rodape">
           Confirmando agora, o que falta não entra na produção.
         </p>
+      )}
+
+      {/* Reposição é de HOJE e não entra no planejamento de amanhã — por
+          isso aparece separada, e não somada ao pedido diário da loja. */}
+      {reposicoesDeHoje.length > 0 && (
+        <div className="cartao-reposicoes">
+          <strong>Reposições pedidas hoje</strong>
+          {reposicoesDeHoje.map((pedido) => (
+            <div key={pedido.id} className="linha-reposicao">
+              <span className="nome-filial">
+                {FILIAIS.find((f) => f.id === pedido.lojaId)?.nomeCurto ?? pedido.lojaId}
+              </span>
+              <span className="status-filial">
+                {pedido.itens
+                  .map(
+                    (i) =>
+                      `${nomeDoProduto ? nomeDoProduto(i.codigoPdv) : i.codigoPdv} (${i.quantidadeUnidades} un)`
+                  )
+                  .join(", ")}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -34,8 +34,22 @@ import {
 import type { Produto } from "../src/types/produto";
 import type { PlanoDeProducaoDiario } from "../src/types/producao";
 import { perdaEstaValida, type RegistroPerda } from "../src/types/perda";
-import { idDoPedido, totalDoPedido, type PedidoFilial } from "../src/types/pedido";
+import {
+  ehPedidoDiario,
+  ehReposicao,
+  idDaReposicao,
+  idDoPedido,
+  totalDoPedido,
+  type PedidoFilial,
+} from "../src/types/pedido";
+import {
+  codigosComFornadaNoDia,
+  fornadasDoProduto,
+  idDaFornada,
+  type FornadaPronta,
+} from "../src/types/fornada";
 import { consolidarProducao, itensParaLoja, quantidadeDaLoja } from "../src/lib/consolidacao";
+import { base64DoDataUrl, ErroImpressao, LIMITE_BASE64_BYTES } from "../src/types/impressao";
 
 let falhas = 0;
 function afirmar(condicao: boolean, descricao: string) {
@@ -1010,6 +1024,138 @@ const perdas: RegistroPerda[] = [
   // perda do negócio é do negócio, não de uma unidade.
   const totalGeral = todas.filter(perdaEstaValida).reduce((s, p) => s + p.quantidadeUnidadesEstimada, 0);
   afirmar(totalGeral === 60, `análise consolidada soma as três lojas (obtido: ${totalGeral})`);
+}
+
+// ---------------------------------------------------------------
+// Caso 24: fila de impressão no caixa (ago/2026). A imagem viaja em
+// base64 dentro de um documento do Firestore, que tem limite de 1 MiB.
+// Recusar cedo, com mensagem clara, é muito melhor que o Firestore
+// recusar a gravação com erro genérico depois que o operador já achou
+// que mandou imprimir.
+// ---------------------------------------------------------------
+{
+  const pequeno = "data:image/png;base64," + "A".repeat(1000);
+  afirmar(
+    base64DoDataUrl(pequeno, "teste.png").length === 1000,
+    "extrai o base64 puro, sem o prefixo data:"
+  );
+  afirmar(
+    !base64DoDataUrl(pequeno, "teste.png").startsWith("data:"),
+    "o prefixo não vaza para o documento gravado"
+  );
+
+  const gigante = "data:image/png;base64," + "A".repeat(LIMITE_BASE64_BYTES + 1);
+  try {
+    base64DoDataUrl(gigante, "fita-gigante.png");
+    afirmar(false, "deveria ter recusado a imagem acima do limite");
+  } catch (e) {
+    afirmar(e instanceof ErroImpressao, "imagem grande demais lança ErroImpressao");
+    afirmar(
+      (e as Error).message.includes("fita-gigante.png"),
+      "a mensagem diz QUAL imagem falhou"
+    );
+    afirmar(
+      /WhatsApp/i.test((e as Error).message),
+      "a mensagem oferece a saída que continua funcionando (WhatsApp)"
+    );
+  }
+
+  try {
+    base64DoDataUrl("isto-nao-e-um-data-url", "x.png");
+    afirmar(false, "deveria ter recusado entrada malformada");
+  } catch (e) {
+    afirmar(e instanceof ErroImpressao, "data URL malformado também é erro de domínio");
+  }
+
+  // O limite tem que ficar com folga real abaixo de 1 MiB do Firestore:
+  // além da imagem, o documento carrega nome, loja, datas e status.
+  afirmar(
+    LIMITE_BASE64_BYTES < 1_048_576 * 0.75,
+    `limite de base64 deixa folga para os demais campos (${LIMITE_BASE64_BYTES} bytes)`
+  );
+}
+
+// ---------------------------------------------------------------
+// Caso 25: fornadas recorrentes e reposição (ago/2026). Correção de
+// modelo do dono do negócio: pão francês e biscoito de queijo saem VÁRIAS
+// vezes ao dia. Produto não é "produzido ou não" — cada fornada é um
+// evento com hora própria, e é isso que permite a filial pedir reposição
+// enquanto ainda dá tempo de entregar hoje.
+// ---------------------------------------------------------------
+{
+  const HOJE = "2026-08-27";
+  const f = (codigo: number, hora: string): FornadaPronta => ({
+    id: idDaFornada(HOJE, codigo, `${HOJE}T${hora}:00.000Z`),
+    data: HOJE,
+    codigoPdv: codigo,
+    marcadaPor: "Daniel",
+    marcadaEm: `${HOJE}T${hora}:00.000Z`,
+  });
+
+  // Pão francês saindo três vezes ao longo do dia.
+  const fornadas = [f(112, "09:00"), f(112, "12:00"), f(112, "15:00"), f(999, "10:00")];
+
+  const doPao = fornadasDoProduto(fornadas, HOJE, 112);
+  afirmar(doPao.length === 3, `mesmo produto acumula fornadas no dia (obtido: ${doPao.length})`);
+  afirmar(
+    doPao[0].marcadaEm.includes("15:00"),
+    "a mais RECENTE vem primeiro — é a que ainda dá para pedir hoje"
+  );
+  afirmar(
+    fornadasDoProduto(fornadas, HOJE, 555).length === 0,
+    "produto que não saiu não tem fornada"
+  );
+  afirmar(
+    fornadasDoProduto(fornadas, "2026-08-26", 112).length === 0,
+    "fornada de outro dia não aparece no dia consultado"
+  );
+
+  // Ids precisam ser distintos, senão a segunda fornada sobrescreveria a
+  // primeira e o histórico do dia se perderia.
+  const ids = new Set(fornadas.map((x) => x.id));
+  afirmar(ids.size === 4, `cada marcação gera um id próprio (obtido: ${ids.size})`);
+
+  // Base do fechamento pré-marcado.
+  const comFornada = codigosComFornadaNoDia(fornadas, HOJE);
+  afirmar(comFornada.has(112) && comFornada.has(999), "fechamento reconhece o que saiu");
+  afirmar(!comFornada.has(555), "e reconhece o que NÃO saiu");
+
+  // --- Reposição não pode entrar no planejamento de amanhã ---
+  const diario: PedidoFilial = {
+    id: "d", lojaId: "FILIAL_ARTHUR_BERNARDES", data: HOJE,
+    itens: [{ codigoPdv: 112, quantidadeUnidades: 20 }],
+    status: "enviado", tipo: "diario", criadoPor: "Ana", criadoEm: "", enviadoEm: "",
+  };
+  const reposicao: PedidoFilial = {
+    ...diario, id: "r", tipo: "reposicao",
+    itens: [{ codigoPdv: 112, quantidadeUnidades: 500 }],
+  };
+
+  const consolidado = consolidarProducao(
+    [{ codigoPdv: 112, quantidadeUnidades: 40 }],
+    [diario, reposicao],
+    "MATRIZ"
+  );
+  const pao = consolidado.find((c) => c.codigoPdv === 112)!;
+  afirmar(
+    pao.totalUnidades === 60,
+    `reposição NÃO entra no planejamento: 40 da matriz + 20 do pedido diário = 60 (obtido: ${pao.totalUnidades})`
+  );
+  afirmar(
+    quantidadeDaLoja(pao, "FILIAL_ARTHUR_BERNARDES") === 20,
+    "o romaneio da filial também ignora a reposição"
+  );
+
+  // Reposição pode acontecer mais de uma vez no mesmo dia — o id leva o
+  // instante, senão o segundo pedido apagaria o primeiro.
+  const r1 = idDaReposicao(HOJE, "FILIAL_ARTHUR_BERNARDES", "2026-08-27T09:00:00.000Z");
+  const r2 = idDaReposicao(HOJE, "FILIAL_ARTHUR_BERNARDES", "2026-08-27T15:00:00.000Z");
+  afirmar(r1 !== r2, "duas reposições no mesmo dia geram documentos diferentes");
+  afirmar(ehReposicao(reposicao) && !ehReposicao(diario), "os dois tipos são distinguíveis");
+  afirmar(
+    ehPedidoDiario({ ...diario, tipo: undefined }),
+    "pedido anterior ao campo `tipo` continua contando como diário"
+  );
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);
