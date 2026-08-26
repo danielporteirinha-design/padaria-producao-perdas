@@ -4,7 +4,14 @@ REM Para o agente subir sozinho com o Windows, veja o LEIA-ME.md.
 
 title Agente de impressao - Padaria Pao de Mel
 cd /d "%~dp0"
-python agente.py
+
+call _encontrar-python.bat
+if errorlevel 1 (
+  pause
+  exit /b 1
+)
+
+%PY% agente.py
 
 REM Se cair, a janela fica aberta para dar tempo de ler o erro.
 echo.

@@ -179,7 +179,22 @@ def valor_simples(campo):
 
 
 def buscar_pendentes(sessao, config):
-    """Consulta os trabalhos com status pendente, mais antigos primeiro."""
+    """
+    Consulta os trabalhos com status pendente, mais antigos primeiro.
+
+    SEM `orderBy` NA CONSULTA, DE PROPOSITO (ago/2026)
+    --------------------------------------------------
+    Filtrar por um campo e ordenar por OUTRO obriga o Firestore a ter um
+    indice composto, criado a mao no console. Na primeira instalacao isso
+    aparecia como "The query requires an index" e travava a configuracao
+    inteira num passo que nao tem nada a ver com impressao — e voltaria a
+    travar no dia em que o projeto fosse recriado.
+
+    A ordenacao acontece aqui embaixo, em Python. A fila e' curta por
+    natureza (o que imprime sai dela em segundos), entao ordenar no PC
+    custa nada e o agente passa a funcionar em qualquer projeto novo sem
+    preparo nenhum.
+    """
     consulta = {
         "structuredQuery": {
             "from": [{"collectionId": COLECAO}],
@@ -190,8 +205,10 @@ def buscar_pendentes(sessao, config):
                     "value": {"stringValue": "pendente"},
                 }
             },
-            "orderBy": [{"field": {"fieldPath": "criadoEm"}, "direction": "ASCENDING"}],
-            "limit": 10,
+            # Limite generoso: sem ordenacao no servidor, o corte e'
+            # arbitrario, e um numero apertado poderia deixar o trabalho
+            # mais antigo de fora justamente quando a fila acumula.
+            "limit": 25,
         }
     }
     resposta = requests.post(
@@ -218,8 +235,16 @@ def buscar_pendentes(sessao, config):
                 "totalPartes": valor_simples(campos.get("totalPartes", {})) or 1,
                 "imagemBase64": valor_simples(campos.get("imagemBase64", {})) or "",
                 "criadoPor": valor_simples(campos.get("criadoPor", {})) or "",
+                "criadoEm": valor_simples(campos.get("criadoEm", {})) or "",
             }
         )
+
+    # Ordenacao que saiu da consulta (ver o comentario la' em cima).
+    # `criadoEm` e' ISO 8601, entao ordem alfabetica e' ordem cronologica.
+    # Uma fita dividida em varias partes tem que sair na sequencia certa:
+    # imprimir a parte 2 antes da 1 entrega ao padeiro uma lista fora de
+    # ordem, e ele so' descobre depois de cortar o papel.
+    trabalhos.sort(key=lambda t: (t["criadoEm"], t["parte"]))
     return trabalhos
 
 

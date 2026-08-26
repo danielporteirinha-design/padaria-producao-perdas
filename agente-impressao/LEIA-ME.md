@@ -14,6 +14,18 @@ o Safari do iPhone bloqueia uma página HTTPS de chamar um endereço da
 rede local, sem contorno confiável. Então o caminho é indireto — o celular
 grava na nuvem, este programa busca a cada 15 segundos e imprime.
 
+## Nenhum índice do Firestore a criar
+
+A consulta da fila filtra por `status` e **não** ordena no servidor: a
+ordenação acontece no PC, em Python. Filtrar por um campo e ordenar por
+outro obrigaria o Firestore a ter um índice composto, criado a mão no
+console — e na primeira instalação isso apareceu como
+`The query requires an index`, travando a configuração num passo que não
+tem nada a ver com impressão (ago/2026).
+
+A fila é curta por natureza, então ordenar aqui custa nada e o agente
+funciona em qualquer projeto novo sem preparo.
+
 ## Instalação (uma vez só)
 
 ### 1. Instalar o Python
@@ -21,7 +33,29 @@ grava na nuvem, este programa busca a cada 15 segundos e imprime.
 Baixe em [python.org/downloads](https://www.python.org/downloads/).
 
 **Na primeira tela do instalador, marque "Add Python to PATH"** antes de
-clicar em Install. Sem isso os arquivos `.bat` não funcionam.
+clicar em Install.
+
+#### Se aparecer "Python Install Manager"
+
+O python.org passou a distribuir o **Python Install Manager** — um
+gerenciador, que instala o atalho `py` mas **não é o Python em si**. Se a
+tela disser que o Install Manager já está instalado, confira no Prompt de
+Comando:
+
+```
+py --version
+```
+
+Se responder com um número de versão, está pronto. Se disser que nenhuma
+versão foi encontrada, instale uma:
+
+```
+py install 3.13
+```
+
+Os arquivos `.bat` deste projeto lidam com os dois mundos: procuram `py`
+primeiro e `python` depois, e avisam na tela quando não acham nenhum — em
+vez de abrir e fechar sem explicação, que era o comportamento antigo.
 
 ### 2. Criar a conta da impressora no Firebase
 
@@ -51,8 +85,12 @@ preencha dois campos:
 - `senha` — a senha que você criou no passo 2
 - `nome` — o nome exato da impressora
 
-Para o nome não errar, dê dois cliques em **`listar-impressoras.py`**: ele
-mostra as impressoras instaladas com o nome exato. Copie de lá.
+Para o nome não errar, dê dois cliques em **`listar-impressoras.bat`**:
+ele mostra as impressoras instaladas com o nome exato. Copie de lá.
+
+(É `.bat`, e não `.py`: dois cliques num `.py` só funcionam se a extensão
+estiver associada ao Python, e com o Install Manager ela costuma não
+estar.)
 
 Se a bobina for de 58mm em vez de 80mm, troque `largura_pontos` para `384`.
 

@@ -1234,7 +1234,8 @@ producao-perdas/
     LEIA-ME.md                      # Instalação passo a passo e tabela de erros
     config.exemplo.ini               # Modelo de configuração (o config.ini real fica fora do Git)
     instalar.bat / iniciar.bat        # Atalhos de dois cliques para quem não usa terminal
-    listar-impressoras.py             # Mostra o nome exato da impressora para o config.ini
+    _encontrar-python.bat              # Acha o Python (py ou python) e avisa quando não existe
+    listar-impressoras.bat / .py       # Mostra o nome exato da impressora para o config.ini
   firestore.rules                 # REGRAS DE ACESSO — a única coisa que protege os dados
   firebase.json                   # Aponta onde ficam as regras (uso opcional pela CLI)
   api/
