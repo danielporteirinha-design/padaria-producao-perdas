@@ -111,6 +111,8 @@ const CONFERENCIAS = [
   ["src/components/TelaCronograma.tsx", "botao-lista-producao", "Botao de imprimir a lista da producao"],
   ["src/components/TelaPedidoFilial.tsx", "aviso-corte", "Filial ve o que a matriz cortou"],
   ["src/lib/gerarImagemLista.ts", "computarBlocosContinuos", "Lista da loja: um cabecalho, um rodape"],
+  ["src/lib/gerarImagemLista.ts", "VERMELHO_MARCA", "Cupom: loja em vermelho, data sem faixa preta"],
+  ["src/components/PainelPedidosFiliais.tsx", "hora-pedido", "Hora da solicitacao na Reposicao"],
   ["src/lib/avisarFiliais.ts", "avisarListaAjustada", "Aviso de lista ajustada"],
   ["api/notificar-fornada.ts", "listaAjustada", "Servidor: aviso de lista ajustada"],
   ["firestore.rules", "ajusteDaMatriz", "Regras: matriz pode ajustar (COLAR NO CONSOLE!)"],

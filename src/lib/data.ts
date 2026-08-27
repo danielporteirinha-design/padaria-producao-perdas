@@ -96,3 +96,19 @@ export function somarDias(dataIso: string, dias: number): string {
   const base = new Date(ano, (mes ?? 1) - 1, (dia ?? 1) + dias);
   return formatarDataIso(base);
 }
+
+
+/**
+ * A hora de um instante ISO, como "09:12". Vazio quando não há instante.
+ *
+ * Existe porque a HORA é o dado que decide na reposição (ago/2026, pedido
+ * do dono do negócio): um pedido das 7h e um das 11h têm urgências
+ * diferentes, e a lista sem hora obrigava a matriz a adivinhar qual
+ * chegou primeiro — ou pior, a tratar os dois igual.
+ */
+export function horaDoInstante(instanteIso: string | undefined): string {
+  if (!instanteIso) return "";
+  const data = new Date(instanteIso);
+  if (Number.isNaN(data.getTime())) return "";
+  return data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}

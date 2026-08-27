@@ -32,6 +32,7 @@ function variedadesDoPedido(pedido: PedidoFilial | undefined): number {
   return pedido?.itens.length ?? 0;
 }
 import { FILIAIS } from "../lib/lojas";
+import { horaDoInstante } from "../lib/data";
 import { IconeAtencao, IconeConfere, IconeSeta } from "./Icones";
 
 interface PainelPedidosFiliaisProps {
@@ -135,7 +136,11 @@ export function PainelPedidosFiliais({
           <span className="dados-filial">
             <strong>{filial.nomeCurto}</strong>
             <span className="status-filial">
-              {enviado ? `${variedadesDoPedido(pedido)} produtos` : "não enviou o pedido"}
+              {enviado
+                ? `${variedadesDoPedido(pedido)} produtos${
+                    horaDoInstante(pedido?.enviadoEm) ? ` · ${horaDoInstante(pedido?.enviadoEm)}` : ""
+                  }`
+                : "não enviou o pedido"}
             </span>
           </span>
         </div>
@@ -206,8 +211,19 @@ export function PainelPedidosFiliais({
             return (
               <div key={pedido.id} className={`linha-reposicao ${desfecho}`}>
                 {/* Sem o nome da loja aqui: o cabeçalho do grupo já diz de
-                    quem é, e repetir em toda linha era metade do ruído. */}
+                    quem é, e repetir em toda linha era metade do ruído.
+
+                    A HORA, sim (ago/2026, pedido do dono do negócio). Um
+                    pedido das 7h e um das 11h têm urgências diferentes, e
+                    sem ela a matriz tratava os dois igual — ou tentava
+                    deduzir a ordem pela posição na lista, que é a ordem
+                    de chegada e ninguém garante que continue sendo. */}
                 <span className="status-filial">
+                  {horaDoInstante(pedido.enviadoEm ?? pedido.criadoEm) && (
+                    <strong className="hora-pedido">
+                      {horaDoInstante(pedido.enviadoEm ?? pedido.criadoEm)}
+                    </strong>
+                  )}
                   {pedido.itens
                     .map(
                       (i) =>

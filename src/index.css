@@ -2080,6 +2080,16 @@ button.perigo:hover { background: #822525; }
 .item-cortado { overflow-wrap: anywhere; }
 .item-cortado em { font-style: normal; color: var(--cor-texto-suave); font-size: 13px; }
 
+/* A hora do pedido, antes dos itens (ago/2026). Fica em destaque e com
+   números de largura fixa: a matriz percorre a coluna de horas para saber
+   o que chegou primeiro, e dígitos de larguras diferentes desalinham essa
+   leitura vertical. */
+.hora-pedido {
+  margin-right: 8px;
+  color: var(--cor-acento);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------------------------------------------------------------
    Relatório das fornadas (TelaAnalises.tsx, ago/2026).
 

@@ -29,12 +29,31 @@ const ALTURA_LINHA = 56;
 /** Só para os testes conferirem a conta de altura sem duplicar o número. */
 export const ALTURA_LINHA_TESTE = ALTURA_LINHA;
 /**
- * 174 e nao 210: saiu a linha "PADARIA PAO DE MEL" do topo de cada bloco
- * (ago/2026). Só funcionario da padaria usa este app e este papel nunca
- * sai da cozinha — a marca ali gastava 36px de bobina, em toda sessao de
- * todo dia, para informar a padaria o nome dela mesma.
+ * Cabeçalho de cada cupom: nome do destino, data e nome do setor.
+ *
+ * Já foi 210 e caiu para 174 quando saiu a linha "PADARIA PAO DE MEL" do
+ * topo de cada bloco (ago/2026) — só funcionário da padaria usa este app
+ * e este papel nunca sai da cozinha; a marca ali gastava 36px de bobina,
+ * em toda sessão de todo dia, para informar a padaria o nome dela mesma.
+ *
+ * Subiu para 186 (ago/2026, pedido do dono do negócio) quando o destino,
+ * a data e o setor ganharam corpo. O papel ficou um pouco mais alto e
+ * passou a ser lido de longe, que é como ele é lido de verdade: pregado
+ * no quadro, com o padeiro de mãos ocupadas a um metro de distância.
  */
-const ALTURA_CABECALHO_BLOCO = 174;
+const ALTURA_CABECALHO_BLOCO = 186;
+
+/**
+ * O vermelho da logomarca, amostrado do arquivo original (ver
+ * scripts/gerar_icones.py).
+ *
+ * NA TÉRMICA ELE SAI PRETO, e é de propósito: a impressora imprime 1 bit
+ * por ponto, e este vermelho é escuro o bastante (luminância ~63 de 255)
+ * para cair do lado preto do corte de limiar, sólido, sem chuvisco. Na
+ * tela e no WhatsApp — para onde a mesma imagem também vai — ele sai
+ * vermelho. Um só arquivo serve aos dois destinos.
+ */
+const VERMELHO_MARCA = "#c40027";
 /**
  * Rodapé de CADA sessão. Tem duas alturas porque a assinatura ("Montado
  * por: fulano") entra dentro de cada bloco, não só no fim da fita
@@ -72,10 +91,10 @@ export const ALTURA_RODAPE_FINAL = 36;
    Aqui a data e o nome da loja saem uma vez no alto, os setores viram
    subtítulos dentro do documento, e a assinatura sai uma vez no fim.
    --------------------------------------------------------------- */
-/** Margem + título + faixa preta da data. */
-export const ALTURA_CABECALHO_DOC = 126;
-/** Nome do setor + régua, dentro do documento. */
-export const ALTURA_SUBTITULO_SESSAO = 44;
+/** Margem + nome da loja + data grande + régua. */
+export const ALTURA_CABECALHO_DOC = 132;
+/** Nome do setor, centrado e maior que os produtos, + régua. */
+export const ALTURA_SUBTITULO_SESSAO = 52;
 /** Respiro entre o fim de uma sessão e o subtítulo da próxima. */
 export const ALTURA_ESPACO_APOS_SESSAO = 14;
 export const ALTURA_RODAPE_DOC = 62;
@@ -413,28 +432,33 @@ function desenharDocumentoContinuo(
   ctx.textBaseline = "top";
 
   // --- Cabeçalho, uma vez só (ALTURA_CABECALHO_DOC)
+  // O nome da loja em vermelho e grande, a data maior ainda e sem faixa
+  // preta — as duas decisões estão explicadas em desenharBloco().
   let y = MARGEM;
-  ctx.fillStyle = "#000000";
   ctx.textAlign = "center";
-  ctx.font = "bold 22px system-ui, -apple-system, sans-serif";
-  ctx.fillText(titulo, LARGURA_PX / 2, y);
-  y += 34;
+  ctx.fillStyle = VERMELHO_MARCA;
+  ctx.font = "bold 30px system-ui, -apple-system, sans-serif";
+  ctx.fillText(titulo, LARGURA_PX / 2, y, LARGURA_PX - MARGEM * 2);
+  y += 42;
 
-  ctx.fillRect(MARGEM, y, LARGURA_PX - MARGEM * 2, 50);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 24px system-ui, -apple-system, sans-serif";
-  ctx.fillText(dataFormatada, LARGURA_PX / 2, y + 13);
-  y += 68;
+  ctx.fillStyle = "#000000";
+  ctx.font = "bold 34px system-ui, -apple-system, sans-serif";
+  ctx.fillText(dataFormatada, LARGURA_PX / 2, y, LARGURA_PX - MARGEM * 2);
+  y += 46;
+  linhaHorizontal(ctx, y, "#000000", 3);
+  y += 19;
 
   // --- Sessões, como subtítulos dentro do mesmo documento
   for (const bloco of grupo) {
+    // Centrado e maior que os produtos: é o que separa, de relance, o
+    // nome de um SETOR do nome de um PRODUTO numa lista corrida.
     ctx.fillStyle = "#000000";
-    ctx.textAlign = "left";
-    ctx.font = "bold 20px system-ui, -apple-system, sans-serif";
-    ctx.fillText(bloco.rotuloSessao.toUpperCase(), MARGEM, y);
-    y += 30;
+    ctx.textAlign = "center";
+    ctx.font = "bold 27px system-ui, -apple-system, sans-serif";
+    ctx.fillText(bloco.rotuloSessao.toUpperCase(), LARGURA_PX / 2, y, LARGURA_PX - MARGEM * 2);
+    y += 38;
     linhaHorizontal(ctx, y, "#000000", 2);
-    y += ALTURA_SUBTITULO_SESSAO - 30;
+    y += ALTURA_SUBTITULO_SESSAO - 38;
 
     if (bloco.linhas.length === 0) {
       ctx.font = "18px system-ui, -apple-system, sans-serif";
@@ -507,38 +531,56 @@ function desenharBloco(
    */
   dataEmDestaque = true
 ): number {
+  void dataEmDestaque;
   let y = yInicial + MARGEM;
 
-  ctx.fillStyle = "#000000";
+  /**
+   * O DESTINO EM VERMELHO E GRANDE (ago/2026, pedido do dono do negócio:
+   * "aumentar o tamanho da fonte do nome da loja, sem 'Matriz' ou
+   * 'Filial', e colocar uma cor mais em destaque").
+   *
+   * O "Filial" na frente não distinguia nada — todo papel que sai desta
+   * fita é de uma loja — e roubava espaço do que distingue: o nome. Quem
+   * passa esses papéis adiante lê a primeira linha de relance para saber
+   * de quem é aquele monte, e é essa leitura que a palavra atrapalhava.
+   */
+  ctx.fillStyle = VERMELHO_MARCA;
   ctx.textAlign = "center";
-  ctx.font = "bold 22px system-ui, -apple-system, sans-serif";
-  ctx.fillText(titulo, LARGURA_PX / 2, y);
-  y += 34;
+  ctx.font = "bold 30px system-ui, -apple-system, sans-serif";
+  ctx.fillText(titulo, LARGURA_PX / 2, y, LARGURA_PX - MARGEM * 2);
+  y += 42;
 
-  const alturaCaixaData = 50;
-  if (dataEmDestaque) {
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(MARGEM, y, LARGURA_PX - MARGEM * 2, alturaCaixaData);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 24px system-ui, -apple-system, sans-serif";
-    ctx.fillText(dataFormatada, LARGURA_PX / 2, y + 13);
-  } else {
-    // Sem faixa: negrito e uma régua embaixo dão hierarquia suficiente
-    // quando a loja de destino já levou o destaque forte.
-    ctx.fillStyle = "#000000";
-    ctx.font = "bold 24px system-ui, -apple-system, sans-serif";
-    ctx.fillText(dataFormatada, LARGURA_PX / 2, y + 13);
-    linhaHorizontal(ctx, y + 46, "#000000", 2);
-  }
-  y += alturaCaixaData + 18;
-
+  /**
+   * A DATA SEM FAIXA PRETA (ago/2026, pedido do dono do negócio).
+   *
+   * A faixa gastava tinta térmica em toda sessão de todo dia e, com duas
+   * ou três num mesmo palmo de papel, deixava de destacar: quando tudo
+   * grita, nada grita. Agora o destaque é o TAMANHO — 34px é a maior
+   * coisa do papel, lida de longe, que é como ela é lida de verdade.
+   */
   ctx.fillStyle = "#000000";
-  ctx.font = "bold 22px system-ui, -apple-system, sans-serif";
-  ctx.fillText(rotuloSessao.toUpperCase(), LARGURA_PX / 2, y);
-  y += 32;
+  ctx.font = "bold 34px system-ui, -apple-system, sans-serif";
+  ctx.fillText(dataFormatada, LARGURA_PX / 2, y, LARGURA_PX - MARGEM * 2);
+  y += 46;
+  linhaHorizontal(ctx, y, "#000000", 3);
+  y += 19;
+
+  /**
+   * O SETOR MAIOR QUE OS PRODUTOS (ago/2026, pedido do dono do negócio:
+   * "uma fonte levemente maior do que a dos produtos, para destacar
+   * visualmente o que é sessão e o que é produto").
+   *
+   * Estava MENOR que as linhas de produto — a hierarquia invertida: o
+   * título do bloco parecia uma observação, e os produtos, o assunto.
+   * 27px contra 24px é pouco no papel e suficiente no olho.
+   */
+  ctx.fillStyle = "#000000";
+  ctx.font = "bold 27px system-ui, -apple-system, sans-serif";
+  ctx.fillText(rotuloSessao.toUpperCase(), LARGURA_PX / 2, y, LARGURA_PX - MARGEM * 2);
+  y += 38;
 
   linhaHorizontal(ctx, y, "#000000", 2);
-  y += 14;
+  y += 16;
 
   ctx.textAlign = "left";
   if (linhas.length === 0) {
