@@ -79,6 +79,7 @@ const CONFERENCIAS = [
   ["src/components/TelaLogin.tsx", "BannerInstalar", "Instalar na tela de entrada"],
   ["src/lib/atualizacao.ts", "onNeedRefresh", "Aviso de versão nova"],
   ["vite.config.ts", '"#ffffff"', "Splash branco"],
+  ["src/index.css", "SEM PLACA ATRÁS DA MARCA", "Logo sem placa branca na entrada"],
   ["scripts/gerar_icones.py", "FUNDO_ICONE", "Ícones com fundo branco"],
 
   // --- Reposição enxuta
@@ -95,6 +96,19 @@ const CONFERENCIAS = [
 
   // --- Reposição: lista do mais recente para o mais antigo
   ["src/lib/ordemDaReposicao.ts", "ordenarPorAnuncioRecente", "Reposição: anúncios mais recentes no topo"],
+
+  // --- Logomarca sem fundo na tela de entrada
+  ["scripts/gerar_icones.py", "cinza_claro", "Logo recortada por regiao (sem casca clara)"],
+
+  // --- Reposição: cadastro relâmpago e botões da filial
+  ["src/components/PainelFornoDeHoje.tsx", "cadastrarEAnunciar", "Matriz: cadastrar produto na hora"],
+  ["src/components/PainelFornadasFilial.tsx", "botao-fornada", "Filial: Pedir e Excluir do mesmo tamanho"],
+  ["src/index.css", "chip-setor", "Estilo do cadastro relampago"],
+
+  // --- Rascunho do pedido da filial
+  ["src/lib/rascunhoLocal.ts", "chavesVencidas", "Base comum dos rascunhos"],
+  ["src/lib/rascunhoPedido.ts", "chaveDoRascunhoPedido", "Programacao da filial sobrevive a troca de aba"],
+  ["src/components/TelaPedidoFilial.tsx", "gravarRascunhoPedido", "Filial: itens excluidos nao voltam"],
 
   // --- Rascunho do cronograma
   ["src/lib/rascunhoCronograma.ts", "mapasIguais", "Rascunho do cronograma sobrevive à troca de aba"],

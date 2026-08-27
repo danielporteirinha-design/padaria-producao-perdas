@@ -30,9 +30,12 @@ AS TRÊS FAMÍLIAS, E POR QUE SÃO DIFERENTES
    dono do negócio). Na tela de início do celular o ícone aparece cercado
    dos outros aplicativos, e o creme lia como papel encardido em vez de
    escolha — além de tirar contraste justamente do vermelho e do amarelo,
-   que são a marca. Sobre branco a pílula recorta limpa, e é a mesma
-   decisão já tomada na tela de entrada do app, onde a marca ganhou uma
-   placa branca.
+   que são a marca. Sobre branco a pílula recorta limpa.
+
+   Na tela de ENTRADA a decisão é outra (ago/2026): lá a marca fica
+   direto sobre o creme do app, sem placa nenhuma. São contextos
+   diferentes — o ícone divide a tela com aplicativos de terceiros e
+   precisa de moldura própria; a tela de entrada é do app inteiro.
 
 2. Maskable (Android): o sistema recorta o ícone em círculo, gota ou
    quadrado arredondado, à escolha do fabricante. Só a área central é
@@ -60,7 +63,9 @@ AS TRÊS FAMÍLIAS, E POR QUE SÃO DIFERENTES
 """
 
 from pathlib import Path
+import numpy as np
 from PIL import Image, ImageDraw
+from scipy import ndimage
 
 RAIZ = Path(__file__).resolve().parent.parent
 PUBLICO = RAIZ / "public"
@@ -76,29 +81,66 @@ FUNDO_ICONE = (255, 255, 255)
 
 def logo() -> Image.Image:
     """
-    A logomarca com o fundo BRANCO removido.
+    A logomarca com o fundo REALMENTE removido, por preenchimento a partir
+    das bordas.
 
-    O arquivo de origem tem fundo branco sólido, e sobre o creme do ícone
-    isso aparecia como um halo claro contornando a pílula — sujeira
-    visível justamente nas bordas arredondadas, que são a parte da forma
-    que carrega o reconhecimento nos tamanhos pequenos.
+    POR QUE NÃO BASTA "APAGAR O QUE FOR BRANCO"
+    --------------------------------------------
+    A versão anterior apagava pixel a pixel o que passasse de 243 nos três
+    canais. O arquivo de origem, porém, é uma digitalização comprimida: o
+    fundo em volta da pílula não é branco puro, é uma nuvem de 238-255 com
+    ruído de compressão. O que sobrava era uma casca de pixels claros
+    contornando a marca — invisível sobre a placa branca da tela de entrada
+    e bem visível sobre o creme do app, que é o fundo pedido agora
+    (ago/2026, pedido do dono do negócio: "abaixo da logomarca teremos
+    somente a cor de plano de fundo do app").
 
-    O corte é só no branco puro (tolerância curta): o "PADARIA" da marca é
-    creme (255,255,215), longe o bastante para não ser apagado junto.
+    Baixar o corte para 232 resolveria a casca e criaria outro problema:
+    apagaria qualquer claro DENTRO da marca. Por isso o corte não é por
+    cor, e sim por REGIÃO: parte-se das quatro bordas da imagem e apaga-se
+    só a mancha clara conectada a elas. Um claro cercado de vermelho não é
+    fundo e não é tocado.
 
-    Continua valendo com o fundo do ícone branco: o que se remove aqui é o
-    branco de FORA da pílula, e o que entra no lugar é o branco do ícone —
-    a diferença é que agora não sobra halo nenhum para aparecer.
+    A franja de 2 px ao redor recebe transparência proporcional — pixel
+    quase branco some, pixel já misturado com a marca fica. Sem isso a
+    borda ficaria serrilhada, que é o defeito que a placa branca escondia.
     """
     marca = Image.open(ORIGEM).convert("RGBA")
-    pixels = marca.load()
-    largura, altura = marca.size
-    for y in range(altura):
-        for x in range(largura):
-            r, g, b, a = pixels[x, y]
-            if r > 243 and g > 243 and b > 243:
-                pixels[x, y] = (r, g, b, 0)
-    return marca
+    dados = np.array(marca).astype(np.int16)
+    canais = dados[:, :, :3]
+
+    maximo = canais.max(axis=2)
+    minimo = canais.min(axis=2)
+
+    # Candidato a fundo: o quase-branco E o cinza da sombra que o
+    # original traz em volta da pílula. A marca não tem cinza — é
+    # vermelha, amarela e branca —, então "quase sem cor e claro" só
+    # descreve o que está FORA dela. O branco do "PADARIA" também se
+    # encaixa nessa descrição, e é justamente por isso que o corte é por
+    # região: ele está cercado de vermelho e nunca chega às bordas.
+    claro = minimo >= 232
+    cinza_claro = ((maximo - minimo) < 30) & (minimo >= 150)
+    candidato = claro | cinza_claro
+
+    # Só a mancha CONECTADA às bordas da imagem é fundo.
+    regioes, _ = ndimage.label(candidato)
+    das_bordas = set(regioes[0].tolist()) | set(regioes[-1].tolist())
+    das_bordas |= set(regioes[:, 0].tolist()) | set(regioes[:, -1].tolist())
+    das_bordas.discard(0)
+    fundo = np.isin(regioes, list(das_bordas))
+
+    alfa = np.where(fundo, 0, 255).astype(np.int16)
+
+    # Franja: o anel de 3 px em volta do fundo perde opacidade conforme
+    # sua clareza. É o que faz a borda da pílula sair suave em vez de
+    # serrilhada — defeito que a placa branca escondia e o fundo creme
+    # denunciaria.
+    anel = ndimage.binary_dilation(fundo, iterations=3) & ~fundo
+    suave = np.clip((232 - minimo) * (255 / 60), 0, 255)
+    alfa = np.where(anel, np.minimum(alfa, suave), alfa)
+
+    dados[:, :, 3] = alfa
+    return Image.fromarray(dados.astype(np.uint8), "RGBA")
 
 
 def cantos_arredondados(imagem: Image.Image, raio_relativo: float = 0.22) -> Image.Image:

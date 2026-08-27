@@ -1033,7 +1033,46 @@ button.perigo:hover { background: #822525; }
 .acao-pastilha { color: var(--cor-acento); text-decoration: underline; text-underline-offset: 2px; }
 
 /* "Pedir" e "excluir aviso" na mesma linha, à direita do produto. */
-.acoes-fornada { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.acoes-fornada { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ---------------------------------------------------------------
+   Pedir x Excluir na Reposição da filial (ago/2026, pedido do dono do
+   negócio: "o botão excluir aviso deve ser no mesmo estilo do botão
+   pedir, utilize cores para diferenciá-los").
+
+   Mesma forma, mesma altura, mesmo peso — o que separa é a cor, que se
+   lê antes da palavra. Verde segue adiante, vermelho tira da frente. As
+   duas usam fundo lavado em vez de cor cheia: são duas por linha, numa
+   lista que pode ter dez, e dois blocos saturados por linha virariam um
+   tabuleiro.
+
+   44 px de altura mínima é o alvo confortável para dedo — antes o
+   "excluir" era um link sublinhado de 13 px.
+   --------------------------------------------------------------- */
+.botao-fornada {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: var(--raio);
+  border: 1px solid;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.botao-fornada.pedir {
+  color: var(--cor-sucesso);
+  background: var(--cor-sucesso-fundo);
+  border-color: var(--cor-sucesso);
+}
+.botao-fornada.excluir {
+  color: #9b2c2c;
+  background: #fbeaea;
+  border-color: #d9a3a3;
+}
+.botao-fornada.excluir svg { flex-shrink: 0; }
 
 .linha-fornada {
   display: flex;
@@ -1471,13 +1510,59 @@ button.perigo:hover { background: #822525; }
 .busca-forno .link { flex-shrink: 0; }
 
 /* ---------------------------------------------------------------
+   Cadastro relâmpago na Reposição (PainelFornoDeHoje.tsx, ago/2026)
+   Aparece no lugar do "não achei". O bloco é discreto — fundo do app,
+   traço pontilhado — porque é uma saída de exceção: na maioria das
+   buscas o produto existe, e um cartão chamativo aqui competiria com a
+   lista do dia todos os dias por causa de um caso raro.
+   --------------------------------------------------------------- */
+.cadastro-relampago {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 14px;
+  border: 1px dashed var(--cor-borda);
+  border-radius: var(--raio);
+}
+.cadastro-relampago .nota-rodape { margin: 0; }
+.cadastro-relampago .acoes { align-items: center; }
+.nome-do-novo { font-size: 16px; overflow-wrap: anywhere; }
+/* Os cinco setores como pastilhas, e não um <select>: são cinco opções
+   fixas, e escolher com um toque é mais rápido que abrir uma lista —
+   além de deixar as cinco visíveis, o que evita o erro de arquivar no
+   setor errado por não ter olhado a lista inteira. */
+.setores-do-novo { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-setor {
+  padding: 8px 12px;
+  min-height: 40px;
+  border: 1px solid var(--cor-borda);
+  border-radius: 999px;
+  background: var(--cor-superficie);
+  font-size: 14px;
+  cursor: pointer;
+}
+.chip-setor.ativo {
+  background: var(--cor-acento);
+  border-color: var(--cor-acento);
+  color: var(--cor-acento-texto);
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------
    Cabeçalho do pedido da filial: data e estado numa coisa só
    --------------------------------------------------------------- */
 /* Um corpo abaixo do resto dos destaques: aqui a linha carrega dia da
    semana E data completa, e a 19px do padrão ela quebrava em duas,
    ocupando mais espaço vertical que a lista que vem em seguida. */
 .bloco-pedido { align-items: flex-start; font-size: 16px; }
-.texto-bloco-pedido { display: flex; flex-direction: column; gap: 2px; }
+/* Duas linhas dentro do botão do título (data + estado): o alinhamento
+   volta para o topo, senão o calendário e a seta ficam centralizados na
+   altura das duas e parecem soltos no meio do bloco. */
+.bloco-pedido .marca-titulo-do-dia { align-items: flex-start; }
+.bloco-pedido .titulo-planejamento { font-size: 16px; }
+.bloco-pedido .seta-sessao { margin-top: 3px; }
+.texto-bloco-pedido { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .estado-pedido {
   display: inline-flex;
   align-items: center;
@@ -1492,22 +1577,22 @@ button.perigo:hover { background: #822525; }
    180px, e não 320: a marca cumprimenta e sai do caminho. Quem abre o
    app trabalha nele dezenas de vezes por dia e já sabe de quem é — o
    espaço pertence ao que a pessoa veio fazer, não ao logotipo. */
-/* Placa BRANCA atrás da logomarca (ago/2026).
-   O PNG é transparente, então o que aparecia atrás do vermelho era o
-   creme do fundo do app (--cor-fundo) — e vermelho sobre creme suja a
-   marca. O fundo do app continua o mesmo; o que mudou é que a marca
-   passou a ter chão próprio, branco, como ela foi desenhada para ser
-   vista. O padding faz parte da placa: logotipo encostado na borda de um
-   retângulo lê como recorte mal feito. */
+/* SEM PLACA ATRÁS DA MARCA (ago/2026, pedido do dono do negócio:
+   "abaixo da logomarca teremos somente a cor de plano de fundo do app").
+
+   A placa branca existia para esconder um defeito do arquivo: o PNG
+   guardava uma casca de pixels claros e uma sombra cinza em volta da
+   pílula, sujeira que sobre o creme do app aparecia e sobre o branco
+   não. Isso foi corrigido na origem — o recorte agora é por região, a
+   partir das bordas (ver scripts/gerar_icones.py) —, e com o arquivo
+   limpo a placa deixou de ter função: virou um retângulo branco no meio
+   de uma tela creme. */
 .marca-login {
   display: block;
   width: 100%;
   max-width: 220px;
   height: auto;
   margin: 0 auto 12px;
-  padding: 14px 18px;
-  background: #ffffff;
-  border-radius: var(--raio);
 }
 
 /* ---------------------------------------------------------------

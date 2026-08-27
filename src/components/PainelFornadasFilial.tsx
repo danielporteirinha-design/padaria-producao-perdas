@@ -270,10 +270,24 @@ export function PainelFornadasFilial({
             </button>
           </div>
         ) : (
+          /* DOIS BOTÕES DO MESMO TAMANHO, SEPARADOS PELA COR (ago/2026,
+              pedido do dono do negócio).
+
+              "Pedir" era um botão e "excluir aviso" era um link
+              sublinhado: tamanhos, pesos e alvos diferentes para duas
+              decisões que estão lado a lado e valem o mesmo peso — quero
+              este produto, ou tire este aviso da minha frente. O link
+              ainda era um alvo pequeno para um dedo com farinha.
+
+              Agora têm a mesma forma e se distinguem pela cor, que é o
+              que se lê antes do texto: verde é o caminho de seguir
+              adiante, vermelho é o de tirar. O ícone de lixeira repete a
+              mensagem — é o mesmo símbolo que a matriz usa para a mesma
+              ação na tela dela. */
           <div className="acoes-fornada">
             <button
               type="button"
-              className="secundario"
+              className="botao-fornada pedir"
               onClick={() => {
                 setCodigoPedindo(produto.codigoPdv);
                 setQuantidade("");
@@ -290,11 +304,13 @@ export function PainelFornadasFilial({
             {mostrarExcluir && (
               <button
                 type="button"
-                className="link"
+                className="botao-fornada excluir"
                 title="Tirar este aviso da lista"
+                aria-label={`Tirar o aviso de ${produto.nome} da lista`}
                 onClick={() => setDispensadas(dispensarFornada(loja.id, hoje, produto.codigoPdv))}
               >
-                excluir aviso
+                <IconeLixeira tamanho={15} />
+                Excluir
               </button>
             )}
           </div>

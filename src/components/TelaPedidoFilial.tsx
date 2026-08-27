@@ -30,6 +30,12 @@ import type { Loja } from "../lib/lojas";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 import { proximaDataAlvo } from "../lib/dataAlvoDoDia";
+import {
+  apagarRascunhoPedido,
+  gravarRascunhoPedido,
+  lerRascunhoPedido,
+  limparRascunhosDePedidoAntigos,
+} from "../lib/rascunhoPedido";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import {
   buscarSugestaoProducao,
@@ -81,16 +87,41 @@ export function TelaPedidoFilial({
     [pedidos, dataAlvo, loja.id]
   );
 
-  const [itens, setItens] = useState<ItemPlanoProducao[]>(() => pedidoExistente?.itens ?? []);
+  /**
+   * A montagem começa pelo RASCUNHO do aparelho, quando existe, e só cai
+   * no pedido gravado quando não existe.
+   *
+   * Antes vivia só na memória: trocar de aba desmontava a tela e o item
+   * removido voltava à lista — defeito relatado em produção. Ver
+   * src/lib/rascunhoPedido.ts.
+   */
+  const [itens, setItens] = useState<ItemPlanoProducao[]>(
+    () => lerRascunhoPedido(loja.id, dataAlvo) ?? pedidoExistente?.itens ?? []
+  );
   const [dataCarregada, setDataCarregada] = useState(dataAlvo);
 
-  // Ao trocar de data, recarrega os itens do pedido daquele dia.
+  // Ao trocar de data, recarrega o rascunho daquele dia — ou, na falta
+  // dele, o pedido gravado.
   if (dataCarregada !== dataAlvo) {
     setDataCarregada(dataAlvo);
-    setItens(pedidoExistente?.itens ?? []);
+    setItens(lerRascunhoPedido(loja.id, dataAlvo) ?? pedidoExistente?.itens ?? []);
     setProdutoAtivo(null);
     setSessaoAConfirmarLimpeza(null);
   }
+
+  /**
+   * Grava o rascunho a cada mudança. Barato: é uma linha de texto no
+   * aparelho, não uma ida à nuvem — e é o que faz o trabalho sobreviver a
+   * trocar de aba, fechar o app e recarregar a página.
+   */
+  useEffect(() => {
+    gravarRascunhoPedido(loja.id, dataAlvo, itens);
+  }, [loja.id, dataAlvo, itens]);
+
+  /** Rascunho de dia que já passou não serve para nada — sai do aparelho. */
+  useEffect(() => {
+    limparRascunhosDePedidoAntigos(hoje);
+  }, [hoje]);
 
   const diaDaSemana = diaDaSemanaDeData(dataAlvo);
   const totalUnidades = itens.reduce((soma, i) => soma + i.quantidadeUnidades, 0);
@@ -218,6 +249,10 @@ export function TelaPedidoFilial({
         criadoEm: pedidoExistente?.criadoEm ?? agora,
         enviadoEm: agora,
       });
+      // Enviado, o rascunho cumpriu a função: o pedido gravado passa a ser
+      // a verdade. Mantê-lo faria a tela continuar exibindo uma cópia
+      // local de algo que já saiu daqui.
+      apagarRascunhoPedido(loja.id, dataAlvo);
     } catch {
       // Mensagem vem do aviso global (ver App.tsx).
     } finally {
@@ -241,30 +276,69 @@ export function TelaPedidoFilial({
         como uma frase só — que é como a informação existe na cabeça de
         quem opera.
       */}
-      <div className={`destaque-data bloco-pedido ${jaEnviado ? "enviado" : ""}`}>
-        <IconeCalendario tamanho={20} />
-        <div className="texto-bloco-pedido">
-          <span>
-            Pedido para {rotuloDoDia(diaDaSemana)}, {formatarDataBr(dataAlvo)}
-          </span>
-          <span className="estado-pedido">
-            {jaEnviado ? (
-              <>
-                <IconeConfere tamanho={14} /> enviado · {pedidoExistente?.itens.length ?? 0} produtos
-              </>
-            ) : (
-              "não enviado — a quantidade ainda não entra na produção"
-            )}
-          </span>
-        </div>
-      </div>
+      {/* O ALVO É A PRÓPRIA DATA, como no Cronograma da matriz (ago/2026,
+          pedido do dono do negócio: "o usuário clica no título 'pedido
+          para dia tal' para mudar a data").
 
-      <button type="button" className="link" onClick={() => setMostrarSeletorData((v) => !v)}>
-        {mostrarSeletorData ? "usar amanhã (padrão)" : "pedir para outra data"}
-      </button>
-      {mostrarSeletorData && (
-        <input type="date" value={dataAlvo} onChange={(e) => setDataAlvo(e.target.value)} />
-      )}
+          Havia um link solto embaixo do bloco, "pedir para outra data",
+          que precisava ser lido e ainda ficava longe da informação que ele
+          muda. As duas telas agora se operam do mesmo jeito: toca-se no
+          dia para trocar o dia. Mesmas classes de propósito — ver
+          .linha-titulo-do-dia em src/index.css. */}
+      <div
+        className={`destaque-data titulo-do-dia bloco-pedido ${jaEnviado ? "enviado" : ""}`}
+      >
+        <button
+          type="button"
+          className={`linha-titulo-do-dia ${mostrarSeletorData ? "aberta" : ""}`}
+          aria-expanded={mostrarSeletorData}
+          title="Tocar na data para pedir para outro dia"
+          onClick={() => setMostrarSeletorData((v) => !v)}
+        >
+          <span className="marca-titulo-do-dia">
+            <IconeCalendario tamanho={20} />
+            <span className="texto-bloco-pedido">
+              <span className="titulo-planejamento">
+                Pedido para {rotuloDoDia(diaDaSemana)}, {formatarDataBr(dataAlvo)}
+              </span>
+              <span className="estado-pedido">
+                {jaEnviado ? (
+                  <>
+                    <IconeConfere tamanho={14} /> enviado ·{" "}
+                    {pedidoExistente?.itens.length ?? 0} produtos
+                  </>
+                ) : (
+                  "não enviado — a quantidade ainda não entra na produção"
+                )}
+              </span>
+            </span>
+          </span>
+          <IconeSeta className="seta-sessao" />
+        </button>
+
+        {mostrarSeletorData && (
+          <div className="escolha-de-data">
+            <input
+              type="date"
+              aria-label="Data do pedido"
+              value={dataAlvo}
+              onChange={(e) => setDataAlvo(e.target.value)}
+            />
+            {/* O caminho de volta ao dia normal de trabalho. Sem ele,
+                voltar de uma data distante exigiria lembrar qual é a data
+                de amanhã e digitá-la. */}
+            {dataAlvo !== dataDeAmanhaIso() && (
+              <button
+                type="button"
+                className="link"
+                onClick={() => setDataAlvo(dataDeAmanhaIso())}
+              >
+                voltar para amanhã
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {CATEGORIAS_PRODUCAO.map((categoria) => {
         const lista = produtosDaCategoria(categoria.chave);

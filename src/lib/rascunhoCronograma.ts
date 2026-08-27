@@ -35,21 +35,18 @@
  */
 
 import type { ItemPlanoProducao, PlanoDeProducaoDiario } from "../types/producao";
-import { diasEntreDatas } from "./data";
+import {
+  apagarChave,
+  chavesVencidas,
+  gravarObjeto,
+  lerObjeto,
+  limparVencidos,
+} from "./rascunhoLocal";
 
 /** Itens em montagem, agrupados pela chave da categoria. */
 export type MapaDeItens = Record<string, ItemPlanoProducao[]>;
 
 const PREFIXO = "padaria:rascunho-cronograma:";
-
-/**
- * Por quantos dias um rascunho não confirmado ainda vale a pena guardar.
- *
- * Dois: cobre o esquecimento de uma noite e o feriado emendado, sem
- * deixar lixo acumulando no aparelho por meses. Rascunho de data futura
- * nunca vence — planejar a semana que vem é uso legítimo.
- */
-const DIAS_ATE_VENCER = 2;
 
 export function chaveDoRascunho(data: string): string {
   return `${PREFIXO}${data}`;
@@ -101,58 +98,27 @@ export function mapasIguais(a: MapaDeItens, b: MapaDeItens): boolean {
 /**
  * Quais chaves de rascunho já passaram do prazo, dado o dia de hoje.
  *
- * Chave que não é de rascunho é ignorada — o localStorage é compartilhado
- * com o resto do app, e apagar por engano o registro de outra coisa seria
- * um estrago silencioso.
+ * O prazo e a regra estão em src/lib/rascunhoLocal.ts, compartilhados com
+ * o rascunho da Programação da filial.
  */
 export function rascunhosVencidos(chaves: string[], hoje: string): string[] {
-  return chaves.filter((chave) => {
-    if (!chave.startsWith(PREFIXO)) return false;
-    const data = chave.slice(PREFIXO.length);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return true; // chave estragada: pode ir
-    // Positivo = a data do rascunho ficou para trás.
-    return diasEntreDatas(data, hoje) > DIAS_ATE_VENCER;
-  });
+  return chavesVencidas(chaves, hoje, PREFIXO);
 }
 
 export function lerRascunho(data: string): MapaDeItens | null {
-  try {
-    const bruto = localStorage.getItem(chaveDoRascunho(data));
-    if (!bruto) return null;
-    const mapa = JSON.parse(bruto);
-    return mapa && typeof mapa === "object" && !Array.isArray(mapa) ? (mapa as MapaDeItens) : null;
-  } catch {
-    return null;
-  }
+  const mapa = lerObjeto<MapaDeItens>(chaveDoRascunho(data));
+  return mapa && !Array.isArray(mapa) ? mapa : null;
 }
 
 export function gravarRascunho(data: string, mapa: MapaDeItens): void {
-  try {
-    localStorage.setItem(chaveDoRascunho(data), JSON.stringify(mapa));
-  } catch {
-    // Armazenamento cheio ou bloqueado: a montagem segue na memória, como
-    // era antes. Perde-se a proteção, não a tela.
-  }
+  gravarObjeto(chaveDoRascunho(data), mapa);
 }
 
 export function apagarRascunho(data: string): void {
-  try {
-    localStorage.removeItem(chaveDoRascunho(data));
-  } catch {
-    /* nada a fazer */
-  }
+  apagarChave(chaveDoRascunho(data));
 }
 
-/** Varre o aparelho e remove os rascunhos vencidos. */
+/** Varre o aparelho e remove os rascunhos de cronograma vencidos. */
 export function limparRascunhosAntigos(hoje: string): void {
-  try {
-    const chaves: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const chave = localStorage.key(i);
-      if (chave) chaves.push(chave);
-    }
-    for (const vencida of rascunhosVencidos(chaves, hoje)) localStorage.removeItem(vencida);
-  } catch {
-    /* nada a fazer */
-  }
+  limparVencidos(hoje, PREFIXO);
 }

@@ -22,11 +22,12 @@
  */
 
 import { useMemo, useState } from "react";
-import type { Produto } from "../types/produto";
+import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import { ordenarPorAnuncioRecente } from "../lib/ordemDaReposicao";
+import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
@@ -61,7 +62,13 @@ interface PainelFornoDeHojeProps {
   onEncerrarAnuncio: (codigoPdv: number) => Promise<void>;
   /** Devolve TODOS à vitrine de uma vez — o "mostrar de novo". */
   onReabrirTudo: () => Promise<void>;
-  onMarcarFornada: (codigoPdv: number) => Promise<void>;
+  onMarcarFornada: (codigoPdv: number, nomeConhecido?: string) => Promise<void>;
+  /**
+   * Cadastro relâmpago do produto que não está no catálogo. Devolve o
+   * produto criado — o código novo é o que permite anunciar a fornada na
+   * mesma ação. `undefined` quando a gravação não confirmou (sem rede).
+   */
+  onCadastrarProduto: (input: NovoProdutoInput) => Promise<Produto | undefined>;
 }
 
 export function PainelFornoDeHoje({
@@ -73,9 +80,18 @@ export function PainelFornoDeHoje({
   onEncerrarAnuncio,
   onReabrirTudo,
   onMarcarFornada,
+  onCadastrarProduto,
 }: PainelFornoDeHojeProps) {
   const [marcando, setMarcando] = useState<number | null>(null);
   const [busca, setBusca] = useState("");
+  /**
+   * Cadastro relâmpago: fechado até a matriz pedir. Guarda só a categoria
+   * — o nome vem do que ela já digitou na busca, e repetir a digitação
+   * seria o oposto de um atalho.
+   */
+  const [cadastrando, setCadastrando] = useState(false);
+  const [categoriaNova, setCategoriaNova] = useState("");
+  const [salvandoNovo, setSalvandoNovo] = useState(false);
 
   const nomeDoProduto = (codigo: number) =>
     produtos.find((p) => p.codigoPdv === codigo)?.nome ?? `#${codigo}`;
@@ -130,6 +146,51 @@ export function PainelFornoDeHoje({
     () => produtos.filter((p) => p.ativoNaProducao).map((p) => p.nome),
     [produtos]
   );
+
+  /**
+   * Cadastra e anuncia numa ação só.
+   *
+   * É o fluxo real: a matriz não veio ao catálogo administrar produto —
+   * ela assou uma coisa nova e quer avisar as filiais. Mandá-la para a
+   * aba Produtos, cadastrar, voltar, buscar de novo e só então anunciar
+   * são cinco passos para uma intenção só, com o pão esfriando.
+   *
+   * O nome vem da busca e a categoria é escolhida aqui. Só isso: unidade
+   * é sempre "un" e a validade sai da categoria, exatamente como no
+   * cadastro completo (ver TelaCadastroProdutos.tsx). Categoria não tem
+   * padrão de propósito — arquivar na primeira da lista contamina o
+   * cronograma e toda análise por categoria, em silêncio.
+   */
+  async function cadastrarEAnunciar() {
+    const nome = busca.trim();
+    if (!nome || !categoriaNova || salvandoNovo) return;
+    setSalvandoNovo(true);
+    try {
+      const novo = await onCadastrarProduto({
+        nome,
+        categoria: categoriaNova,
+        unidadeProducao: "un",
+        ativoNaProducao: true,
+        prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[categoriaNova] ?? null,
+      });
+      // Sem produto de volta, a gravação ficou enfileirada: o aviso global
+      // já explicou. Anunciar um código que ainda não existe na nuvem
+      // mandaria as filiais um item que elas não conseguem abrir.
+      if (!novo) return;
+      // O nome vai junto: o produto acabou de nascer e a lista de
+      // `produtos` do App ainda não o tem — ver handleMarcarFornada.
+      await onMarcarFornada(novo.codigoPdv, novo.nome);
+      // A busca CONTINUA no campo de propósito: com o produto criado, ele
+      // passa a aparecer nos resultados logo abaixo, com a hora da
+      // fornada. É a confirmação de que deu certo, na própria tela.
+      setCadastrando(false);
+      setCategoriaNova("");
+    } catch {
+      /* o aviso global cuida da mensagem */
+    } finally {
+      setSalvandoNovo(false);
+    }
+  }
 
   /** A linha é a mesma na busca e na lista do dia — um jeito só de marcar. */
   function linhaDoProduto(codigoPdv: number, podeTirarDaLista = false) {
@@ -214,7 +275,67 @@ export function PainelFornoDeHoje({
         {buscando ? (
           <>
             {resultados.length === 0 ? (
-              <p className="nota-rodape">Nenhum produto ativo com esse nome.</p>
+              /* NÃO ACHOU = OFERECE CADASTRAR (ago/2026, pedido do dono do
+                 negócio: "se esse produto não estiver cadastrado no
+                 sistema, o app deve fornecer-lhe essa opção de cadastro
+                 como um atalho simples e rápido").
+
+                 Antes, a busca sem resultado era um beco: uma frase
+                 dizendo que não achou, e a saída era decorar o nome, ir
+                 até a aba Produtos e voltar. O caminho para frente estava
+                 faltando justamente onde a pessoa parou. */
+              <div className="cadastro-relampago">
+                {!cadastrando ? (
+                  <>
+                    <p className="nota-rodape">Não está no catálogo.</p>
+                    <button
+                      type="button"
+                      className="secundario"
+                      onClick={() => {
+                        setCadastrando(true);
+                        setCategoriaNova("");
+                      }}
+                    >
+                      Cadastrar "{busca.trim()}"
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <strong className="nome-do-novo">{busca.trim()}</strong>
+                    <p className="nota-rodape">Em qual setor?</p>
+                    <div className="setores-do-novo">
+                      {CATEGORIAS_PRODUCAO.map((categoria) => (
+                        <button
+                          key={categoria.chave}
+                          type="button"
+                          className={`chip-setor ${categoriaNova === categoria.chave ? "ativo" : ""}`}
+                          aria-pressed={categoriaNova === categoria.chave}
+                          onClick={() => setCategoriaNova(categoria.chave)}
+                        >
+                          {categoria.rotulo}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="acoes">
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => setCadastrando(false)}
+                      >
+                        cancelar
+                      </button>
+                      <button
+                        type="button"
+                        className="primario"
+                        disabled={!categoriaNova || salvandoNovo}
+                        onClick={() => void cadastrarEAnunciar()}
+                      >
+                        {salvandoNovo ? "Salvando..." : "Cadastrar e anunciar"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             ) : (
               <div className="grupo-forno">{resultados.map((p) => linhaDoProduto(p.codigoPdv))}</div>
             )}

@@ -66,6 +66,7 @@ import {
   rascunhosVencidos,
 } from "../src/lib/rascunhoCronograma";
 import { ordenarPorAnuncioRecente, ultimaSaidaPorProduto } from "../src/lib/ordemDaReposicao";
+import { chaveDoRascunhoPedido, rascunhosDePedidoVencidos } from "../src/lib/rascunhoPedido";
 import {
   codigosComFornadaNoDia,
   fornadasDoProduto,
@@ -2656,6 +2657,52 @@ const perdas: RegistroPerda[] = [
     "guarda a ULTIMA fornada do produto, nao a primeira"
   );
   afirmar(saidas.get(40) === undefined, "produto sem fornada nao entra no mapa");
+}
+
+// ---------------------------------------------------------------
+// Rascunho do pedido da filial: chave por loja E data, e a mesma regra
+// de expiração do cronograma (ver src/lib/rascunhoPedido.ts)
+// ---------------------------------------------------------------
+{
+  const HOJE_P = "2026-08-27";
+
+  afirmar(
+    chaveDoRascunhoPedido("FILIAL_A", "2026-08-28") !==
+      chaveDoRascunhoPedido("FILIAL_B", "2026-08-28"),
+    "duas filiais no mesmo aparelho nao compartilham rascunho"
+  );
+  afirmar(
+    chaveDoRascunhoPedido("FILIAL_A", "2026-08-28") !==
+      chaveDoRascunhoPedido("FILIAL_A", "2026-08-29"),
+    "rascunho de um dia nao contamina o do dia seguinte"
+  );
+
+  const chavesP = [
+    chaveDoRascunhoPedido("FILIAL_A", HOJE_P),
+    chaveDoRascunhoPedido("FILIAL_A", "2026-08-25"), // anteontem: no prazo
+    chaveDoRascunhoPedido("FILIAL_A", "2026-08-20"), // vencido
+    chaveDoRascunhoPedido("FILIAL_B", "2026-08-20"), // vencido, outra loja
+    chaveDoRascunhoPedido("FILIAL_A", "2026-09-10"), // futuro: nunca vence
+    "padaria:rascunho-cronograma:2026-08-20", // de outra tela: nao pode ir junto
+    "padaria:operador:MATRIZ",
+  ];
+  const vencidosP = rascunhosDePedidoVencidos(chavesP, HOJE_P);
+  afirmar(vencidosP.length === 2, `so' os dois vencidos saem (obtidos: ${vencidosP.length})`);
+  afirmar(
+    !vencidosP.includes("padaria:rascunho-cronograma:2026-08-20") &&
+      !vencidosP.includes("padaria:operador:MATRIZ"),
+    "chave de outro prefixo nunca e' apagada pela limpeza do pedido"
+  );
+  afirmar(
+    !vencidosP.includes(chaveDoRascunhoPedido("FILIAL_A", "2026-09-10")),
+    "rascunho de data futura nunca vence"
+  );
+  // A loja fica DEPOIS da data na chave: e' o que permite ler a data sem
+  // saber o nome da loja.
+  afirmar(
+    rascunhosDePedidoVencidos(["padaria:rascunho-pedido:sabado:FILIAL_A"], HOJE_P).length === 1,
+    "chave de rascunho de pedido com data invalida e' descartada"
+  );
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

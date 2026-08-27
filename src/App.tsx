@@ -737,7 +737,14 @@ export default function App() {
    * Marca que uma fornada do produto acabou de sair do forno. Um toque,
    * sem quantidade — ver src/types/fornada.ts sobre por quê.
    */
-  async function handleMarcarFornada(codigoPdv: number) {
+  /**
+   * `nomeConhecido` existe para o cadastro relâmpago da Reposição: o
+   * produto acabou de ser criado e o `produtos` desta closure ainda é o
+   * anterior — o React só re-renderiza depois. Sem isto, o aviso que sai
+   * para as três filiais diria "Produto saiu do forno", que é justamente
+   * a informação que elas precisam para decidir se pedem.
+   */
+  async function handleMarcarFornada(codigoPdv: number, nomeConhecido?: string) {
     const agora = new Date().toISOString();
     const hoje = dataDeHojeIso();
     const fornada: FornadaPronta = {
@@ -747,7 +754,7 @@ export default function App() {
       marcadaPor: operador,
       marcadaEm: agora,
     };
-    const nome = produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? "Produto";
+    const nome = nomeConhecido ?? produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? "Produto";
     await comRetorno(() => repositorio!.marcarFornada(fornada), `${nome} saiu do forno.`);
     setFornadas((atual) => [...atual, fornada]);
 
@@ -1073,6 +1080,28 @@ export default function App() {
     await comRetorno(() => promessa, `"${input.nome}" cadastrado no catálogo.`);
   }
 
+  /**
+   * Cadastro relâmpago da aba Reposição (ago/2026, pedido do dono do
+   * negócio): a matriz procurou um produto para anunciar, ele não existe
+   * no catálogo, e ela cadastra dali mesmo.
+   *
+   * Diferente de `handleCriarProduto` em uma coisa só, e é a que importa:
+   * DEVOLVE o produto criado. Quem chamou precisa do código novo para
+   * anunciar a fornada em seguida, na mesma ação. Sem rede o retorno é
+   * `undefined` — a gravação fica enfileirada, o aviso explica, e o
+   * anúncio não sai (não sairia mesmo: ele depende de uma chamada à
+   * nuvem para chegar às filiais).
+   */
+  async function handleCadastroRelampago(input: NovoProdutoInput): Promise<Produto | undefined> {
+    const promessa = repositorio!.salvarNovoProduto(input);
+    promessa
+      .then((novo) => setProdutos((atual) => [...atual, novo]))
+      .catch(() => {
+        /* falha já reportada por comRetorno */
+      });
+    return await comRetorno(() => promessa, `"${input.nome}" cadastrado no catálogo.`);
+  }
+
   async function handleAtualizarProduto(produto: Produto) {
     await comRetorno(() => repositorio!.atualizarProduto(produto), `"${produto.nome}" atualizado.`);
     setProdutos((atual) => atual.map((p) => (p.codigoPdv === produto.codigoPdv ? produto : p)));
@@ -1332,6 +1361,7 @@ export default function App() {
                 onEncerrarAnuncio={handleEncerrarAnuncio}
                 onReabrirTudo={handleReabrirTudo}
                 onMarcarFornada={handleMarcarFornada}
+                onCadastrarProduto={handleCadastroRelampago}
               />
             </>
           ) : (
