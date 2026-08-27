@@ -1998,6 +1998,89 @@ button.perigo:hover { background: #822525; }
 }
 
 /* ---------------------------------------------------------------
+   Revisão da lista de cada loja no Cronograma (ago/2026)
+   A linha inteira é o alvo de edição: um lápis pequeno ao lado do número
+   seria um alvo ruim para dedo com farinha e esconderia que dá para
+   editar até alguém reparar no ícone.
+   --------------------------------------------------------------- */
+.linha-item-editavel { display: flex; flex-direction: column; }
+.item-da-loja.editavel {
+  width: 100%;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--cor-borda);
+  padding: 10px 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.linha-item-editavel:first-of-type .item-da-loja.editavel { border-top: none; }
+.item-da-loja.editavel:hover { background: var(--cor-fundo); }
+.linha-item-editavel .editor-quantidade { margin: 0 0 10px; }
+
+/* Ações no pé de cada card: imprimir e confirmar aquela loja, sem sair
+   de onde se está. */
+.acoes-do-card {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cor-borda);
+}
+.acoes-do-card .secundario,
+.acoes-do-card .primario {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  font-size: 15px;
+}
+
+/* O botão que leva a lista da produção ao papel. Ocupa a largura toda
+   por ser a única ação da página que não pertence a nenhuma loja. */
+.botao-lista-producao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+}
+.texto-botao-producao { display: flex; flex-direction: column; gap: 2px; }
+.detalhe-botao { font-size: 13px; font-weight: 400; opacity: 0.9; }
+
+/* ---------------------------------------------------------------
+   O que a matriz mudou, na tela da filial (ago/2026)
+   A marca fica na LINHA do produto, e não num aviso separado: aviso se
+   lê uma vez e some, e a diferença precisa continuar visível toda vez
+   que a loja abrir a lista.
+   --------------------------------------------------------------- */
+.marca-ajuste {
+  display: block;
+  padding: 2px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cor-alerta);
+}
+/* Item cortado por completo sairia da lista sem deixar rastro — este
+   bloco é o que impede o sumiço silencioso. */
+.aviso-corte {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--cor-alerta);
+  border-radius: var(--raio);
+  background: var(--cor-alerta-fundo);
+  font-size: 15px;
+}
+.item-cortado { overflow-wrap: anywhere; }
+.item-cortado em { font-style: normal; color: var(--cor-texto-suave); font-size: 13px; }
+
+/* ---------------------------------------------------------------
    Relatório das fornadas (TelaAnalises.tsx, ago/2026).
 
    Separado dos gráficos de perda por um filete e um respiro: são dados

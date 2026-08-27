@@ -40,7 +40,10 @@ import {
   ehPedidoDiario,
   ehReposicao,
   idDaReposicao,
+  ajustarPedidoPelaMatriz,
+  diferencasDoAjuste,
   idDoPedido,
+  itensIguais,
   reposicaoEstaPendente,
   totalDoPedido,
   type PedidoFilial,
@@ -66,7 +69,21 @@ import {
   rascunhosVencidos,
 } from "../src/lib/rascunhoCronograma";
 import { ordenarPorAnuncioRecente, ultimaSaidaPorProduto } from "../src/lib/ordemDaReposicao";
-import { chaveDoRascunhoPedido, rascunhosDePedidoVencidos } from "../src/lib/rascunhoPedido";
+import {
+  ajustesVencidos,
+  chaveDoAjuste,
+  chaveDoRascunhoPedido,
+  rascunhosDePedidoVencidos,
+} from "../src/lib/rascunhoPedido";
+import {
+  ALTURA_CABECALHO_DOC,
+  ALTURA_ESPACO_APOS_SESSAO,
+  ALTURA_LINHA_TESTE,
+  ALTURA_RODAPE_DOC_ASSINADO,
+  ALTURA_SUBTITULO_SESSAO,
+  agruparBlocosContinuos,
+  computarBlocosContinuos,
+} from "../src/lib/gerarImagemLista";
 import {
   codigosComFornadaNoDia,
   fornadasDoProduto,
@@ -2703,6 +2720,207 @@ const perdas: RegistroPerda[] = [
     rascunhosDePedidoVencidos(["padaria:rascunho-pedido:sabado:FILIAL_A"], HOJE_P).length === 1,
     "chave de rascunho de pedido com data invalida e' descartada"
   );
+}
+
+// ---------------------------------------------------------------
+// Ajuste da matriz na lista da filial (ver src/types/pedido.ts)
+// ---------------------------------------------------------------
+{
+  const DIA_A = "2026-08-28";
+  const baseDoPedido: PedidoFilial = {
+    id: idDoPedido(DIA_A, "FILIAL_A"),
+    lojaId: "FILIAL_A",
+    data: DIA_A,
+    tipo: "diario",
+    status: "enviado",
+    itens: [
+      { codigoPdv: 10, quantidadeUnidades: 150 },
+      { codigoPdv: 20, quantidadeUnidades: 30 },
+      { codigoPdv: 30, quantidadeUnidades: 12 },
+    ],
+    criadoPor: "Ana",
+    criadoEm: `${DIA_A}T18:00:00.000Z`,
+    enviadoEm: `${DIA_A}T18:05:00.000Z`,
+  };
+
+  // A matriz corta o 10 para 100 e diz que o 30 nao vem.
+  const ajustado = ajustarPedidoPelaMatriz(
+    baseDoPedido,
+    [
+      { codigoPdv: 10, quantidadeUnidades: 100 },
+      { codigoPdv: 20, quantidadeUnidades: 30 },
+    ],
+    "Daniel",
+    `${DIA_A}T19:00:00.000Z`
+  );
+  afirmar(ajustado.itens.length === 2, "item cortado sai da lista a produzir");
+  afirmar(
+    ajustado.ajusteDaMatriz?.itensOriginais.length === 3,
+    "o pedido ORIGINAL da loja continua guardado inteiro"
+  );
+
+  const dif = diferencasDoAjuste(ajustado);
+  afirmar(dif.length === 2, `so' os itens que mudaram entram na diferenca (obtidos: ${dif.length})`);
+  afirmar(
+    dif.find((d) => d.codigoPdv === 10)?.pedido === 150 &&
+      dif.find((d) => d.codigoPdv === 10)?.confirmado === 100,
+    "guarda o que a loja pediu e o que a matriz confirmou"
+  );
+  afirmar(
+    dif.find((d) => d.codigoPdv === 30)?.confirmado === 0,
+    "item cortado aparece como confirmado 0 (nao vem)"
+  );
+  afirmar(
+    !dif.some((d) => d.codigoPdv === 20),
+    "item que ficou igual nao e' marcado como ajustado"
+  );
+
+  // AJUSTAR DE NOVO nao pode transformar o ajuste anterior no "pedido da loja".
+  const ajustadoDeNovo = ajustarPedidoPelaMatriz(
+    ajustado,
+    [{ codigoPdv: 10, quantidadeUnidades: 80 }, { codigoPdv: 20, quantidadeUnidades: 30 }],
+    "Daniel",
+    `${DIA_A}T19:30:00.000Z`
+  );
+  afirmar(
+    diferencasDoAjuste(ajustadoDeNovo).find((d) => d.codigoPdv === 10)?.pedido === 150,
+    "o segundo ajuste continua comparando com o que a LOJA pediu (150), nao com o ajuste anterior"
+  );
+
+  // Voltar ao original limpa a marca — senao a filial leria um aviso sobre
+  // uma diferenca que nao existe mais.
+  const revertido = ajustarPedidoPelaMatriz(
+    ajustado,
+    baseDoPedido.itens,
+    "Daniel",
+    `${DIA_A}T20:00:00.000Z`
+  );
+  afirmar(revertido.ajusteDaMatriz === undefined, "desfazer o ajuste apaga a marca");
+  afirmar(diferencasDoAjuste(revertido).length === 0, "sem marca, nao ha diferenca a mostrar");
+  afirmar(revertido.itens.length === 3, "desfazer devolve os tres itens da loja");
+
+  // Quantidade zero e' o mesmo que tirar da lista.
+  const comZero = ajustarPedidoPelaMatriz(
+    baseDoPedido,
+    [
+      { codigoPdv: 10, quantidadeUnidades: 150 },
+      { codigoPdv: 20, quantidadeUnidades: 0 },
+      { codigoPdv: 30, quantidadeUnidades: 12 },
+    ],
+    "Daniel",
+    `${DIA_A}T19:00:00.000Z`
+  );
+  afirmar(
+    comZero.itens.length === 2 && diferencasDoAjuste(comZero).length === 1,
+    "quantidade zero vira 'nao vem' em vez de item com zero unidades"
+  );
+
+  // Pedido sem ajuste nenhum nao produz diferenca.
+  afirmar(diferencasDoAjuste(baseDoPedido).length === 0, "pedido intocado nao tem diferenca");
+
+  afirmar(
+    itensIguais(
+      [{ codigoPdv: 1, quantidadeUnidades: 2 }, { codigoPdv: 2, quantidadeUnidades: 3 }],
+      [{ codigoPdv: 2, quantidadeUnidades: 3 }, { codigoPdv: 1, quantidadeUnidades: 2 }]
+    ),
+    "itensIguais ignora a ordem"
+  );
+  afirmar(
+    !itensIguais([{ codigoPdv: 1, quantidadeUnidades: 2 }], [{ codigoPdv: 1, quantidadeUnidades: 3 }]),
+    "itensIguais compara a quantidade"
+  );
+}
+
+// ---------------------------------------------------------------
+// Rascunho do ajuste da matriz: chave por loja e data, prefixo proprio
+// ---------------------------------------------------------------
+{
+  const HOJE_A = "2026-08-27";
+  afirmar(
+    chaveDoAjuste("FILIAL_A", "2026-08-28") !== chaveDoRascunhoPedido("FILIAL_A", "2026-08-28"),
+    "o ajuste da matriz nao divide chave com o rascunho da propria filial"
+  );
+  const chavesA = [
+    chaveDoAjuste("FILIAL_A", "2026-08-20"), // vencido
+    chaveDoAjuste("FILIAL_A", HOJE_A),
+    chaveDoRascunhoPedido("FILIAL_A", "2026-08-20"), // de outro prefixo
+  ];
+  const vencidosA = ajustesVencidos(chavesA, HOJE_A);
+  afirmar(
+    vencidosA.length === 1 && vencidosA[0] === chaveDoAjuste("FILIAL_A", "2026-08-20"),
+    "a limpeza do ajuste nao toca no rascunho da filial"
+  );
+}
+
+// ---------------------------------------------------------------
+// Documento continuo: um cabecalho, um rodape (ver gerarImagemLista.ts)
+// ---------------------------------------------------------------
+{
+  const produtosDoc: Produto[] = [10, 20, 30].map((codigoPdv) => ({
+    codigoPdv,
+    nome: `PRODUTO ${codigoPdv}`,
+    categoria: "PÃES E ROSCAS",
+    unidadeProducao: "un",
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+    pesoMedioUnitarioGramas: 50,
+  }));
+
+  const blocosDoc = computarBlocosContinuos(
+    [
+      { rotuloSessao: "Pães e Roscas", itens: [{ codigoPdv: 10, quantidadeUnidades: 100 }] },
+      {
+        rotuloSessao: "Bolos",
+        itens: [
+          { codigoPdv: 20, quantidadeUnidades: 10 },
+          { codigoPdv: 30, quantidadeUnidades: 5 },
+        ],
+      },
+    ],
+    produtosDoc
+  );
+  afirmar(blocosDoc.length === 2, "uma entrada por sessao");
+  afirmar(
+    blocosDoc[0].altura ===
+      ALTURA_SUBTITULO_SESSAO + ALTURA_LINHA_TESTE + ALTURA_ESPACO_APOS_SESSAO,
+    `bloco continuo NAO paga cabecalho nem rodape proprios (obtido: ${blocosDoc[0].altura})`
+  );
+  afirmar(
+    blocosDoc[1].altura > blocosDoc[0].altura,
+    "sessao com mais itens e' mais alta"
+  );
+
+  // Cabem numa imagem so'.
+  afirmar(
+    agruparBlocosContinuos(blocosDoc, ALTURA_CABECALHO_DOC, ALTURA_RODAPE_DOC_ASSINADO).length === 1,
+    "lista pequena sai em UMA folha"
+  );
+
+  // Uma lista enorme divide — e cada folha paga cabecalho e rodape de novo,
+  // senao a segunda folha sai orfa, sem data e sem o nome da loja.
+  const muitos = Array.from({ length: 40 }, (_, i) => ({
+    rotuloSessao: `Sessao ${i}`,
+    itens: [{ codigoPdv: 10, quantidadeUnidades: 1 }],
+  }));
+  const gruposDoc = agruparBlocosContinuos(
+    computarBlocosContinuos(muitos, produtosDoc),
+    ALTURA_CABECALHO_DOC,
+    ALTURA_RODAPE_DOC_ASSINADO
+  );
+  afirmar(gruposDoc.length > 1, "lista longa demais e' dividida em folhas");
+  afirmar(
+    gruposDoc.flat().length === 40,
+    `nenhuma sessao se perde na divisao (obtidas: ${gruposDoc.flat().length})`
+  );
+  const maiorFolha = Math.max(
+    ...gruposDoc.map(
+      (g) =>
+        ALTURA_CABECALHO_DOC +
+        ALTURA_RODAPE_DOC_ASSINADO +
+        g.reduce((soma, b) => soma + b.altura, 0)
+    )
+  );
+  afirmar(maiorFolha <= 4000, `nenhuma folha passa do limite seguro (maior: ${maiorFolha}px)`);
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

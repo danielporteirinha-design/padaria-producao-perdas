@@ -5,7 +5,7 @@ import type { PlanoDeProducaoDiario } from "./types/producao";
 import type { RegistroPerda, LancamentoPerdaInput } from "./types/perda";
 import { RepositorioFirestore } from "./data/repositorioFirestore";
 import { auth } from "./lib/firebase";
-import { lojaPorEmail } from "./lib/lojas";
+import { lojaPorEmail, nomeDaLoja } from "./lib/lojas";
 import { TelaLogin } from "./components/TelaLogin";
 import { ImportarDadosLocais } from "./components/ImportarDadosLocais";
 import { AvisoGlobal, type Aviso } from "./components/AvisoGlobal";
@@ -20,13 +20,19 @@ import { TelaAnalises } from "./components/TelaAnalises";
 import { BannerInstalar } from "./components/BannerInstalar";
 import { AvisoPerdaPendente } from "./components/AvisoPerdaPendente";
 import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
-import { decidirReposicao, ehReposicao, type PedidoFilial } from "./types/pedido";
+import {
+  decidirReposicao,
+  diferencasDoAjuste,
+  ehReposicao,
+  type PedidoFilial,
+} from "./types/pedido";
 import { base64DoDataUrl, resumoDaImpressao, type TrabalhoImpressao } from "./types/impressao";
 import { codigosComFornadaNoDia, idDaFornada, type FornadaPronta } from "./types/fornada";
 import { codigosEncerrados, idDoEncerramento, type AnuncioEncerrado } from "./types/anuncio";
 import {
   avisarDesfechoReposicao,
   avisarFiliais,
+  avisarListaAjustada,
   avisarListaEnviada,
   avisarMatriz,
   ErroAviso,
@@ -885,6 +891,38 @@ export default function App() {
   }
 
   /**
+   * A matriz confirma a lista de uma filial — possivelmente com outras
+   * quantidades (ago/2026, decisão do dono do negócio).
+   *
+   * O pedido gravado passa a ser o que a matriz vai produzir, e o que a
+   * loja pediu fica guardado dentro dele (ver ajustarPedidoPelaMatriz em
+   * src/types/pedido.ts). A filial vê a diferença na tela dela na mesma
+   * hora, porque os pedidos chegam em tempo real.
+   *
+   * O AVISO SÓ SAI QUANDO ALGO MUDOU. Confirmar uma lista que ficou
+   * igual é rotina da matriz e não é notícia para a loja — mandar push
+   * de "sua lista foi ajustada" quando nada foi ajustado ensinaria a
+   * filial a ignorar o aviso justamente nos dias em que ele importa.
+   */
+  async function handleAjustarPedido(pedido: PedidoFilial) {
+    await comRetorno(
+      () => repositorio!.salvarPedido(pedido),
+      `Lista de ${nomeDaLoja(pedido.lojaId)} confirmada.`
+    );
+    setPedidos((atual) => [...atual.filter((p) => p.id !== pedido.id), pedido]);
+
+    const diferencas = diferencasDoAjuste(pedido);
+    if (diferencas.length === 0) return;
+    try {
+      await avisarListaAjustada(pedido.lojaId, diferencas.length);
+    } catch (erro) {
+      // A lista JÁ está gravada e a filial a vê ao abrir o app. Falhar em
+      // vermelho aqui faria a matriz achar que precisa confirmar de novo.
+      console.warn("Lista ajustada, mas o aviso à filial não saiu:", erro);
+    }
+  }
+
+  /**
    * A matriz responde a uma reposição: confirmada (vai na próxima
    * entrega) ou cancelada (com motivo). O motivo é obrigatório e a regra
    * vive em decidirReposicao — a tela só a apresenta.
@@ -1257,6 +1295,7 @@ export default function App() {
             operador={operador}
             hoje={diaCorrente}
             onSalvarPlano={handleSalvarPlano}
+            onAjustarPedido={handleAjustarPedido}
           />
         )}
         {/* Aba própria: na matriz é onde se MARCA a fornada; na filial é

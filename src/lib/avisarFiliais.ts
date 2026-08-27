@@ -107,6 +107,23 @@ export async function avisarDesfechoReposicao(
 }
 
 /**
+ * Avisa UMA filial que a matriz confirmou a lista dela com mudanças
+ * (ago/2026).
+ *
+ * A filial monta a lista no fim do expediente e vai embora. Sem aviso,
+ * ela só descobriria o corte na manhã seguinte, quando a mercadoria
+ * chegasse a menos — tarde demais para procurar alternativa. Manda a
+ * QUANTIDADE DE ITENS alterados, não quais: o número dá a dimensão para
+ * quem lê na tela bloqueada, e a lista item a item está a um toque.
+ */
+export async function avisarListaAjustada(
+  paraLojaId: string,
+  itensAlterados: number
+): Promise<ResultadoAviso> {
+  return enviar({ paraLojaId, listaAjustada: true, itensAlterados });
+}
+
+/**
  * Dispara um aviso de teste para os aparelhos das filiais, sem marcar
  * fornada nenhuma. Existe porque a alternativa para conferir se o push
  * funciona é marcar uma fornada de mentira — que entra no histórico do dia

@@ -203,6 +203,9 @@ export default async function handler(req: any, res: any) {
       /** Aviso de lista diária enviada — não fala de um produto só. */
       listaDiaria?: boolean;
       variedades?: number;
+      /** A matriz confirmou a lista da filial com mudanças (ago/2026). */
+      listaAjustada?: boolean;
+      itensAlterados?: number;
     } = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {});
     const {
       nomeProduto,
@@ -215,10 +218,12 @@ export default async function handler(req: any, res: any) {
       teste,
       listaDiaria,
       variedades,
+      listaAjustada,
+      itensAlterados,
     } = corpoBruto;
     // O aviso de lista diária e o de teste não falam de um produto — os
     // outros, sim, e sem o nome o celular receberia um aviso em branco.
-    if (!teste && !listaDiaria && (!nomeProduto || typeof codigoPdv !== "number")) {
+    if (!teste && !listaDiaria && !listaAjustada && (!nomeProduto || typeof codigoPdv !== "number")) {
       throw new ErroNotificacao("Faltou o produto no pedido de aviso.", 400);
     }
 
@@ -291,6 +296,27 @@ export default async function handler(req: any, res: any) {
           ? "A matriz separou e manda na próxima entrega."
           : motivo || "A matriz cancelou o pedido.";
       etiqueta = `reposicao-resposta-${codigoPdv}`;
+    } else if (listaAjustada && destinoDirigido) {
+      /**
+       * A matriz mexeu na lista desta loja (ago/2026).
+       *
+       * A filial monta a lista no fim do expediente e vai embora. Sem
+       * este aviso ela só descobriria o corte na manhã seguinte, quando a
+       * mercadoria chegasse a menos — tarde demais para procurar
+       * alternativa. O toque abre a Programação, onde a diferença está
+       * item a item.
+       *
+       * Uma etiqueta por LOJA: ajustar duas vezes substitui o aviso em
+       * vez de empilhar dois.
+       */
+      const quantos = typeof itensAlterados === "number" ? itensAlterados : 0;
+      titulo = "Sua lista de amanhã mudou";
+      corpo =
+        quantos > 0
+          ? `A matriz confirmou com ${quantos} ${quantos === 1 ? "item diferente" : "itens diferentes"}. Toque para ver.`
+          : "A matriz confirmou sua lista com mudanças. Toque para ver.";
+      etiqueta = `lista-ajustada-${destinoDirigido}`;
+      destinoNoApp = "/?aba=pedido";
     } else if (listaDiaria) {
       /**
        * Lista diária enviada pela filial (ago/2026). É planejamento, não

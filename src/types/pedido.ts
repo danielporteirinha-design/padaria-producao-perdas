@@ -52,6 +52,31 @@ export interface AtendimentoReposicao {
   motivo?: string;
 }
 
+/**
+ * O que a matriz mudou na lista que a filial mandou (ago/2026, decisão do
+ * dono do negócio).
+ *
+ * ANTES ISSO ERA PROIBIDO, DE PROPÓSITO. As regras do Firestore travavam
+ * a quantidade pedida com o argumento de que o número tinha que continuar
+ * sendo o que a loja mandou. O uso mostrou o outro lado: a matriz nem
+ * sempre consegue produzir o que foi pedido — faltou matéria-prima, o
+ * forno atrasou, a soma das três lojas não cabe no dia — e sem poder
+ * ajustar ela produzia um número e entregava outro, sem registro nenhum.
+ *
+ * O que torna o ajuste seguro é `itensOriginais`: o pedido da filial não é
+ * apagado, é GUARDADO. A tela dela mostra a quantidade confirmada com a
+ * marca "ajustado pela matriz" e o número que ela havia pedido, então a
+ * loja descobre a diferença na véspera — não no caminhão, no dia seguinte.
+ *
+ * Ajustar duas vezes não perde o original: ver ajustarPedidoPelaMatriz.
+ */
+export interface AjusteDaMatriz {
+  por: string;
+  em: string; // ISO 8601 datetime
+  /** O que a filial havia enviado, antes de qualquer ajuste. */
+  itensOriginais: ItemPlanoProducao[];
+}
+
 export interface PedidoFilial {
   id: string;
   lojaId: string;
@@ -71,6 +96,12 @@ export interface PedidoFilial {
    * aparecem como pendentes.
    */
   atendimento?: AtendimentoReposicao;
+
+  /**
+   * Presente só quando a matriz mexeu na lista. Ausente = o que está em
+   * `itens` é exatamente o que a filial mandou.
+   */
+  ajusteDaMatriz?: AjusteDaMatriz;
 }
 
 /** Estado atual da reposição, tratando ausência como pendente. */
@@ -137,4 +168,88 @@ export function pedidoFoiEnviado(pedido: PedidoFilial | undefined): boolean {
 /** Total de unidades pedidas — usado no resumo e no indicador da matriz. */
 export function totalDoPedido(pedido: PedidoFilial | undefined): number {
   return (pedido?.itens ?? []).reduce((soma, i) => soma + i.quantidadeUnidades, 0);
+}
+
+
+/**
+ * A matriz confirma a lista de uma filial, possivelmente com outras
+ * quantidades.
+ *
+ * DUAS REGRAS QUE PARECEM DETALHE E NÃO SÃO:
+ *
+ * 1. O ORIGINAL É GUARDADO UMA VEZ SÓ. Ajustar de novo compara sempre com
+ *    o que a FILIAL mandou, nunca com o ajuste anterior. Sem isso, dois
+ *    ajustes seguidos fariam o "pedido: 150" virar "pedido: 100" — a
+ *    própria correção da matriz viraria o pedido da loja, e a diferença
+ *    que a filial precisa enxergar sumiria em silêncio.
+ *
+ * 2. VOLTAR AO ORIGINAL LIMPA A MARCA. Se a matriz desfaz o que mudou, o
+ *    pedido não pode continuar dizendo "ajustado" — a filial leria um
+ *    aviso sobre uma diferença que não existe, e alarme que aparece sem
+ *    motivo é alarme que se aprende a ignorar.
+ *
+ * Quantidade zero ou item ausente significam "não vem". O item some de
+ * `itens`, mas continua em `itensOriginais` — é assim que a filial fica
+ * sabendo que aquilo que ela pediu não virá.
+ */
+export function ajustarPedidoPelaMatriz(
+  pedido: PedidoFilial,
+  novosItens: ItemPlanoProducao[],
+  por: string,
+  em: string
+): PedidoFilial {
+  const originais = pedido.ajusteDaMatriz?.itensOriginais ?? pedido.itens;
+  const itens = novosItens.filter((i) => i.quantidadeUnidades > 0);
+
+  if (itensIguais(itens, originais)) {
+    const { ajusteDaMatriz: _descartado, ...semAjuste } = pedido;
+    return { ...semAjuste, itens: originais };
+  }
+
+  return {
+    ...pedido,
+    itens,
+    ajusteDaMatriz: { por, em, itensOriginais: originais },
+  };
+}
+
+/** Mesmos códigos, mesmas quantidades — a ordem não importa. */
+export function itensIguais(a: ItemPlanoProducao[], b: ItemPlanoProducao[]): boolean {
+  if (a.length !== b.length) return false;
+  const mapa = new Map(a.map((i) => [i.codigoPdv, i.quantidadeUnidades]));
+  return b.every((i) => mapa.get(i.codigoPdv) === i.quantidadeUnidades);
+}
+
+export interface DiferencaDoAjuste {
+  codigoPdv: number;
+  /** O que a filial pediu. */
+  pedido: number;
+  /** O que a matriz confirmou. Zero = não vem. */
+  confirmado: number;
+}
+
+/**
+ * O que mudou entre o pedido da filial e o que a matriz confirmou.
+ *
+ * Vazio quando não houve ajuste. Só entram os itens que REALMENTE mudaram
+ * — a tela da filial marca esses, e marcar o que ficou igual seria ruído
+ * na lista inteira.
+ */
+export function diferencasDoAjuste(pedido: PedidoFilial): DiferencaDoAjuste[] {
+  const ajuste = pedido.ajusteDaMatriz;
+  if (!ajuste) return [];
+
+  const confirmados = new Map(pedido.itens.map((i) => [i.codigoPdv, i.quantidadeUnidades]));
+  const originais = new Map(ajuste.itensOriginais.map((i) => [i.codigoPdv, i.quantidadeUnidades]));
+  const codigos = new Set([...originais.keys(), ...confirmados.keys()]);
+
+  const diferencas: DiferencaDoAjuste[] = [];
+  for (const codigoPdv of codigos) {
+    const pedidoOriginal = originais.get(codigoPdv) ?? 0;
+    const confirmado = confirmados.get(codigoPdv) ?? 0;
+    if (pedidoOriginal !== confirmado) {
+      diferencas.push({ codigoPdv, pedido: pedidoOriginal, confirmado });
+    }
+  }
+  return diferencas.sort((a, b) => a.codigoPdv - b.codigoPdv);
 }

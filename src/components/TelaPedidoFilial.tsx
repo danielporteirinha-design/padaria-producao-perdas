@@ -30,6 +30,7 @@ import type { Loja } from "../lib/lojas";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 import { proximaDataAlvo } from "../lib/dataAlvoDoDia";
+import { diferencasDoAjuste, itensIguais } from "../types/pedido";
 import {
   apagarRascunhoPedido,
   gravarRascunhoPedido,
@@ -115,13 +116,54 @@ export function TelaPedidoFilial({
    * trocar de aba, fechar o app e recarregar a página.
    */
   useEffect(() => {
+    /**
+     * RASCUNHO IGUAL AO PEDIDO GRAVADO NÃO É RASCUNHO — é uma cópia velha
+     * esperando para atrapalhar (ago/2026).
+     *
+     * Sem esta guarda, enviar a lista deixava no aparelho um rascunho
+     * idêntico ao que foi enviado. Quando a MATRIZ ajustasse as
+     * quantidades, a tela da filial carregaria o rascunho — os números
+     * antigos — e o ajuste ficaria invisível justamente para quem
+     * precisava vê-lo. O rascunho existe para o que ainda não foi
+     * enviado; passou a valer, quem manda é o documento.
+     */
+    if (pedidoExistente && itensIguais(itens, pedidoExistente.itens)) {
+      apagarRascunhoPedido(loja.id, dataAlvo);
+      return;
+    }
     gravarRascunhoPedido(loja.id, dataAlvo, itens);
-  }, [loja.id, dataAlvo, itens]);
+  }, [loja.id, dataAlvo, itens, pedidoExistente]);
 
   /** Rascunho de dia que já passou não serve para nada — sai do aparelho. */
   useEffect(() => {
     limparRascunhosDePedidoAntigos(hoje);
   }, [hoje]);
+
+  /**
+   * O que a matriz mudou na lista desta loja (ago/2026).
+   *
+   * A filial precisa descobrir o corte na VÉSPERA, não na manhã seguinte
+   * quando a mercadoria chegar a menos. Por isso a diferença aparece na
+   * própria linha do produto, ao lado da quantidade — e não num aviso
+   * separado que se lê uma vez e some.
+   */
+  const ajustes = useMemo(() => {
+    if (!pedidoExistente) return new Map<number, number>();
+    return new Map(diferencasDoAjuste(pedidoExistente).map((d) => [d.codigoPdv, d.pedido]));
+  }, [pedidoExistente]);
+
+  /**
+   * O que a matriz cortou por completo. Estes produtos saíram de `itens`,
+   * então não apareceriam em lugar nenhum da tela — e sumir em silêncio é
+   * exatamente o que não pode acontecer com um item que a loja pediu.
+   */
+  const cortados = useMemo(
+    () =>
+      pedidoExistente
+        ? diferencasDoAjuste(pedidoExistente).filter((d) => d.confirmado === 0)
+        : [],
+    [pedidoExistente]
+  );
 
   const diaDaSemana = diaDaSemanaDeData(dataAlvo);
   const totalUnidades = itens.reduce((soma, i) => soma + i.quantidadeUnidades, 0);
@@ -340,6 +382,22 @@ export function TelaPedidoFilial({
         )}
       </div>
 
+      {/* O QUE NÃO VEM (ago/2026). Item cortado pela matriz sai de
+          `itens` e, sem este bloco, sumiria da tela sem deixar rastro —
+          a loja não teria como saber que aquilo que ela pediu não virá.
+          Fica no topo, antes das sessões, porque é a informação que muda
+          a decisão de hoje: dá tempo de procurar alternativa. */}
+      {cortados.length > 0 && (
+        <div className="aviso-corte">
+          <strong>Não vem amanhã:</strong>
+          {cortados.map((corte) => (
+            <span key={corte.codigoPdv} className="item-cortado">
+              {nomeDoProduto(corte.codigoPdv)} <em>(você pediu {corte.pedido} un)</em>
+            </span>
+          ))}
+        </div>
+      )}
+
       {CATEGORIAS_PRODUCAO.map((categoria) => {
         const lista = produtosDaCategoria(categoria.chave);
         const codigos = new Set(lista.map((p) => p.codigoPdv));
@@ -431,6 +489,12 @@ export function TelaPedidoFilial({
                           <span className="valor-confirmado">{itemSalvo.quantidadeUnidades} un ✓</span>
                         )}
                       </button>
+
+                      {ajustes.has(produto.codigoPdv) && (
+                        <span className="marca-ajuste">
+                          ajustado pela matriz · você pediu {ajustes.get(produto.codigoPdv)} un
+                        </span>
+                      )}
 
                       {editando && (
                         <div className="editor-quantidade">

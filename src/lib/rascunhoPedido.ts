@@ -64,3 +64,46 @@ export function apagarRascunhoPedido(lojaId: string, data: string): void {
 export function limparRascunhosDePedidoAntigos(hoje: string): void {
   limparVencidos(hoje, PREFIXO);
 }
+
+/* ---------------------------------------------------------------
+   AJUSTE DA MATRIZ (ago/2026)
+   A matriz revisa a lista de uma filial no Cronograma e pode mudar
+   quantidades antes de confirmar. Enquanto não confirma, o que ela
+   digitou é rascunho — e rascunho tem que sobreviver a trocar de aba,
+   que é a reclamação que já apareceu duas vezes neste app.
+
+   PREFIXO PRÓPRIO, e não o do rascunho da filial. O mesmo computador
+   troca de conta (é assim que a padaria testa): com a chave
+   compartilhada, o ajuste que a MATRIZ fez na lista da Filial A
+   reapareceria como rascunho da própria Filial A ao entrar com a conta
+   dela — a loja veria como seu um número que quem digitou foi outro.
+   --------------------------------------------------------------- */
+
+const PREFIXO_AJUSTE = "padaria:ajuste-matriz:";
+
+export function chaveDoAjuste(lojaId: string, data: string): string {
+  return `${PREFIXO_AJUSTE}${data}:${lojaId}`;
+}
+
+/** Quais chaves de ajuste já passaram do prazo. */
+export function ajustesVencidos(chaves: string[], hoje: string): string[] {
+  return chavesVencidas(chaves, hoje, PREFIXO_AJUSTE);
+}
+
+export function lerAjuste(lojaId: string, data: string): ItemPlanoProducao[] | null {
+  const itens = lerObjeto<ItemPlanoProducao[]>(chaveDoAjuste(lojaId, data));
+  return Array.isArray(itens) ? itens : null;
+}
+
+export function gravarAjuste(lojaId: string, data: string, itens: ItemPlanoProducao[]): void {
+  gravarObjeto(chaveDoAjuste(lojaId, data), itens);
+}
+
+export function apagarAjuste(lojaId: string, data: string): void {
+  apagarChave(chaveDoAjuste(lojaId, data));
+}
+
+/** Varre o aparelho e remove os ajustes vencidos. */
+export function limparAjustesAntigos(hoje: string): void {
+  limparVencidos(hoje, PREFIXO_AJUSTE);
+}

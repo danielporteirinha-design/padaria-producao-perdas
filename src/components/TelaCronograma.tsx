@@ -54,7 +54,19 @@ import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProduc
 import { itensPlanejados, producaoFoiConfirmada } from "../lib/producaoRealizada";
 import { ExportarFita } from "./ExportarFita";
 import { ConfirmarProducao } from "./ConfirmarProducao";
-import { ehPedidoDiario, type PedidoFilial } from "../types/pedido";
+import {
+  ajustarPedidoPelaMatriz,
+  diferencasDoAjuste,
+  ehPedidoDiario,
+  itensIguais,
+  type PedidoFilial,
+} from "../types/pedido";
+import {
+  apagarAjuste,
+  gravarAjuste,
+  lerAjuste,
+  limparAjustesAntigos,
+} from "../lib/rascunhoPedido";
 import type { FornadaPronta } from "../types/fornada";
 import { codigosComFornadaNoDia } from "../types/fornada";
 import { FILIAIS, LOJA_MATRIZ, nomeDaLoja } from "../lib/lojas";
@@ -64,7 +76,7 @@ import {
   type ItemConsolidado,
 } from "../lib/consolidacao";
 import { agruparPorCategoria } from "../lib/blocosDeImpressao";
-import { IconeCalendario, IconeLixeira, IconeSeta } from "./Icones";
+import { IconeCalendario, IconeImpressora, IconeLixeira, IconeSeta } from "./Icones";
 
 interface TelaCronogramaProps {
   produtos: Produto[];
@@ -82,9 +94,21 @@ interface TelaCronogramaProps {
   /** Data de hoje, viva — ver src/lib/useDiaCorrente.ts. */
   hoje: string;
   onSalvarPlano: (plano: PlanoDeProducaoDiario) => Promise<void>;
+  /**
+   * A matriz confirma a lista de uma filial, possivelmente com outras
+   * quantidades. Grava o pedido ajustado e avisa a loja — ver
+   * ajustarPedidoPelaMatriz em src/types/pedido.ts.
+   */
+  onAjustarPedido: (pedido: PedidoFilial) => Promise<void>;
 }
 
-type Fase = "montar" | "resumo" | "exportar";
+/**
+ * "resumo" saiu (ago/2026): a conferência final tinha tela própria porque
+ * a montagem vivia dentro de um card que não mostrava a lista pronta.
+ * Agora cada card de loja JÁ é a revisão — abrir o card e ler é a mesma
+ * coisa que a tela de resumo fazia, sem tirar ninguém de onde está.
+ */
+type Fase = "montar" | "exportar";
 type StatusSugestao = "" | "carregando" | "erro";
 
 /**
@@ -108,6 +132,7 @@ export function TelaCronograma({
   operador,
   hoje,
   onSalvarPlano,
+  onAjustarPedido,
 }: TelaCronogramaProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
   const [mostrarSeletorData, setMostrarSeletorData] = useState(false);
@@ -147,13 +172,33 @@ export function TelaCronograma({
   const [valorEditando, setValorEditando] = useState("");
   const [fase, setFase] = useState<Fase>("montar");
   const [salvando, setSalvando] = useState(false);
-  const [planoConfirmado, setPlanoConfirmado] = useState<PlanoDeProducaoDiario | null>(null);
+  /** Confirmação da produção da matriz, pendente do segundo toque. */
+  const [matrizAConfirmar, setMatrizAConfirmar] = useState(false);
   // Qual sessão está com a limpeza pendente de confirmação (só uma por vez).
   // Limpar é destrutivo e não tem desfazer, então exige dois toques.
   const [sessaoAConfirmarLimpeza, setSessaoAConfirmarLimpeza] = useState<string | null>(null);
   const [documentoAtivo, setDocumentoAtivo] = useState<string>("producao");
   const [statusSugestao, setStatusSugestao] = useState<Record<string, StatusSugestao>>({});
   const [mensagemSugestao, setMensagemSugestao] = useState<Record<string, string>>({});
+
+  /**
+   * REVISÃO DA LISTA DE CADA FILIAL (ago/2026, pedido do dono do negócio:
+   * "dentro do card de cada loja, eu consigo revisar, editar, confirmar e
+   * imprimir a lista de cada uma das lojas, de forma independente").
+   *
+   * `ajustePorLoja` é a cópia de trabalho: o que está na tela enquanto a
+   * matriz mexe, antes de confirmar. Guardada no aparelho para sobreviver
+   * a trocar de aba — ver src/lib/rascunhoPedido.ts.
+   */
+  const [ajustePorLoja, setAjustePorLoja] = useState<Record<string, ItemPlanoProducao[]>>({});
+  /** `${lojaId}:${codigoPdv}` do item cuja quantidade está aberta. */
+  const [itemDaLojaAtivo, setItemDaLojaAtivo] = useState<string | null>(null);
+  const [valorDaLoja, setValorDaLoja] = useState("");
+  /** Loja com a confirmação pendente do segundo toque. */
+  const [lojaAConfirmar, setLojaAConfirmar] = useState<string | null>(null);
+  const [confirmandoLoja, setConfirmandoLoja] = useState<string | null>(null);
+  /** Documento pedido pelo botão de imprimir de um card de loja. */
+  const [impressaoDeLoja, setImpressaoDeLoja] = useState<string | null>(null);
 
   /**
    * Grava o rascunho a cada mudança. Barato: é uma linha de texto no
@@ -167,7 +212,29 @@ export function TelaCronograma({
   /** Rascunho de dia que já passou não serve para nada — sai do aparelho. */
   useEffect(() => {
     limparRascunhosAntigos(hoje);
+    limparAjustesAntigos(hoje);
   }, [hoje]);
+
+  /**
+   * Carrega as revisões guardadas no aparelho para a data em foco. Roda
+   * na montagem e a cada troca de data — é o que faz a revisão sobreviver
+   * a sair da aba e voltar.
+   */
+  useEffect(() => {
+    const guardadas: Record<string, ItemPlanoProducao[]> = {};
+    for (const filial of FILIAIS) {
+      const itens = lerAjuste(filial.id, dataAlvo);
+      if (itens) guardadas[filial.id] = itens;
+    }
+    setAjustePorLoja(guardadas);
+  }, [dataAlvo]);
+
+  /** Grava a revisão em andamento de cada filial, a cada mudança. */
+  useEffect(() => {
+    for (const [lojaId, itens] of Object.entries(ajustePorLoja)) {
+      gravarAjuste(lojaId, dataAlvo, itens);
+    }
+  }, [ajustePorLoja, dataAlvo]);
 
   const diaDaSemana = diaDaSemanaDeData(dataAlvo);
   const dataFormatada = `${rotuloDoDia(diaDaSemana)}, ${formatarDataBr(dataAlvo)}`;
@@ -239,14 +306,33 @@ export function TelaCronograma({
    * existia depois de "Ir para o Resumo", e conferir exigia sair do meio
    * da montagem.
    */
+  /**
+   * Os pedidos como estão NA TELA — com a revisão da matriz aplicada,
+   * mesmo antes de confirmada.
+   *
+   * É o que mantém a tela coerente consigo mesma: se o card da filial
+   * mostra 100 e a lista da produção soma 150, uma das duas está mentindo,
+   * e quem descobre é o padeiro. O que se vê é o que se imprime.
+   */
+  const pedidosNaTela = useMemo(
+    () =>
+      pedidosDoDia.map((pedido) => {
+        const revisao = ajustePorLoja[pedido.lojaId];
+        return revisao && pedido.status === "enviado" && ehPedidoDiario(pedido)
+          ? { ...pedido, itens: revisao }
+          : pedido;
+      }),
+    [pedidosDoDia, ajustePorLoja]
+  );
+
   const consolidadoDaData = useMemo(
     () =>
       consolidarProducao(
         GRUPOS.flatMap((chave) => itensPorGrupo[chave] ?? []),
-        pedidosDoDia,
+        pedidosNaTela,
         LOJA_MATRIZ.id
       ),
-    [itensPorGrupo, pedidosDoDia]
+    [itensPorGrupo, pedidosNaTela]
   );
 
   /**
@@ -277,37 +363,18 @@ export function TelaCronograma({
   const totalUnidadesGerais = consolidadoDaData.reduce((soma, i) => soma + i.totalUnidades, 0);
 
   /**
-   * O que vai para cada FILIAL, quebrado por sessão.
-   *
-   * A matriz saiu deste mapa (ago/2026): o card dela deixou de espelhar o
-   * que ela guarda e passou a ser o lugar onde ela LANÇA o próprio
-   * cronograma — ver o card da matriz mais abaixo. O que ela guarda
-   * continua legível na Programação geral, junto do resto.
+   * O que a tela de impressão da PRODUÇÃO oferece. A lista de cada loja
+   * saiu daqui (ago/2026): ela agora se imprime do card da própria loja,
+   * que é onde ela é revisada. Ficou o par que só faz sentido junto —
+   * os totais da cozinha e, quando as duas filiais mandaram, a bobina
+   * única de despacho.
    */
-  const porFilial = useMemo(
-    () =>
-      FILIAIS.map((loja) => {
-        const itens = itensParaLoja(consolidadoDaData, loja.id);
-        return {
-          loja,
-          sessoes: agruparEmSessoes(itens, produtos),
-          total: itens.reduce((soma, i) => soma + i.quantidadeUnidades, 0),
-          variedades: itens.length,
-        };
-      }),
-    [consolidadoDaData, produtos]
-  );
-
   const documentos = useMemo(() => {
     const lista = [{ id: "producao", rotulo: "Produção" }];
     if (filiaisQueEnviaram.length > 1) lista.push({ id: "todas-filiais", rotulo: "Filiais (todas)" });
-    for (const filial of filiaisQueEnviaram) {
-      lista.push({ id: filial.id, rotulo: filial.nomeCurto });
-    }
     return lista;
   }, [filiaisQueEnviaram]);
 
-  /** Todas as filiais numa bobina só, cada uma aberta por uma faixa preta. */
   function blocosDeTodasAsFiliais(consolidado: ItemConsolidado[]) {
     return filiaisQueEnviaram.flatMap((filial) =>
       blocosDeSeparacao(consolidado, filial.id).map((bloco, indice) => ({
@@ -354,9 +421,6 @@ export function TelaCronograma({
     // dispara isto é a virada do dia, e é só ela que precisa estar aqui.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoje]);
-  const totalUnidades = Object.values(itensPorGrupo)
-    .flat()
-    .reduce((soma, i) => soma + i.quantidadeUnidades, 0);
 
   function produtosDaCategoria(chave: string): Produto[] {
     return produtos
@@ -417,6 +481,100 @@ export function TelaCronograma({
     return produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? `#${codigoPdv}`;
   }
 
+  /**
+   * A lista de uma filial COMO ESTÁ NA TELA: a revisão em andamento, se
+   * houver, senão o que a loja mandou.
+   */
+  function listaDaFilial(lojaId: string): ItemPlanoProducao[] {
+    const emRevisao = ajustePorLoja[lojaId];
+    if (emRevisao) return emRevisao;
+    return pedidoDaFilial(lojaId)?.itens ?? [];
+  }
+
+  function pedidoDaFilial(lojaId: string): PedidoFilial | undefined {
+    return pedidosDoDia.find(
+      (p) => p.lojaId === lojaId && p.status === "enviado" && ehPedidoDiario(p)
+    );
+  }
+
+  /** A tela está diferente do pedido gravado daquela loja? */
+  function lojaTemAlteracaoPendente(lojaId: string): boolean {
+    const emRevisao = ajustePorLoja[lojaId];
+    if (!emRevisao) return false;
+    return !itensIguais(emRevisao, pedidoDaFilial(lojaId)?.itens ?? []);
+  }
+
+  function abrirItemDaLoja(lojaId: string, codigoPdv: number) {
+    const chave = `${lojaId}:${codigoPdv}`;
+    if (itemDaLojaAtivo === chave) {
+      setItemDaLojaAtivo(null);
+      setValorDaLoja("");
+      return;
+    }
+    setItemDaLojaAtivo(chave);
+    const item = listaDaFilial(lojaId).find((i) => i.codigoPdv === codigoPdv);
+    setValorDaLoja(item ? String(item.quantidadeUnidades) : "");
+  }
+
+  function confirmarItemDaLoja(lojaId: string, codigoPdv: number) {
+    if (!ehNumeroValidoPositivo(valorDaLoja)) return;
+    const quantidadeUnidades = paraNumero(valorDaLoja);
+    const atual = listaDaFilial(lojaId);
+    setAjustePorLoja((mapa) => ({
+      ...mapa,
+      [lojaId]: atual.map((i) => (i.codigoPdv === codigoPdv ? { ...i, quantidadeUnidades } : i)),
+    }));
+    setItemDaLojaAtivo(null);
+    setValorDaLoja("");
+  }
+
+  /**
+   * Tirar um item da lista de uma loja é dizer "isto não vai" — e não
+   * apagar o pedido dela. O produto continua guardado em `itensOriginais`
+   * quando a matriz confirmar, e a filial vê "não vem" no lugar da
+   * quantidade. Ver ajustarPedidoPelaMatriz em src/types/pedido.ts.
+   */
+  function tirarItemDaLoja(lojaId: string, codigoPdv: number) {
+    const atual = listaDaFilial(lojaId);
+    setAjustePorLoja((mapa) => ({
+      ...mapa,
+      [lojaId]: atual.filter((i) => i.codigoPdv !== codigoPdv),
+    }));
+    setItemDaLojaAtivo(null);
+  }
+
+  /** Desfaz a revisão em andamento e volta ao que está gravado. */
+  function descartarRevisao(lojaId: string) {
+    apagarAjuste(lojaId, dataAlvo);
+    setAjustePorLoja((mapa) => {
+      const { [lojaId]: _fora, ...resto } = mapa;
+      return resto;
+    });
+    setItemDaLojaAtivo(null);
+    setLojaAConfirmar(null);
+  }
+
+  async function confirmarListaDaLoja(lojaId: string) {
+    const pedido = pedidoDaFilial(lojaId);
+    if (!pedido) return;
+    setConfirmandoLoja(lojaId);
+    try {
+      await onAjustarPedido(
+        ajustarPedidoPelaMatriz(pedido, listaDaFilial(lojaId), operador, new Date().toISOString())
+      );
+      // Confirmado, o rascunho cumpriu a função: o pedido gravado passa a
+      // ser a verdade, e manter a cópia local faria a tela seguir avisando
+      // de uma alteração que já foi.
+      descartarRevisao(lojaId);
+    } catch {
+      // A mensagem vem do aviso global (ver App.tsx). O rascunho FICA: o
+      // que a matriz digitou não pode sumir junto com a falha de rede.
+    } finally {
+      setConfirmandoLoja(null);
+      setLojaAConfirmar(null);
+    }
+  }
+
   async function gerarSugestaoIA(chave: string) {
     setStatusSugestao((atual) => ({ ...atual, [chave]: "carregando" }));
     setMensagemSugestao((atual) => ({ ...atual, [chave]: "" }));
@@ -475,8 +633,12 @@ export function TelaCronograma({
       // ser a verdade. Mantê-lo faria a tela voltar a mostrar "alterações
       // não confirmadas" sobre algo que acabou de ser confirmado.
       apagarRascunho(dataAlvo);
-      setPlanoConfirmado(plano);
-      setFase("exportar");
+      // NÃO pula para a tela de impressão (ago/2026): confirmar e imprimir
+      // viraram duas ações independentes, cada uma com botão próprio. Ser
+      // jogado para outra tela depois de confirmar tirava a matriz de onde
+      // ela estava trabalhando, e obrigava a voltar para revisar a loja
+      // seguinte.
+      setMatrizAConfirmar(false);
     } catch {
       // Fica na tela de resumo com os itens intactos — a mensagem de
       // falha vem do aviso global (ver App.tsx). Avançar para a tela de
@@ -490,149 +652,116 @@ export function TelaCronograma({
   // ------------------------------------------------------------------
   // Fase: Exportar / Imprimir
   // ------------------------------------------------------------------
-  if (fase === "exportar" && planoConfirmado) {
-    /**
-     * Saem DOIS tipos de documento da mesma confirmação, porque a
-     * operação faz duas perguntas diferentes (ver src/lib/consolidacao.ts):
-     * o padeiro precisa do TOTAL por item; quem separa de manhã precisa
-     * da divisão por loja.
-     */
-    const consolidado = consolidarProducao(
-      planoConfirmado.sessoes.flatMap((sessao) => sessao.itens),
-      pedidosDoDia,
-      LOJA_MATRIZ.id
-    );
+  /**
+   * DOIS PAPÉIS DIFERENTES, E ELES SAEM DE PORTAS DIFERENTES (ago/2026,
+   * pedido do dono do negócio):
+   *
+   * - O botão do topo imprime a LISTA DA PRODUÇÃO: os totais somados das
+   *   três lojas, separados por segmento, para ficar fixada na cozinha da
+   *   matriz. Formato cortável — cada segmento vira um pedaço de papel no
+   *   quadro do seu setor.
+   * - O botão dentro do card de cada loja imprime a lista DAQUELA loja,
+   *   sozinha. Formato contínuo: um cabeçalho, um rodapé, segmentos como
+   *   subtítulos — porque esse papel vai inteiro para uma pessoa só, e
+   *   não é picotado. Ver src/lib/gerarImagemLista.ts.
+   */
+  if (fase === "exportar") {
+    const voltar = () => {
+      setFase("montar");
+      setImpressaoDeLoja(null);
+    };
 
-    // Fita de produção: mesmas sessões por categoria, mas com as
-    // quantidades TOTALIZADAS (matriz + filiais que enviaram).
-    const blocosProducao = planoConfirmado.sessoes.map((sessao) => ({
-      rotuloSessao: rotuloDaCategoria(sessao.categoria),
-      itens: sessao.itens.map((item) => ({
-        codigoPdv: item.codigoPdv,
-        quantidadeUnidades:
-          consolidado.find((c) => c.codigoPdv === item.codigoPdv)?.totalUnidades ??
-          item.quantidadeUnidades,
-      })),
-    }));
+    if (impressaoDeLoja) {
+      const destino = [LOJA_MATRIZ, ...FILIAIS].find((l) => l.id === impressaoDeLoja);
+      const itens =
+        impressaoDeLoja === LOJA_MATRIZ.id
+          ? GRUPOS.flatMap((chave) => itensPorGrupo[chave] ?? [])
+          : listaDaFilial(impressaoDeLoja);
+
+      return (
+        <div className="tela">
+          <h2>Lista de {destino?.nomeCurto ?? nomeDaLoja(impressaoDeLoja)}</h2>
+          <ExportarFita
+            blocos={agruparEmSessoes(itens, produtos).map((sessao) => ({
+              rotuloSessao: sessao.rotulo,
+              itens: sessao.itens,
+            }))}
+            titulo={destino?.nome ?? nomeDaLoja(impressaoDeLoja)}
+            instrucao="O que sai da matriz para esta loja. Um papel só, do começo ao fim — use na separação da manhã, conferindo item por item antes de despachar."
+            dataFormatada={dataFormatada}
+            produtos={produtos}
+            montadoPor={operador}
+            formato="continuo"
+            nomeArquivoBase={`lista-${impressaoDeLoja.toLowerCase()}-${dataAlvo}`}
+            onImprimirNoCaixa={(canvases, titulo) =>
+              onImprimirNoCaixa(canvases, titulo, `lista-${impressaoDeLoja.toLowerCase()}-${dataAlvo}`)
+            }
+          />
+          <div className="acoes">
+            <button type="button" className="secundario" onClick={voltar}>
+              Voltar ao Cronograma
+            </button>
+          </div>
+        </div>
+      );
+    }
 
     const documentoSelecionado = documentos.find((d) => d.id === documentoAtivo) ?? documentos[0];
 
     return (
       <div className="tela">
-        <h2>Listas prontas para impressão</h2>
-        <p className="mensagem-sucesso">Produção de {dataFormatada} confirmada.</p>
+        <h2>Lista da produção</h2>
+        <p className="subtitulo destaque-data">{dataFormatada}</p>
 
-        <div className="seletor-documento">
-          {documentos.map((d) => (
-            <button
-              key={d.id}
-              type="button"
-              className={documentoAtivo === d.id ? "ativa" : ""}
-              onClick={() => setDocumentoAtivo(d.id)}
-            >
-              {d.rotulo}
-            </button>
-          ))}
-        </div>
+        {documentos.length > 1 && (
+          <div className="seletor-documento">
+            {documentos.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                className={documentoAtivo === d.id ? "ativa" : ""}
+                onClick={() => setDocumentoAtivo(d.id)}
+              >
+                {d.rotulo}
+              </button>
+            ))}
+          </div>
+        )}
 
         {documentoSelecionado.id === "todas-filiais" ? (
           <ExportarFita
-            blocos={blocosDeTodasAsFiliais(consolidado)}
+            blocos={blocosDeTodasAsFiliais(consolidadoDaData)}
             titulo="Separação por loja"
             instrucao="As duas filiais numa bobina só. Cada loja começa depois de uma faixa preta com o nome dela — corte ali para separar os pedidos antes de despachar."
             dataFormatada={dataFormatada}
             produtos={produtos}
-            montadoPor={planoConfirmado.criadoPor}
+            montadoPor={operador}
             nomeArquivoBase={`separacao-filiais-${dataAlvo}`}
             onImprimirNoCaixa={(canvases, titulo) =>
               onImprimirNoCaixa(canvases, titulo, `separacao-filiais-${dataAlvo}`)
             }
           />
-        ) : documentoSelecionado.id === "producao" ? (
+        ) : (
           <ExportarFita
-            blocos={blocosProducao}
+            blocos={sessoesGerais.map((sessao) => ({
+              rotuloSessao: sessao.rotulo,
+              itens: sessao.itens,
+            }))}
             titulo="Lista de Produção"
-            instrucao="Quantidades TOTAIS — matriz mais as filiais que enviaram pedido. Imprima em uma tira só, corte em cada tesourinha e fixe cada pedaço no quadro do respectivo setor."
+            instrucao="Quantidades TOTAIS — matriz mais as filiais que enviaram. Imprima em uma tira só, corte em cada tesourinha e fixe cada pedaço no quadro do respectivo setor."
             dataFormatada={dataFormatada}
             produtos={produtos}
-            montadoPor={planoConfirmado.criadoPor}
+            montadoPor={operador}
             nomeArquivoBase={`producao-${dataAlvo}`}
             onImprimirNoCaixa={(canvases, titulo) =>
               onImprimirNoCaixa(canvases, titulo, `producao-${dataAlvo}`)
             }
           />
-        ) : (
-          <ExportarFita
-            blocos={blocosDeSeparacao(consolidado, documentoSelecionado.id)}
-            titulo={`Separação — ${nomeDaLoja(documentoSelecionado.id)}`}
-            instrucao="O que sai da matriz para esta loja. Use na separação da manhã, conferindo item por item antes de despachar."
-            dataFormatada={dataFormatada}
-            produtos={produtos}
-            montadoPor={planoConfirmado.criadoPor}
-            nomeArquivoBase={`separacao-${documentoSelecionado.id.toLowerCase()}-${dataAlvo}`}
-            onImprimirNoCaixa={(canvases, titulo) =>
-              onImprimirNoCaixa(canvases, titulo, `separacao-${documentoSelecionado.id.toLowerCase()}-${dataAlvo}`)
-            }
-          />
         )}
 
         <div className="acoes">
-          <button type="button" className="secundario" onClick={() => setFase("montar")}>
+          <button type="button" className="secundario" onClick={voltar}>
             Voltar ao Cronograma
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ------------------------------------------------------------------
-  // Fase: Resumo
-  // ------------------------------------------------------------------
-  if (fase === "resumo") {
-    return (
-      <div className="tela">
-        <h2>Resumo — última conferência</h2>
-        <p className="subtitulo destaque-data">{dataFormatada}</p>
-
-        {GRUPOS.filter((chave) => (itensPorGrupo[chave]?.length ?? 0) > 0).map((chave) => {
-          const itens = itensPorGrupo[chave] ?? [];
-          const subtotal = itens.reduce((s, i) => s + i.quantidadeUnidades, 0);
-          return (
-            <div key={chave}>
-              <h3>{rotuloDaCategoria(chave)}</h3>
-              <div className="tabela-scroll">
-                <table className="tabela-simples">
-                  <thead>
-                    <tr>
-                      <th>Produto</th>
-                      <th>Unidades</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {itens.map((item) => (
-                      <tr key={item.codigoPdv}>
-                        <td>{nomeDoProduto(item.codigoPdv)}</td>
-                        <td>{item.quantidadeUnidades} un</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="nota-rodape">Subtotal: {arred(subtotal)} un</p>
-            </div>
-          );
-        })}
-
-        <p className="total-linha">
-          <strong>{totalItens}</strong> itens · <strong>{arred(totalUnidades)}</strong> unidades planejadas no total
-        </p>
-
-        <div className="acoes">
-          <button type="button" className="secundario" onClick={() => setFase("montar")}>
-            Voltar e ajustar
-          </button>
-          <button type="button" className="primario" disabled={salvando} onClick={confirmarESalvar}>
-            {salvando ? "Salvando..." : "Confirmar produção"}
           </button>
         </div>
       </div>
@@ -751,112 +880,217 @@ export function TelaCronograma({
       </div>
 
       {/*
-        CARD 1 — PROGRAMAÇÃO GERAL: TODAS AS LOJAS REUNIDAS (ago/2026,
-        pedido do dono do negócio)
+        O BOTÃO DA LISTA DA COZINHA, NO LUGAR DO CARD "PROGRAMAÇÃO GERAL"
+        (ago/2026, pedido do dono do negócio)
         ---------------------------------------------------------------
-        Este card era onde a matriz MONTAVA o cronograma dela. Ficava
-        estranho: um card chamado "geral" que na prática era o lançamento
-        de uma loja só, enquanto as outras duas tinham card próprio.
+        O card mostrava, na tela, a soma das três lojas por segmento. Só
+        que ninguém decide nada olhando esse número na tela: ele existe
+        para virar PAPEL e ficar pregado na cozinha da matriz, ao lado do
+        forno, onde o celular não vai.
 
-        Agora ele é o que o nome diz — a lista do dia inteira, com a
-        quantidade total de cada item. Só leitura: é o retrato de tudo
-        que foi lançado, matriz e filiais somadas. Quem lança, lança no
-        card da própria loja, logo abaixo.
+        Um card que só se lê para depois imprimir é um card que podia ser
+        o botão de imprimir. O que sobrou na tela são os cards das lojas,
+        que é onde se revisa e se decide.
       */}
-      <CardCronograma
-        nome="Programação geral"
-        situacao={situacaoDoCronograma(variedadesGerais)}
-        contagem={variedadesGerais > 0 ? contagemDeItens(variedadesGerais) : "—"}
-        aberto={!!cardsAbertos.programacao}
-        onAlternar={() => alternarCard("programacao")}
+      <button
+        type="button"
+        className="primario largura-cheia botao-lista-producao"
+        disabled={variedadesGerais === 0}
+        onClick={() => {
+          setImpressaoDeLoja(null);
+          setDocumentoAtivo("producao");
+          setFase("exportar");
+        }}
       >
-        {planoExistente?.status === "confirmado" && (
-          <p className="callout-inline">
-            Plano confirmado.{" "}
-            <button
-              type="button"
-              className="link"
-              onClick={() => {
-                setPlanoConfirmado(planoExistente);
-                setFase("exportar");
-              }}
-            >
-              reimprimir
-            </button>
-          </p>
-        )}
+        <IconeImpressora tamanho={19} />
+        <span className="texto-botao-producao">
+          Imprimir lista da produção
+          <span className="detalhe-botao">
+            {variedadesGerais > 0
+              ? `${contagemDeItens(variedadesGerais)} · ${arred(totalUnidadesGerais).toLocaleString("pt-BR")} un · separados por segmento`
+              : "nada lançado para esta data ainda"}
+          </span>
+        </span>
+      </button>
 
-        {sessoesGerais.length === 0 ? (
-          <p className="nota-rodape">Nada lançado para esta data ainda.</p>
-        ) : (
-          <>
-            {sessoesGerais.map((sessao) => (
-              <div key={sessao.chave} className="sessao-do-card">
-                <h4>{sessao.rotulo}</h4>
-                {sessao.itens.map((item) => (
-                  <div key={item.codigoPdv} className="item-da-loja">
-                    <span className="nome-item-loja">{nomeDoProduto(item.codigoPdv)}</span>
-                    <span className="qtd-item-loja">{arred(item.quantidadeUnidades)} un</span>
+      {/*
+        CARDS DAS FILIAIS — PRIMEIRO NA PÁGINA (ago/2026, pedido do dono
+        do negócio)
+        ---------------------------------------------------------------
+        Elas vêm antes porque é o trabalho que CHEGA de fora e espera
+        resposta: a matriz abre a aba para ver o que as lojas pediram e
+        decidir o que dá para produzir. O que ela mesma monta pode
+        esperar — está na mão dela o tempo todo.
+
+        Cada card é autônomo: revisa, edita, confirma e imprime a lista
+        daquela loja sem passar por nenhuma tela intermediária.
+      */}
+      {FILIAIS.map((filial) => {
+        const pedido = pedidoDaFilial(filial.id);
+        const itens = listaDaFilial(filial.id);
+        const sessoes = agruparEmSessoes(itens, produtos);
+        const variedades = itens.length;
+        const total = itens.reduce((soma, i) => soma + i.quantidadeUnidades, 0);
+        const pendente = lojaTemAlteracaoPendente(filial.id);
+        const diferencas = pedido ? diferencasDoAjuste(pedido) : [];
+
+        // Quatro estados, e cada um pede uma coisa diferente de quem lê:
+        // a lista não chegou, chegou e está intacta, foi ajustada e
+        // gravada, ou tem edição na tela esperando confirmação.
+        const situacao: SituacaoDoCard = !pedido
+          ? { texto: "lista pendente", tom: "pendente" }
+          : pendente
+            ? { texto: "alterações não confirmadas", tom: "pendente" }
+            : diferencas.length > 0
+              ? { texto: "ajustada pela matriz", tom: "ok" }
+              : { texto: "lista enviada", tom: "ok" };
+
+        return (
+          <CardCronograma
+            key={filial.id}
+            nome={filial.nomeCurto}
+            situacao={situacao}
+            contagem={variedades > 0 ? contagemDeItens(variedades) : "—"}
+            aberto={!!cardsAbertos[filial.id]}
+            onAlternar={() => alternarCard(filial.id)}
+          >
+            {!pedido ? (
+              <p className="nota-rodape">Esta filial ainda não enviou o pedido do dia.</p>
+            ) : (
+              <>
+                {sessoes.length === 0 && <p className="nota-rodape">Nada vai para esta loja.</p>}
+
+                {sessoes.map((sessao) => (
+                  <div key={sessao.chave} className="sessao-do-card">
+                    <h4>{sessao.rotulo}</h4>
+                    {sessao.itens.map((item) => {
+                      const editando = itemDaLojaAtivo === `${filial.id}:${item.codigoPdv}`;
+                      return (
+                        <div key={item.codigoPdv} className="linha-item-editavel">
+                          {/* A LINHA INTEIRA É O ALVO. Um lápis de 20px ao
+                              lado do número seria um alvo pequeno para um
+                              dedo com farinha, e esconderia que dá para
+                              editar até alguém reparar no ícone. */}
+                          <button
+                            type="button"
+                            className="item-da-loja editavel"
+                            aria-expanded={editando}
+                            onClick={() => abrirItemDaLoja(filial.id, item.codigoPdv)}
+                          >
+                            <span className="nome-item-loja">{nomeDoProduto(item.codigoPdv)}</span>
+                            <span className="qtd-item-loja">{arred(item.quantidadeUnidades)} un</span>
+                          </button>
+
+                          {editando && (
+                            <div className="editor-quantidade">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                pattern="[0-9]*[.,]?[0-9]*"
+                                autoFocus
+                                aria-label={`Quantidade de ${nomeDoProduto(item.codigoPdv)}`}
+                                value={valorDaLoja}
+                                onChange={(e) => setValorDaLoja(sanitizarEntradaNumerica(e.target.value))}
+                              />
+                              <span className="unidade-fixa">un</span>
+                              <button
+                                type="button"
+                                className="primario"
+                                disabled={!ehNumeroValidoPositivo(valorDaLoja)}
+                                onClick={() => confirmarItemDaLoja(filial.id, item.codigoPdv)}
+                              >
+                                Confirmar
+                              </button>
+                              {/* "não vem" e não "remover": o item não é
+                                  apagado do pedido da loja, ele é
+                                  respondido. A filial vê "não vem" no
+                                  lugar da quantidade que pediu. */}
+                              <button
+                                type="button"
+                                className="link"
+                                onClick={() => tirarItemDaLoja(filial.id, item.codigoPdv)}
+                              >
+                                não vem
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ))}
-              </div>
-            ))}
-            <p className="nota-rodape">
-              {contagemDeItens(variedadesGerais)} ·{" "}
-              {arred(totalUnidadesGerais).toLocaleString("pt-BR")} unidades — matriz e filiais
-              somadas
-            </p>
-          </>
-        )}
-      </CardCronograma>
+
+                <p className="nota-rodape">
+                  {contagemDeItens(variedades)} · {arred(total).toLocaleString("pt-BR")} unidades
+                </p>
+
+                {diferencas.length > 0 && !pendente && (
+                  <p className="callout-inline">
+                    {diferencas.length === 1
+                      ? "1 item saiu diferente do que a loja pediu."
+                      : `${diferencas.length} itens saíram diferentes do que a loja pediu.`}{" "}
+                    Ela já está vendo a diferença na tela dela.
+                  </p>
+                )}
+
+                <div className="acoes acoes-do-card">
+                  {pendente && (
+                    <button
+                      type="button"
+                      className="link"
+                      onClick={() => descartarRevisao(filial.id)}
+                    >
+                      desfazer
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="secundario"
+                    onClick={() => {
+                      setImpressaoDeLoja(filial.id);
+                      setFase("exportar");
+                    }}
+                  >
+                    <IconeImpressora tamanho={17} /> Imprimir
+                  </button>
+                  {lojaAConfirmar === filial.id ? (
+                    <span className="confirmar-limpeza">
+                      <button
+                        type="button"
+                        className="primario"
+                        disabled={confirmandoLoja === filial.id}
+                        onClick={() => void confirmarListaDaLoja(filial.id)}
+                      >
+                        {confirmandoLoja === filial.id ? "Enviando..." : "Confirmar?"}
+                      </button>
+                      <button type="button" className="link" onClick={() => setLojaAConfirmar(null)}>
+                        não
+                      </button>
+                    </span>
+                  ) : (
+                    /* Só acende quando há o que confirmar: um botão sempre
+                       disponível para uma ação sem efeito ensina a tocar
+                       nele sem ler. */
+                    <button
+                      type="button"
+                      className="primario"
+                      disabled={!pendente}
+                      onClick={() => setLojaAConfirmar(filial.id)}
+                    >
+                      Confirmar
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </CardCronograma>
+        );
+      })}
 
       {/*
-        CARD 2 — CONFIRMAÇÃO DO QUE FOI PRODUZIDO HOJE
-        ---------------------------------------------------------------
-        Fica logo abaixo da programação porque é a outra metade do mesmo
-        ciclo: o card de cima diz o que foi PEDIDO, este diz o que
-        realmente SAIU. Só aparece quando existe plano confirmado hoje —
-        sem plano não há o que conferir.
-      */}
-      {planoDeHoje && (
-        <CardCronograma
-          nome="Confirmar o que foi produzido"
-          /* Confirmado não mostra segunda linha (ago/2026): "produção
-             confirmada" logo abaixo de um título que já diz o assunto era
-             a mesma frase duas vezes, e o número à direita já conta a
-             história inteira. Pendente continua avisando, porque aí falta
-             uma ação. */
-          situacao={
-            hojeJaConfirmado ? null : { texto: "ainda não confirmado", tom: "pendente" }
-          }
-          contagem={`${confirmadosDeHoje} de ${itensDoPlanoDeHoje} confirmados`}
-          aberto={!!cardsAbertos.confirmacao}
-          onAlternar={() => alternarCard("confirmacao")}
-        >
-          <ConfirmarProducao
-            embutido
-            plano={planoDeHoje}
-            produtos={produtos}
-            operador={operador}
-            totaisPedidos={totaisPedidosDeHoje}
-            codigosComFornada={codigosComFornadaNoDia(fornadas, hojeIso)}
-            onConfirmar={(codigos) => onConfirmarProducao(planoDeHoje.id, codigos)}
-          />
-        </CardCronograma>
-      )}
-
-      {/*
-        CARD 3 — MATRIZ: ONDE ELA LANÇA O PRÓPRIO CRONOGRAMA (ago/2026,
-        pedido do dono do negócio)
-        ---------------------------------------------------------------
-        Cada loja lança o cronograma dela no card dela. A filial lança
-        enviando a lista do próprio aparelho; a matriz lança aqui, na
-        sanfona das cinco sessões — é a mesma ideia, no mesmo lugar da
-        tela, e agora as três lojas se leem do mesmo jeito.
-
-        A montagem morava na Programação geral, o que misturava duas
-        coisas: o que UMA loja quer e o que a padaria inteira vai
-        produzir. Separado, cada card responde uma pergunta só.
+        CARD DA MATRIZ — onde ela LANÇA o próprio cronograma. Vem depois
+        das filiais (ago/2026): o que chega de fora e espera resposta tem
+        precedência sobre o que está na mão dela o tempo todo.
       */}
       <CardCronograma
         nome={LOJA_MATRIZ.nomeCurto}
@@ -995,79 +1229,74 @@ export function TelaCronograma({
           );
         })}
 
-        <div className="acoes">
+        <div className="acoes acoes-do-card">
           <button
             type="button"
-            className="primario"
+            className="secundario"
             disabled={totalItens === 0}
-            onClick={() => setFase("resumo")}
+            onClick={() => {
+              setImpressaoDeLoja(LOJA_MATRIZ.id);
+              setFase("exportar");
+            }}
           >
-            Ir para o Resumo ({contagemDeItens(totalItens)})
+            <IconeImpressora tamanho={17} /> Imprimir
           </button>
+          {matrizAConfirmar ? (
+            <span className="confirmar-limpeza">
+              <button
+                type="button"
+                className="primario"
+                disabled={salvando}
+                onClick={confirmarESalvar}
+              >
+                {salvando ? "Salvando..." : `Confirmar ${contagemDeItens(totalItens)}?`}
+              </button>
+              <button type="button" className="link" onClick={() => setMatrizAConfirmar(false)}>
+                não
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="primario"
+              disabled={totalItens === 0}
+              onClick={() => setMatrizAConfirmar(true)}
+            >
+              Confirmar produção
+            </button>
+          )}
         </div>
       </CardCronograma>
 
-      {/* As reposições saíram desta tela (ago/2026): elas são de HOJE e
-          moram na aba "Nova fornada", junto do resto do que acontece
-          durante o expediente. O Cronograma é sobre AMANHÃ. */}
-
       {/*
-        CARDS 4 E 5 — UM POR FILIAL (ago/2026).
-        Substituiu o quadro único "Quanto vai para cada loja". A tabela
-        com uma coluna por loja obrigava a matriz a cruzar linha e coluna
-        de cabeça; e quem separa de manhã separa UMA loja de cada vez,
-        sessão por sessão. O card tem a forma do trabalho real.
-
-        O cabeçalho conta VARIEDADES, não unidades (ago/2026): "12 itens"
-        é o tamanho da lista que alguém vai separar. O total em unidades
-        continua no rodapé do card, junto dos produtos — lá ele tem
-        contexto; no cabeçalho ele só competia com o número que importa.
+        CARD DA CONFERÊNCIA — POR ÚLTIMO (ago/2026, pedido do dono do
+        negócio).
+        ---------------------------------------------------------------
+        Ele fala de HOJE, e todo o resto da aba fala de AMANHÃ. Ficava no
+        meio do caminho de quem entra aqui para planejar, e planejar é o
+        que traz alguém a esta aba. No fim, ele continua à mão para o
+        fechamento do expediente, sem atravessar o trabalho do resto do
+        dia.
       */}
-      {porFilial.map(({ loja: destino, sessoes, total, variedades }) => {
-        const enviou = filiaisQueEnviaram.some((f) => f.id === destino.id);
-
-        // O que importa aqui é se a lista da loja chegou: sem ela, a
-        // matriz produz no escuro para aquele destino.
-        const situacao: SituacaoDoCard = enviou
-          ? { texto: "lista enviada", tom: "ok" }
-          : { texto: "lista pendente", tom: "pendente" };
-
-        return (
-          <CardCronograma
-            key={destino.id}
-            nome={destino.nomeCurto}
-            situacao={situacao}
-            contagem={variedades > 0 ? contagemDeItens(variedades) : "—"}
-            aberto={!!cardsAbertos[destino.id]}
-            onAlternar={() => alternarCard(destino.id)}
-          >
-            {sessoes.length === 0 ? (
-              <p className="nota-rodape">
-                {enviou
-                  ? "Nada destinado a esta loja neste cronograma."
-                  : "Esta filial ainda não enviou o pedido do dia."}
-              </p>
-            ) : (
-              <>
-                {sessoes.map((sessao) => (
-                  <div key={sessao.chave} className="sessao-do-card">
-                    <h4>{sessao.rotulo}</h4>
-                    {sessao.itens.map((item) => (
-                      <div key={item.codigoPdv} className="item-da-loja">
-                        <span className="nome-item-loja">{nomeDoProduto(item.codigoPdv)}</span>
-                        <span className="qtd-item-loja">{arred(item.quantidadeUnidades)} un</span>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-                <p className="nota-rodape">
-                  {contagemDeItens(variedades)} · {arred(total).toLocaleString("pt-BR")} unidades
-                </p>
-              </>
-            )}
-          </CardCronograma>
-        );
-      })}
+      {planoDeHoje && (
+        <CardCronograma
+          nome="Confirmar o que foi produzido"
+          situacao={hojeJaConfirmado ? null : { texto: "ainda não confirmado", tom: "pendente" }}
+          contagem={`${confirmadosDeHoje} de ${itensDoPlanoDeHoje} confirmados`}
+          aberto={!!cardsAbertos.confirmacao}
+          onAlternar={() => alternarCard("confirmacao")}
+        >
+          <ConfirmarProducao
+            embutido
+            plano={planoDeHoje}
+            produtos={produtos}
+            operador={operador}
+            totaisPedidos={totaisPedidosDeHoje}
+            codigosComFornada={codigosComFornadaNoDia(fornadas, hojeIso)}
+            onConfirmar={(codigos) => onConfirmarProducao(planoDeHoje.id, codigos)}
+          />
+        </CardCronograma>
+      )}
     </div>
   );
 }
@@ -1078,10 +1307,10 @@ export function TelaCronograma({
  *
  * A SOBRA NO FIM É DE PROPÓSITO. A filial pode pedir um produto cuja
  * categoria não é uma das cinco — cadastro antigo, item recém-criado, a
- * antiga sessão de encomendas. A versão anterior filtrava por categoria e
- * pronto: esses itens simplesmente NÃO APARECIAM no card, sem nenhum
- * sinal, e a loja recebia menos do que pediu sem ninguém entender por
- * quê. Aqui eles caem em "Outros" e ficam visíveis.
+ * antiga sessão de encomendas. Filtrar por categoria e pronto faria esses
+ * itens simplesmente NÃO APARECEREM no card, sem nenhum sinal, e a loja
+ * receberia menos do que pediu sem ninguém entender por quê. Aqui eles
+ * caem em "Outros" e ficam visíveis.
  */
 function agruparEmSessoes<T extends { codigoPdv: number }>(itens: T[], produtos: Produto[]) {
   const categoriaDe = new Map(produtos.map((p) => [p.codigoPdv, p.categoria]));

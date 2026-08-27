@@ -95,10 +95,7 @@ service cloud.firestore {
       allow read: if ehMatriz() || (lojaConhecida() && resource.data.lojaId == lojaDoUsuario());
       allow create, update: if lojaConhecida()
                             && request.resource.data.lojaId == lojaDoUsuario();
-      // A matriz responde à reposição — e SÓ isso. A lista de chaves
-      // permitidas é o que impede a resposta virar porta para reescrever
-      // a quantidade que a filial pediu: o número tem que continuar sendo
-      // o que a loja mandou, mesmo depois de atendido.
+      // A matriz responde à reposição.
       allow update: if ehMatriz()
                     && request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['atendimento'])
@@ -107,6 +104,33 @@ service cloud.firestore {
                     // é exatamente o problema que este campo resolve.
                     && (request.resource.data.atendimento.desfecho == 'confirmado'
                         || request.resource.data.atendimento.motivo is string);
+
+      // A matriz confirma a lista da filial, podendo mudar as quantidades
+      // (ago/2026, decisão do dono do negócio).
+      //
+      // Esta regra INVERTE uma decisão anterior. Antes o número era
+      // intocável, com o argumento de que tinha que continuar sendo o que
+      // a loja mandou. O uso mostrou o outro lado: a matriz nem sempre
+      // consegue produzir o que foi pedido, e sem poder ajustar ela
+      // produzia um número e entregava outro, sem registro nenhum.
+      //
+      // O que substitui a antiga proteção é `ajusteDaMatriz`: o pedido
+      // original não é apagado, é guardado dentro do documento, e a
+      // filial vê a diferença na tela dela. Por isso só estas duas chaves
+      // entram juntas — mudar `itens` sem carimbar o ajuste continua
+      // proibido, e é o que impede a edição silenciosa.
+      allow update: if ehMatriz()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['itens', 'ajusteDaMatriz'])
+                    && request.resource.data.itens is list
+                    && (
+                      // Desfazer o ajuste também é legítimo: some a marca,
+                      // e os itens voltam a ser os da loja.
+                      !('ajusteDaMatriz' in request.resource.data)
+                      || (request.resource.data.ajusteDaMatriz.por is string
+                          && request.resource.data.ajusteDaMatriz.em is string
+                          && request.resource.data.ajusteDaMatriz.itensOriginais is list)
+                    );
       // Pedido enviado não some: se a filial desistir, ela zera os itens.
       // Assim a matriz nunca fica sem saber se a filial já respondeu.
       allow delete: if false;

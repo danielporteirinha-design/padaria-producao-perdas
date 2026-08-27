@@ -44,6 +44,12 @@ interface ExportarFitaProps {
   nomeArquivoBase: string;
   montadoPor?: string;
   /**
+   * `continuo` para a lista de uma loja (um cabeçalho, um rodapé) e
+   * `cortavel` (padrão) para a fita da produção, picotada por setor. Ver
+   * o bloco de constantes em src/lib/gerarImagemLista.ts.
+   */
+  formato?: "cortavel" | "continuo";
+  /**
    * Envia direto para a impressora do caixa. Ausente quando o perfil não
    * pode imprimir (a impressora fica na matriz) — nesse caso o botão nem
    * aparece, em vez de aparecer e falhar.
@@ -59,6 +65,7 @@ export function ExportarFita({
   produtos,
   nomeArquivoBase,
   montadoPor,
+  formato,
   onImprimirNoCaixa,
 }: ExportarFitaProps) {
   const [imprimindo, setImprimindo] = useState(false);
@@ -74,7 +81,14 @@ export function ExportarFita({
   useEffect(() => {
     if (!previewRef.current) return;
     try {
-      const canvases = gerarCanvasesFita({ sessoes: blocos, titulo, dataFormatada, produtos, montadoPor });
+      const canvases = gerarCanvasesFita({
+        sessoes: blocos,
+        titulo,
+        dataFormatada,
+        produtos,
+        montadoPor,
+        formato,
+      });
       previewRef.current.innerHTML = "";
       canvases.forEach((canvas, indice) => {
         if (canvases.length > 1) {
@@ -92,14 +106,21 @@ export function ExportarFita({
       console.error("Falha ao pré-visualizar a fita de produção:", erro);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blocos, titulo, dataFormatada, montadoPor]);
+  }, [blocos, titulo, dataFormatada, montadoPor, formato]);
 
   async function handleAcao() {
     setStatus("gerando");
     setMensagem("");
     setArquivosParaBaixar(null);
     try {
-      const canvases = gerarCanvasesFita({ sessoes: blocos, titulo, dataFormatada, produtos, montadoPor });
+      const canvases = gerarCanvasesFita({
+        sessoes: blocos,
+        titulo,
+        dataFormatada,
+        produtos,
+        montadoPor,
+        formato,
+      });
       const arquivos = await canvasesParaArquivos(canvases, nomeArquivoBase);
       const resultado = await compartilharOuBaixar(arquivos);
       setStatus("ok");
@@ -145,6 +166,7 @@ export function ExportarFita({
                 dataFormatada,
                 produtos,
                 montadoPor,
+                formato,
               });
               await onImprimirNoCaixa(canvases, titulo);
             } catch (erro) {

@@ -91,8 +91,7 @@ const CONFERENCIAS = [
   ["src/App.tsx", "avisarFilialDoDesfecho", "Aviso do desfecho em paralelo"],
 
   // --- Cronograma: cada loja lança no card dela; título abre a data
-  ["src/components/TelaCronograma.tsx", "porFilial", "Cronograma: matriz lança no card dela"],
-  ["src/components/TelaCronograma.tsx", "sessoesGerais", "Programação geral: todas as lojas reunidas"],
+  ["src/components/TelaCronograma.tsx", "listaDaFilial", "Cronograma: cada loja no card dela"],
   ["src/index.css", "escolha-de-data", "Título do dia abre a troca de data"],
 
   // --- Reposição: lista do mais recente para o mais antigo
@@ -105,6 +104,16 @@ const CONFERENCIAS = [
   ["src/components/PainelFornoDeHoje.tsx", "cadastrarEAnunciar", "Matriz: cadastrar produto na hora"],
   ["src/components/PainelFornadasFilial.tsx", "botao-fornada", "Filial: Pedir e Excluir do mesmo tamanho"],
   ["src/index.css", "chip-setor", "Estilo do cadastro relampago"],
+
+  // --- Cronograma: cards autônomos por loja
+  ["src/types/pedido.ts", "ajustarPedidoPelaMatriz", "Matriz confirma a lista da filial"],
+  ["src/components/TelaCronograma.tsx", "confirmarListaDaLoja", "Revisar/editar/confirmar por loja"],
+  ["src/components/TelaCronograma.tsx", "botao-lista-producao", "Botao de imprimir a lista da producao"],
+  ["src/components/TelaPedidoFilial.tsx", "aviso-corte", "Filial ve o que a matriz cortou"],
+  ["src/lib/gerarImagemLista.ts", "computarBlocosContinuos", "Lista da loja: um cabecalho, um rodape"],
+  ["src/lib/avisarFiliais.ts", "avisarListaAjustada", "Aviso de lista ajustada"],
+  ["api/notificar-fornada.ts", "listaAjustada", "Servidor: aviso de lista ajustada"],
+  ["firestore.rules", "ajusteDaMatriz", "Regras: matriz pode ajustar (COLAR NO CONSOLE!)"],
 
   // --- Rascunho do pedido da filial
   ["src/lib/rascunhoLocal.ts", "chavesVencidas", "Base comum dos rascunhos"],

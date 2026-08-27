@@ -26,6 +26,8 @@ import type { ItemPlanoProducao } from "../types/producao";
 const LARGURA_PX = 576;
 const MARGEM = 24;
 const ALTURA_LINHA = 56;
+/** Só para os testes conferirem a conta de altura sem duplicar o número. */
+export const ALTURA_LINHA_TESTE = ALTURA_LINHA;
 /**
  * 174 e nao 210: saiu a linha "PADARIA PAO DE MEL" do topo de cada bloco
  * (ago/2026). Só funcionario da padaria usa este app e este papel nunca
@@ -48,6 +50,36 @@ export const ALTURA_FAIXA_CORTE = 90;
 export const ALTURA_MARCADOR_DESTINO = 120;
 /** Rodapé no fim da imagem inteira (contagem de sessões/itens + nome do app). */
 export const ALTURA_RODAPE_FINAL = 36;
+
+/* ---------------------------------------------------------------
+   FORMATO CONTÍNUO — a lista de UMA loja (ago/2026, pedido do dono do
+   negócio: "recomendo que o pedido das filiais venham com um único
+   cabeçalho, um único rodapé, e as sessões podem continuar vindo
+   separadas").
+
+   POR QUE DOIS FORMATOS, E NÃO UM
+   --------------------------------
+   O formato cortável repete cabeçalho e data em CADA sessão porque a
+   fita da produção é picotada: cada pedaço vai para o quadro de um setor
+   diferente, e um pedaço sem data e sem assinatura é um pedaço sem
+   contexto e sem responsável.
+
+   A lista de uma loja não é picotada. Ela vai inteira para uma pessoa
+   só — quem separa a mercadoria daquela loja. Repetir o cabeçalho ali
+   gastava um palmo de bobina por setor e, pior, fazia a mesma lista
+   parecer cinco pedidos diferentes empilhados.
+
+   Aqui a data e o nome da loja saem uma vez no alto, os setores viram
+   subtítulos dentro do documento, e a assinatura sai uma vez no fim.
+   --------------------------------------------------------------- */
+/** Margem + título + faixa preta da data. */
+export const ALTURA_CABECALHO_DOC = 126;
+/** Nome do setor + régua, dentro do documento. */
+export const ALTURA_SUBTITULO_SESSAO = 44;
+/** Respiro entre o fim de uma sessão e o subtítulo da próxima. */
+export const ALTURA_ESPACO_APOS_SESSAO = 14;
+export const ALTURA_RODAPE_DOC = 62;
+export const ALTURA_RODAPE_DOC_ASSINADO = 96;
 
 // Limite de altura por imagem, deliberadamente conservador (set/2026):
 // alguns navegadores móveis (histórico do Safari no iPhone, entre outros)
@@ -94,8 +126,15 @@ export interface DadosImpressaoFita {
   dataFormatada: string; // já pronta para exibição, ex.: "Quarta-feira, 26/08/2026"
   sessoes: BlocoSessaoImpressao[];
   produtos: Produto[];
-  /** Quem montou/confirmou o cronograma — exibido no rodapé de CADA sessão para rastreabilidade. */
+  /** Quem montou/confirmou o cronograma — exibido no rodapé para rastreabilidade. */
   montadoPor?: string;
+  /**
+   * `cortavel` (padrão) — a fita da produção, um cupom por setor, feita
+   * para ser picotada e fixada nos quadros da cozinha.
+   * `continuo` — a lista de uma loja: um cabeçalho, um rodapé, setores
+   * como subtítulos. Ver o bloco de constantes acima.
+   */
+  formato?: "cortavel" | "continuo";
 }
 
 interface LinhaItem {
@@ -238,6 +277,8 @@ function desenharCanvasParaGrupo(
  * o total de sessões/itens do dia realmente exigir.
  */
 export function gerarCanvasesFita(dados: DadosImpressaoFita): HTMLCanvasElement[] {
+  if (dados.formato === "continuo") return gerarCanvasesContinuos(dados);
+
   const temAssinatura = Boolean(dados.montadoPor);
   const blocos = computarBlocos(dados.sessoes, dados.produtos, temAssinatura);
   const grupos = agruparBlocosEmImagens(blocos);
@@ -251,6 +292,188 @@ export function gerarCanvasesFita(dados: DadosImpressaoFita): HTMLCanvasElement[
       grupos.length
     )
   );
+}
+
+/* =================================================================
+   FORMATO CONTÍNUO
+   ================================================================= */
+
+export interface BlocoContinuo {
+  rotuloSessao: string;
+  linhas: LinhaItem[];
+  /** Subtítulo + linhas + respiro. Não inclui cabeçalho nem rodapé. */
+  altura: number;
+}
+
+/**
+ * Exportado só para teste (ver scripts/verificar_logica.ts) — puro, sem
+ * canvas nem DOM.
+ *
+ * Cada bloco aqui carrega SÓ o que é dele: o subtítulo do setor e as
+ * linhas. Cabeçalho e rodapé pertencem ao documento, não à sessão — é
+ * exatamente essa a diferença para o formato cortável, e é por isso que
+ * a conta de altura é outra.
+ */
+export function computarBlocosContinuos(
+  sessoes: BlocoSessaoImpressao[],
+  produtos: Produto[]
+): BlocoContinuo[] {
+  return sessoes.map((sessao) => {
+    const linhas = linhasDoBloco(sessao.itens, produtos);
+    return {
+      rotuloSessao: sessao.rotuloSessao,
+      linhas,
+      altura:
+        ALTURA_SUBTITULO_SESSAO +
+        Math.max(linhas.length, 1) * ALTURA_LINHA +
+        ALTURA_ESPACO_APOS_SESSAO,
+    };
+  });
+}
+
+/**
+ * Divide os blocos em imagens que caibam sob ALTURA_MAXIMA_SEGURA_PX.
+ *
+ * CADA IMAGEM PAGA CABEÇALHO E RODAPÉ. Não é desperdício: uma segunda
+ * folha sem a data e sem o nome da loja é uma folha órfã, e quem separa
+ * de manhã tem duas na mão sem saber de quem é a segunda. Por isso as
+ * duas alturas entram na conta de toda imagem, e não só da primeira.
+ *
+ * Nunca parte uma sessão ao meio. Sessão sozinha maior que o limite fica
+ * numa imagem própria mesmo assim — dividir uma sessão exigiria repetir
+ * o subtítulo, e aí o setor apareceria duas vezes na mesma lista.
+ *
+ * Exportado só para teste — puro.
+ */
+export function agruparBlocosContinuos(
+  blocos: BlocoContinuo[],
+  alturaCabecalho: number,
+  alturaRodape: number
+): BlocoContinuo[][] {
+  const disponivel = ALTURA_MAXIMA_SEGURA_PX - alturaCabecalho - alturaRodape;
+  const grupos: BlocoContinuo[][] = [];
+  let grupoAtual: BlocoContinuo[] = [];
+  let alturaGrupo = 0;
+
+  for (const bloco of blocos) {
+    if (grupoAtual.length > 0 && alturaGrupo + bloco.altura > disponivel) {
+      grupos.push(grupoAtual);
+      grupoAtual = [bloco];
+      alturaGrupo = bloco.altura;
+    } else {
+      grupoAtual.push(bloco);
+      alturaGrupo += bloco.altura;
+    }
+  }
+  if (grupoAtual.length > 0) grupos.push(grupoAtual);
+  return grupos;
+}
+
+function gerarCanvasesContinuos(dados: DadosImpressaoFita): HTMLCanvasElement[] {
+  const alturaRodape = dados.montadoPor ? ALTURA_RODAPE_DOC_ASSINADO : ALTURA_RODAPE_DOC;
+  const blocos = computarBlocosContinuos(dados.sessoes, dados.produtos);
+  const grupos = agruparBlocosContinuos(blocos, ALTURA_CABECALHO_DOC, alturaRodape);
+  const totalItens = blocos.reduce((soma, b) => soma + b.linhas.length, 0);
+
+  return grupos.map((grupo, indice) =>
+    desenharDocumentoContinuo(
+      grupo,
+      dados.titulo,
+      dados.dataFormatada,
+      dados.montadoPor,
+      alturaRodape,
+      indice + 1,
+      grupos.length,
+      totalItens
+    )
+  );
+}
+
+function desenharDocumentoContinuo(
+  grupo: BlocoContinuo[],
+  titulo: string,
+  dataFormatada: string,
+  montadoPor: string | undefined,
+  alturaRodape: number,
+  numeroImagem: number,
+  totalImagens: number,
+  totalItensDoDocumento: number
+): HTMLCanvasElement {
+  const altura =
+    ALTURA_CABECALHO_DOC + grupo.reduce((soma, b) => soma + b.altura, 0) + alturaRodape;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = LARGURA_PX;
+  canvas.height = Math.max(altura, 200);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new ErroGeracaoImagem("Este navegador não suporta geração de imagem (canvas 2D indisponível).");
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.textBaseline = "top";
+
+  // --- Cabeçalho, uma vez só (ALTURA_CABECALHO_DOC)
+  let y = MARGEM;
+  ctx.fillStyle = "#000000";
+  ctx.textAlign = "center";
+  ctx.font = "bold 22px system-ui, -apple-system, sans-serif";
+  ctx.fillText(titulo, LARGURA_PX / 2, y);
+  y += 34;
+
+  ctx.fillRect(MARGEM, y, LARGURA_PX - MARGEM * 2, 50);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 24px system-ui, -apple-system, sans-serif";
+  ctx.fillText(dataFormatada, LARGURA_PX / 2, y + 13);
+  y += 68;
+
+  // --- Sessões, como subtítulos dentro do mesmo documento
+  for (const bloco of grupo) {
+    ctx.fillStyle = "#000000";
+    ctx.textAlign = "left";
+    ctx.font = "bold 20px system-ui, -apple-system, sans-serif";
+    ctx.fillText(bloco.rotuloSessao.toUpperCase(), MARGEM, y);
+    y += 30;
+    linhaHorizontal(ctx, y, "#000000", 2);
+    y += ALTURA_SUBTITULO_SESSAO - 30;
+
+    if (bloco.linhas.length === 0) {
+      ctx.font = "18px system-ui, -apple-system, sans-serif";
+      ctx.fillText("Nenhum item nesta sessão.", MARGEM, y);
+      y += ALTURA_LINHA;
+    }
+    for (const linha of bloco.linhas) {
+      ctx.fillStyle = "#000000";
+      ctx.font = "bold 24px system-ui, -apple-system, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(linha.nome, MARGEM, y, LARGURA_PX - MARGEM * 2 - 120);
+      ctx.textAlign = "right";
+      ctx.fillText(`${formatarUnidades(linha.unidades)} un`, LARGURA_PX - MARGEM, y);
+      y += ALTURA_LINHA - 16;
+      linhaHorizontal(ctx, y, "#000000", 1);
+      y += 16;
+    }
+    y += ALTURA_ESPACO_APOS_SESSAO;
+  }
+
+  // --- Rodapé, uma vez só
+  linhaHorizontal(ctx, y, "#000000", 2);
+  y += 12;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#000000";
+  ctx.font = "18px system-ui, -apple-system, sans-serif";
+  const itensNesta = grupo.reduce((soma, b) => soma + b.linhas.length, 0);
+  const contagem =
+    totalImagens > 1
+      ? `${itensNesta} de ${totalItensDoDocumento} itens · folha ${numeroImagem}/${totalImagens}`
+      : `${totalItensDoDocumento} ${totalItensDoDocumento === 1 ? "item" : "itens"}`;
+  ctx.fillText(contagem, LARGURA_PX / 2, y);
+
+  if (montadoPor) {
+    ctx.font = "bold 20px system-ui, -apple-system, sans-serif";
+    ctx.fillText(`Montado por: ${montadoPor}`, LARGURA_PX / 2, y + 26);
+  }
+
+  return canvas;
 }
 
 function linhasDoBloco(itens: ItemPlanoProducao[], produtos: Produto[]): LinhaItem[] {
