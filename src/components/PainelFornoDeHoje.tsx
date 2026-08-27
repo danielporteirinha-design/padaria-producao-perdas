@@ -209,10 +209,6 @@ export function PainelFornoDeHoje({
 
         {buscando ? (
           <>
-            <p className="nota-rodape">
-              Busca no catálogo inteiro — o produto não precisa estar na lista de hoje. Toque para
-              anunciar às filiais.
-            </p>
             {resultados.length === 0 ? (
               <p className="nota-rodape">Nenhum produto ativo com esse nome.</p>
             ) : (
@@ -221,26 +217,15 @@ export function PainelFornoDeHoje({
           </>
         ) : (
           <>
-            <p className="nota-rodape">
-              Toque no item quando a fornada sair. As filiais veem na hora e podem pedir reposição
-              enquanto ainda dá tempo de entregar hoje.
-            </p>
-
             {/* Lista CORRIDA, sem separar por sessão (ago/2026, decisão do
                 dono do negócio). Aqui não se planeja nada: só se anuncia o
                 que acabou de sair, e o cabeçalho de categoria só empurrava
                 a lista para baixo sem ajudar a achar. A ordem é a do
                 cronograma, que é a ordem em que a padaria produz. */}
             {!plano ? (
-              <p className="nota-rodape">
-                Nenhum cronograma confirmado para hoje. Use a busca acima para anunciar o que sair
-                do forno.
-              </p>
+              <p className="nota-rodape">Sem cronograma hoje. Use a busca acima.</p>
             ) : itensDoDia.length === 0 ? (
-              <p className="nota-rodape">
-                Todos os itens de hoje foram tirados da lista. Use a busca acima para anunciar, ou
-                mostre a lista de novo abaixo.
-              </p>
+              <p className="nota-rodape">Lista vazia.</p>
             ) : (
               <div className="grupo-forno">
                 {itensDoDia.map((codigoPdv) => linhaDoProduto(codigoPdv, true))}
@@ -256,14 +241,23 @@ export function PainelFornoDeHoje({
                 pessoa que abre esta aba veio anunciar, não administrar o
                 que já tirou. Devolver tudo de uma vez é o caso comum:
                 acabou o dia, começa outro. */}
+            {/* Uma PASTILHA, não um parágrafo (ago/2026, pedido do dono do
+                negócio: a frase longa virava ruído justamente depois de
+                uma ação de limpeza). A lixeira riscada e o número dizem o
+                estado sem exigir leitura; o toque desfaz. O que a frase
+                explicava — que as filiais deixam de ver — já é o efeito
+                que a pessoa acabou de provocar de propósito. */}
             {encerrados.size > 0 && (
-              <p className="nota-rodape">
-                {encerrados.size} {encerrados.size === 1 ? "item escondido" : "itens escondidos"}{" "}
-                hoje — as filiais não veem.{" "}
-                <button type="button" className="link" onClick={() => void onReabrirTudo()}>
-                  mostrar de novo
-                </button>
-              </p>
+              <button
+                type="button"
+                className="pastilha-escondidos"
+                aria-label={`Mostrar de novo ${encerrados.size} item(ns) escondido(s)`}
+                onClick={() => void onReabrirTudo()}
+              >
+                <IconeLixeira tamanho={15} />
+                {encerrados.size}
+                <span className="acao-pastilha">mostrar</span>
+              </button>
             )}
           </>
         )}

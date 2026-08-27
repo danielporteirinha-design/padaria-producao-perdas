@@ -1004,6 +1004,34 @@ button.perigo:hover { background: #822525; }
 .tirar-da-lista:focus-visible { outline: 2px solid var(--cor-acento); outline-offset: -2px; }
 
 
+/* Pastilha do que está escondido (ago/2026).
+
+   Substituiu uma frase de duas linhas que aparecia justo DEPOIS de uma
+   ação de limpeza — o pior momento possível para encher a tela de texto.
+   A lixeira e o número dizem o estado sem exigir leitura; a pastilha
+   inteira é o botão que desfaz.
+
+   Discreta de propósito: é rodapé de uma lista, não um alerta. */
+.pastilha-escondidos {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 6px 12px;
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+  border-radius: 999px;
+  color: var(--cor-texto-suave);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.pastilha-escondidos:hover { color: var(--cor-acento); border-color: var(--cor-acento); }
+.pastilha-escondidos:focus-visible { outline: 2px solid var(--cor-acento); outline-offset: 2px; }
+.pastilha-escondidos svg { flex-shrink: 0; }
+.acao-pastilha { color: var(--cor-acento); text-decoration: underline; text-underline-offset: 2px; }
+
 /* "Pedir" e "excluir aviso" na mesma linha, à direita do produto. */
 .acoes-fornada { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 

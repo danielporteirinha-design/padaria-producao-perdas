@@ -81,6 +81,9 @@ const CONFERENCIAS = [
   ["vite.config.ts", '"#ffffff"', "Splash branco"],
   ["scripts/gerar_icones.py", "FUNDO_ICONE", "Ícones com fundo branco"],
 
+  // --- Reposição enxuta
+  ["src/index.css", "pastilha-escondidos", "Reposição: pastilha no lugar do texto longo"],
+
   // --- Resposta da matriz à reposição
   ["src/components/PainelFornadasFilial.tsx", "reposicao-confirmada", "Filial: resposta 'separado' em destaque"],
   ["src/App.tsx", "avisarFilialDoDesfecho", "Aviso do desfecho em paralelo"],

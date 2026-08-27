@@ -262,6 +262,35 @@ caminho de volta ("N itens fora da lista · mostrar de novo") fica fora da lista
 porque é justamente quando alguém tira o último item que ele precisa estar
 visível.
 
+## A aba Reposição perdeu 4 parágrafos (ago/2026)
+
+**Relato:** ao excluir itens da lista, aparecia um texto enorme, e a tela ficava
+ruidosa.
+
+O ruído não estava só ali. A aba tinha quatro blocos de prosa que ensinavam algo
+na primeira semana e depois só ocupavam altura acima da lista:
+
+| Saiu | Por quê |
+|---|---|
+| "Toque no item quando a fornada sair. As filiais veem na hora e podem pedir reposição enquanto ainda dá tempo de entregar hoje." | A aba se chama Reposição e cada linha diz "anunciar". A frase ensinava o que o botão já diz |
+| "Busca no catálogo inteiro — o produto não precisa estar na lista de hoje..." (nas duas telas) | O campo já diz "Buscar produto para anunciar" |
+| "Está sem no balcão? Peça reposição." | O botão se chama "Pedir" |
+| "N itens escondidos hoje — as filiais não veem. mostrar de novo" | Duas linhas de texto **logo depois de uma ação de limpeza** — o pior momento possível para encher a tela |
+
+No lugar da última entrou uma **pastilha**: lixeira riscada, o número, e
+"mostrar". A pastilha inteira é o botão que desfaz. O estado se lê sem ler — e o
+que a frase explicava (que as filiais deixam de ver) já é o efeito que a pessoa
+acabou de provocar de propósito.
+
+As mensagens de confirmação encolheram junto: "PÃO FRANCÊS saiu da lista — as
+filiais não veem mais hoje" virou **"PÃO FRANCÊS fora da lista."** Quem tocou na
+lixeira está olhando a linha sumir; explicar o efeito por extenso, num aviso que
+cobre a tela por quatro segundos, é repetir o que ela já viu acontecer.
+
+O painel inteiro da matriz, com dois itens na lista e dois escondidos, tem hoje
+**86 caracteres de texto** — contra mais de 400 antes. O que sobrou são nomes de
+produto, horários e três botões.
+
 ## O "sim" tinha menos peso que o "não" (ago/2026)
 
 Quando a matriz confirmava uma reposição, a filial via três palavras cinzas

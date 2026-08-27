@@ -688,10 +688,10 @@ export default function App() {
       encerradoEm: new Date().toISOString(),
     };
     const nome = produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? "Produto";
-    await comRetorno(
-      () => repositorio!.encerrarAnuncio(anuncio),
-      `${nome} saiu da lista — as filiais não veem mais hoje.`
-    );
+    // Mensagem curta: a pessoa acabou de tocar na lixeira e está olhando
+    // a linha sumir. Explicar o efeito por extenso, num aviso que cobre a
+    // tela por quatro segundos, é repetir o que ela já viu acontecer.
+    await comRetorno(() => repositorio!.encerrarAnuncio(anuncio), `${nome} fora da lista.`);
     setAnunciosEncerrados((atual) => [...atual.filter((a) => a.id !== anuncio.id), anuncio]);
   }
 
@@ -715,7 +715,7 @@ export default function App() {
     if (doDia.length === 0) return;
     await comRetorno(async () => {
       for (const anuncio of doDia) await repositorio!.reabrirAnuncio(anuncio.id);
-    }, "Itens de volta na lista — as filiais voltam a ver.");
+    }, "Itens de volta na lista.");
     setAnunciosEncerrados((atual) => atual.filter((a) => a.data !== hoje));
   }
 

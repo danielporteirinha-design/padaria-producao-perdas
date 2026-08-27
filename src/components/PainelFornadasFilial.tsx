@@ -27,7 +27,7 @@ import type { Loja } from "../lib/lojas";
 import { dataDeHojeIso } from "../lib/data";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { contemBusca } from "../lib/texto";
-import { IconeChama, IconeConfere } from "./Icones";
+import { IconeChama, IconeConfere, IconeLixeira } from "./Icones";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
 import {
@@ -346,10 +346,6 @@ export function PainelFornadasFilial({
 
         {buscando ? (
           <>
-            <p className="nota-rodape">
-              Busca no catálogo inteiro — o produto não precisa ter saído do forno. Informe a
-              quantidade e a matriz responde se dá tempo de produzir.
-            </p>
             {resultados.length === 0 ? (
               <p className="nota-rodape">Nenhum produto ativo com esse nome.</p>
             ) : (
@@ -363,16 +359,12 @@ export function PainelFornadasFilial({
             <IconeChama tamanho={20} />
             <span>
               {dispensadas.size > 0
-                ? "Você já resolveu todos os avisos de hoje. Precisa de algo? Use a busca acima."
-                : "Nada saiu do forno na matriz ainda hoje. Precisa de algo? Use a busca acima."}
+                ? "Avisos resolvidos. Precisa de algo? Use a busca acima."
+                : "Nada saiu do forno ainda. Precisa de algo? Use a busca acima."}
             </span>
           </p>
         ) : (
           <>
-            {/* Uma linha, não um parágrafo. O texto longo ensinava na
-                primeira semana; agora a filial já sabe para que serve o
-                botão, e o que sobra é altura ocupada acima da lista. */}
-            <p className="nota-rodape">Está sem no balcão? Peça reposição.</p>
             {prontosHoje.map(({ produto, doDia }) => linhaDoProduto(produto, doDia, true))}
           </>
         )}
@@ -381,16 +373,16 @@ export function PainelFornadasFilial({
             precisa do caminho de volta, e é justamente na tela vazia que
             ele some se ficar dentro da lista. */}
         {!buscando && dispensadas.size > 0 && (
-          <p className="nota-rodape">
-            {dispensadas.size} {dispensadas.size === 1 ? "aviso escondido" : "avisos escondidos"} hoje.{" "}
-            <button
-              type="button"
-              className="link"
-              onClick={() => setDispensadas(restaurarFornadas(loja.id, hoje))}
-            >
-              mostrar de novo
-            </button>
-          </p>
+          <button
+            type="button"
+            className="pastilha-escondidos"
+            aria-label={`Mostrar de novo ${dispensadas.size} aviso(s) escondido(s)`}
+            onClick={() => setDispensadas(restaurarFornadas(loja.id, hoje))}
+          >
+            <IconeLixeira tamanho={15} />
+            {dispensadas.size}
+            <span className="acao-pastilha">mostrar</span>
+          </button>
         )}
 
       {/* Diagnóstico da direção filial -> matriz: dispara um aviso de
