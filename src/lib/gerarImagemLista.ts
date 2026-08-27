@@ -325,11 +325,39 @@ export interface BlocoContinuo {
 }
 
 /**
+ * Uma PEÇA é um pedaço de papel autossuficiente: cabeçalho (destino +
+ * data), os blocos de setor, e um rodapé. É o que alguém arranca da
+ * bobina e leva para separar a mercadoria de uma loja.
+ *
+ * A bobina das duas filiais é uma sequência de peças com uma faixa de
+ * corte entre elas — e SÓ entre elas (ago/2026, pedido do dono do
+ * negócio: "os segmentos dos produtos das filiais podem ser impressos em
+ * uma mesma tira de papel, não precisa cortar a etiqueta entre cada
+ * segmento").
+ *
+ * Antes cada SETOR virava um cupom completo, com cabeçalho, data e
+ * rodapé próprios, e a bobina de uma loja com cinco setores saía como
+ * cinco recibos empilhados. Quem separa não trabalha assim: ele leva um
+ * papel por loja e percorre os setores nele.
+ */
+export interface PecaContinua {
+  /** O destino, em destaque no alto: "Filial Arthur Bernardes". */
+  titulo: string;
+  blocos: BlocoContinuo[];
+  /** Itens do destino inteiro — o rodapé conta o todo, não a folha. */
+  totalDoDestino: number;
+  /** Preenchido só quando o destino não coube em uma folha. */
+  folha?: { numero: number; total: number };
+  /** Cabeçalho + blocos + rodapé. */
+  altura: number;
+}
+
+/**
  * Exportado só para teste (ver scripts/verificar_logica.ts) — puro, sem
  * canvas nem DOM.
  *
  * Cada bloco aqui carrega SÓ o que é dele: o subtítulo do setor e as
- * linhas. Cabeçalho e rodapé pertencem ao documento, não à sessão — é
+ * linhas. Cabeçalho e rodapé pertencem à peça, não ao setor — é
  * exatamente essa a diferença para o formato cortável, e é por isso que
  * a conta de altura é outra.
  */
@@ -351,16 +379,16 @@ export function computarBlocosContinuos(
 }
 
 /**
- * Divide os blocos em imagens que caibam sob ALTURA_MAXIMA_SEGURA_PX.
+ * Divide os blocos de UM destino em folhas que caibam sob
+ * ALTURA_MAXIMA_SEGURA_PX.
  *
- * CADA IMAGEM PAGA CABEÇALHO E RODAPÉ. Não é desperdício: uma segunda
+ * CADA FOLHA PAGA CABEÇALHO E RODAPÉ. Não é desperdício: uma segunda
  * folha sem a data e sem o nome da loja é uma folha órfã, e quem separa
- * de manhã tem duas na mão sem saber de quem é a segunda. Por isso as
- * duas alturas entram na conta de toda imagem, e não só da primeira.
+ * de manhã tem duas na mão sem saber de quem é a segunda.
  *
- * Nunca parte uma sessão ao meio. Sessão sozinha maior que o limite fica
- * numa imagem própria mesmo assim — dividir uma sessão exigiria repetir
- * o subtítulo, e aí o setor apareceria duas vezes na mesma lista.
+ * Nunca parte um setor ao meio. Setor sozinho maior que o limite fica
+ * numa folha própria mesmo assim — dividir exigiria repetir o subtítulo,
+ * e aí o setor apareceria duas vezes na mesma lista.
  *
  * Exportado só para teste — puro.
  */
@@ -388,38 +416,99 @@ export function agruparBlocosContinuos(
   return grupos;
 }
 
+/**
+ * Monta as peças a partir das sessões, quebrando A CADA DESTINO NOVO.
+ *
+ * `inicioDeDestino` é o que marca "daqui para baixo é outra loja" (ver
+ * BlocoSessaoImpressao). Sem nenhum destino marcado — a lista de uma
+ * loja só — sai uma peça com o título recebido.
+ *
+ * Exportado só para teste — puro.
+ */
+export function montarPecasContinuas(
+  sessoes: BlocoSessaoImpressao[],
+  produtos: Produto[],
+  tituloPadrao: string,
+  alturaCabecalho: number,
+  alturaRodape: number
+): PecaContinua[] {
+  const destinos: { titulo: string; sessoes: BlocoSessaoImpressao[] }[] = [];
+  for (const sessao of sessoes) {
+    if (destinos.length === 0 || sessao.inicioDeDestino) {
+      destinos.push({ titulo: sessao.inicioDeDestino ?? tituloPadrao, sessoes: [] });
+    }
+    destinos[destinos.length - 1].sessoes.push(sessao);
+  }
+
+  const pecas: PecaContinua[] = [];
+  for (const destino of destinos) {
+    const blocos = computarBlocosContinuos(destino.sessoes, produtos);
+    const total = blocos.reduce((soma, b) => soma + b.linhas.length, 0);
+    const folhas = agruparBlocosContinuos(blocos, alturaCabecalho, alturaRodape);
+    folhas.forEach((folha, indice) => {
+      pecas.push({
+        titulo: destino.titulo,
+        blocos: folha,
+        totalDoDestino: total,
+        folha: folhas.length > 1 ? { numero: indice + 1, total: folhas.length } : undefined,
+        altura:
+          alturaCabecalho + folha.reduce((soma, b) => soma + b.altura, 0) + alturaRodape,
+      });
+    });
+  }
+  return pecas;
+}
+
+/**
+ * Empacota as peças em imagens. Duas peças na mesma imagem ficam
+ * separadas por uma faixa de corte — a única tesoura do papel inteiro,
+ * exatamente onde uma loja termina e a outra começa.
+ *
+ * Exportado só para teste — puro.
+ */
+export function agruparPecasEmImagens(pecas: PecaContinua[]): PecaContinua[][] {
+  const imagens: PecaContinua[][] = [];
+  let atual: PecaContinua[] = [];
+  let altura = 0;
+
+  for (const peca of pecas) {
+    const corte = atual.length > 0 ? ALTURA_FAIXA_CORTE : 0;
+    if (atual.length > 0 && altura + corte + peca.altura > ALTURA_MAXIMA_SEGURA_PX) {
+      imagens.push(atual);
+      atual = [peca];
+      altura = peca.altura;
+    } else {
+      atual.push(peca);
+      altura += corte + peca.altura;
+    }
+  }
+  if (atual.length > 0) imagens.push(atual);
+  return imagens;
+}
+
 function gerarCanvasesContinuos(dados: DadosImpressaoFita): HTMLCanvasElement[] {
   const alturaRodape = dados.montadoPor ? ALTURA_RODAPE_DOC_ASSINADO : ALTURA_RODAPE_DOC;
-  const blocos = computarBlocosContinuos(dados.sessoes, dados.produtos);
-  const grupos = agruparBlocosContinuos(blocos, ALTURA_CABECALHO_DOC, alturaRodape);
-  const totalItens = blocos.reduce((soma, b) => soma + b.linhas.length, 0);
-
-  return grupos.map((grupo, indice) =>
-    desenharDocumentoContinuo(
-      grupo,
-      dados.titulo,
-      dados.dataFormatada,
-      dados.montadoPor,
-      alturaRodape,
-      indice + 1,
-      grupos.length,
-      totalItens
-    )
+  const pecas = montarPecasContinuas(
+    dados.sessoes,
+    dados.produtos,
+    dados.titulo,
+    ALTURA_CABECALHO_DOC,
+    alturaRodape
+  );
+  return agruparPecasEmImagens(pecas).map((imagem) =>
+    desenharImagemContinua(imagem, dados.dataFormatada, dados.montadoPor, alturaRodape)
   );
 }
 
-function desenharDocumentoContinuo(
-  grupo: BlocoContinuo[],
-  titulo: string,
+function desenharImagemContinua(
+  pecas: PecaContinua[],
   dataFormatada: string,
   montadoPor: string | undefined,
-  alturaRodape: number,
-  numeroImagem: number,
-  totalImagens: number,
-  totalItensDoDocumento: number
+  alturaRodape: number
 ): HTMLCanvasElement {
   const altura =
-    ALTURA_CABECALHO_DOC + grupo.reduce((soma, b) => soma + b.altura, 0) + alturaRodape;
+    pecas.reduce((soma, p) => soma + p.altura, 0) +
+    Math.max(pecas.length - 1, 0) * ALTURA_FAIXA_CORTE;
 
   const canvas = document.createElement("canvas");
   canvas.width = LARGURA_PX;
@@ -431,14 +520,35 @@ function desenharDocumentoContinuo(
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.textBaseline = "top";
 
-  // --- Cabeçalho, uma vez só (ALTURA_CABECALHO_DOC)
-  // O nome da loja em vermelho e grande, a data maior ainda e sem faixa
-  // preta — as duas decisões estão explicadas em desenharBloco().
-  let y = MARGEM;
+  let y = 0;
+  pecas.forEach((peca, indice) => {
+    y = desenharPeca(ctx, y, peca, dataFormatada, montadoPor, alturaRodape);
+    // A ÚNICA tesoura do papel fica aqui: entre uma loja e a próxima.
+    if (indice < pecas.length - 1) y = desenharFaixaDeCorte(ctx, y);
+  });
+
+  return canvas;
+}
+
+/** Uma peça inteira: cabeçalho, setores e rodapé. Devolve o y do fim. */
+function desenharPeca(
+  ctx: CanvasRenderingContext2D,
+  yInicial: number,
+  peca: PecaContinua,
+  dataFormatada: string,
+  montadoPor: string | undefined,
+  alturaRodape: number
+): number {
+  const yFim = yInicial + peca.altura;
+
+  // --- Cabeçalho (ALTURA_CABECALHO_DOC): destino e data, uma vez só.
+  // As duas decisões — vermelho no destino, data grande sem faixa preta —
+  // estão explicadas em desenharBloco().
+  let y = yInicial + MARGEM;
   ctx.textAlign = "center";
   ctx.fillStyle = VERMELHO_MARCA;
   ctx.font = "bold 30px system-ui, -apple-system, sans-serif";
-  ctx.fillText(titulo, LARGURA_PX / 2, y, LARGURA_PX - MARGEM * 2);
+  ctx.fillText(peca.titulo, LARGURA_PX / 2, y, LARGURA_PX - MARGEM * 2);
   y += 42;
 
   ctx.fillStyle = "#000000";
@@ -448,10 +558,8 @@ function desenharDocumentoContinuo(
   linhaHorizontal(ctx, y, "#000000", 3);
   y += 19;
 
-  // --- Sessões, como subtítulos dentro do mesmo documento
-  for (const bloco of grupo) {
-    // Centrado e maior que os produtos: é o que separa, de relance, o
-    // nome de um SETOR do nome de um PRODUTO numa lista corrida.
+  // --- Setores: blocos dentro da MESMA tira, sem tesoura entre eles.
+  for (const bloco of peca.blocos) {
     ctx.fillStyle = "#000000";
     ctx.textAlign = "center";
     ctx.font = "bold 27px system-ui, -apple-system, sans-serif";
@@ -461,6 +569,7 @@ function desenharDocumentoContinuo(
     y += ALTURA_SUBTITULO_SESSAO - 38;
 
     if (bloco.linhas.length === 0) {
+      ctx.textAlign = "left";
       ctx.font = "18px system-ui, -apple-system, sans-serif";
       ctx.fillText("Nenhum item nesta sessão.", MARGEM, y);
       y += ALTURA_LINHA;
@@ -479,25 +588,24 @@ function desenharDocumentoContinuo(
     y += ALTURA_ESPACO_APOS_SESSAO;
   }
 
-  // --- Rodapé, uma vez só
-  linhaHorizontal(ctx, y, "#000000", 2);
-  y += 12;
+  // --- Rodapé: UM por tira de papel.
+  const yRodape = yFim - alturaRodape;
+  linhaHorizontal(ctx, yRodape, "#000000", 2);
   ctx.textAlign = "center";
   ctx.fillStyle = "#000000";
   ctx.font = "18px system-ui, -apple-system, sans-serif";
-  const itensNesta = grupo.reduce((soma, b) => soma + b.linhas.length, 0);
-  const contagem =
-    totalImagens > 1
-      ? `${itensNesta} de ${totalItensDoDocumento} itens · folha ${numeroImagem}/${totalImagens}`
-      : `${totalItensDoDocumento} ${totalItensDoDocumento === 1 ? "item" : "itens"}`;
-  ctx.fillText(contagem, LARGURA_PX / 2, y);
+  const itensNesta = peca.blocos.reduce((soma, b) => soma + b.linhas.length, 0);
+  const contagem = peca.folha
+    ? `${itensNesta} de ${peca.totalDoDestino} itens · folha ${peca.folha.numero}/${peca.folha.total}`
+    : `${peca.totalDoDestino} ${peca.totalDoDestino === 1 ? "item" : "itens"}`;
+  ctx.fillText(contagem, LARGURA_PX / 2, yRodape + 12);
 
   if (montadoPor) {
     ctx.font = "bold 20px system-ui, -apple-system, sans-serif";
-    ctx.fillText(`Montado por: ${montadoPor}`, LARGURA_PX / 2, y + 26);
+    ctx.fillText(`Montado por: ${montadoPor}`, LARGURA_PX / 2, yRodape + 38);
   }
 
-  return canvas;
+  return yFim;
 }
 
 function linhasDoBloco(itens: ItemPlanoProducao[], produtos: Produto[]): LinhaItem[] {

@@ -382,7 +382,10 @@ export function TelaCronograma({
         // Só o PRIMEIRO bloco de cada loja carrega o marcador — os
         // seguintes são categorias da mesma loja, separadas pela faixa
         // de corte comum.
-        inicioDeDestino: indice === 0 ? filial.nomeCurto : undefined,
+        // COM a palavra "Filial" (ago/2026, pedido do dono do negócio).
+        // Numa bobina que traz as duas lojas, o nome completo é o que
+        // separa sem margem de dúvida na hora de despachar.
+        inicioDeDestino: indice === 0 ? filial.nome : undefined,
       }))
     );
   }
@@ -686,11 +689,11 @@ export function TelaCronograma({
               rotuloSessao: sessao.rotulo,
               itens: sessao.itens,
             }))}
-            /* Nome CURTO: "Arthur Bernardes", não "Filial Arthur
-               Bernardes" (ago/2026, pedido do dono do negócio). A palavra
-               "Filial" não distingue nada num papel que é sempre de uma
-               loja, e rouba espaço do nome, que é o que se lê de relance. */
-            titulo={destino?.nomeCurto ?? nomeDaLoja(impressaoDeLoja)}
+            /* Nome completo, "Filial Arthur Bernardes" (ago/2026, pedido
+               do dono do negócio): é o mesmo cabeçalho da bobina que traz
+               as duas lojas juntas, e dois papéis do mesmo dia com nomes
+               escritos de jeitos diferentes se conferem pior. */
+            titulo={destino?.nome ?? nomeDaLoja(impressaoDeLoja)}
             instrucao="O que sai da matriz para esta loja. Um papel só, do começo ao fim — use na separação da manhã, conferindo item por item antes de despachar."
             dataFormatada={dataFormatada}
             produtos={produtos}
@@ -735,11 +738,17 @@ export function TelaCronograma({
         {documentoSelecionado.id === "todas-filiais" ? (
           <ExportarFita
             blocos={blocosDeTodasAsFiliais(consolidadoDaData)}
-            titulo="Separação por loja"
-            instrucao="As duas filiais numa bobina só. Cada loja começa depois de uma faixa preta com o nome dela — corte ali para separar os pedidos antes de despachar."
+            /* O título genérico saiu (ago/2026, pedido do dono do
+               negócio: "gera ruído"). Cada loja já abre a própria tira
+               com o nome dela em destaque — uma linha dizendo
+               "Separação por loja" logo acima só repetia, em texto
+               menor, o que a tira inteira já mostra. */
+            titulo=""
+            instrucao="As duas filiais numa bobina só. Cada loja sai numa tira inteira, com os setores em blocos — a única tesoura fica entre uma loja e a outra."
             dataFormatada={dataFormatada}
             produtos={produtos}
             montadoPor={operador}
+            formato="continuo"
             nomeArquivoBase={`separacao-filiais-${dataAlvo}`}
             onImprimirNoCaixa={(canvases, titulo) =>
               onImprimirNoCaixa(canvases, titulo, `separacao-filiais-${dataAlvo}`)

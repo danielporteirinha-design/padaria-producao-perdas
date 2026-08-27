@@ -82,7 +82,9 @@ import {
   ALTURA_RODAPE_DOC_ASSINADO,
   ALTURA_SUBTITULO_SESSAO,
   agruparBlocosContinuos,
+  agruparPecasEmImagens,
   computarBlocosContinuos,
+  montarPecasContinuas,
 } from "../src/lib/gerarImagemLista";
 import {
   codigosComFornadaNoDia,
@@ -2921,6 +2923,109 @@ const perdas: RegistroPerda[] = [
     )
   );
   afirmar(maiorFolha <= 4000, `nenhuma folha passa do limite seguro (maior: ${maiorFolha}px)`);
+}
+
+// ---------------------------------------------------------------
+// Uma tira por LOJA: cabecalho e rodape uma vez, tesoura so' entre lojas
+// (ver PecaContinua em src/lib/gerarImagemLista.ts)
+// ---------------------------------------------------------------
+{
+  const produtosPeca: Produto[] = [10, 20, 30].map((codigoPdv) => ({
+    codigoPdv,
+    nome: `PRODUTO ${codigoPdv}`,
+    categoria: "PÃES E ROSCAS",
+    unidadeProducao: "un",
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+    pesoMedioUnitarioGramas: 50,
+  }));
+
+  const CAB = ALTURA_CABECALHO_DOC;
+  const ROD = ALTURA_RODAPE_DOC_ASSINADO;
+
+  const bobina = montarPecasContinuas(
+    [
+      {
+        rotuloSessao: "Pães e Roscas",
+        itens: [{ codigoPdv: 10, quantidadeUnidades: 100 }],
+        inicioDeDestino: "Filial Arthur Bernardes",
+      },
+      { rotuloSessao: "Biscoitos", itens: [{ codigoPdv: 20, quantidadeUnidades: 30 }] },
+      {
+        rotuloSessao: "Pães e Roscas",
+        itens: [{ codigoPdv: 10, quantidadeUnidades: 90 }],
+        inicioDeDestino: "Filial Benjamin Constant",
+      },
+    ],
+    produtosPeca,
+    "",
+    CAB,
+    ROD
+  );
+
+  afirmar(bobina.length === 2, `duas lojas viram DUAS pecas (obtidas: ${bobina.length})`);
+  afirmar(
+    bobina[0].titulo === "Filial Arthur Bernardes" && bobina[1].titulo === "Filial Benjamin Constant",
+    "cada peca leva o nome completo da loja"
+  );
+  afirmar(
+    bobina[0].blocos.length === 2,
+    `os dois setores da primeira loja ficam na MESMA tira (obtidos: ${bobina[0].blocos.length})`
+  );
+  afirmar(
+    bobina[0].altura === CAB + ROD + bobina[0].blocos.reduce((s, b) => s + b.altura, 0),
+    "a peca paga cabecalho e rodape UMA vez, nao um por setor"
+  );
+  afirmar(
+    bobina.every((p) => p.folha === undefined),
+    "lista pequena nao vira 'folha 1/2'"
+  );
+
+  // Sem destino nenhum (a lista de UMA loja) sai uma peca so'.
+  const umaLoja = montarPecasContinuas(
+    [
+      { rotuloSessao: "Pães e Roscas", itens: [{ codigoPdv: 10, quantidadeUnidades: 1 }] },
+      { rotuloSessao: "Bolos", itens: [{ codigoPdv: 20, quantidadeUnidades: 2 }] },
+    ],
+    produtosPeca,
+    "Filial Arthur Bernardes",
+    CAB,
+    ROD
+  );
+  afirmar(
+    umaLoja.length === 1 && umaLoja[0].titulo === "Filial Arthur Bernardes",
+    "sem destino marcado, uma peca so', com o titulo recebido"
+  );
+
+  // As duas pecas cabem numa imagem — e a tesoura entre elas entra na conta.
+  const imagens = agruparPecasEmImagens(bobina);
+  afirmar(imagens.length === 1, "as duas lojas cabem na mesma bobina");
+  afirmar(imagens[0].length === 2, "e continuam sendo duas pecas dentro dela");
+
+  // Loja grande demais para uma folha: divide, e cada folha se identifica.
+  const setoresDemais = Array.from({ length: 40 }, (_, i) => ({
+    rotuloSessao: `Setor ${i}`,
+    itens: [{ codigoPdv: 10, quantidadeUnidades: 1 }],
+    ...(i === 0 ? { inicioDeDestino: "Filial Arthur Bernardes" } : {}),
+  }));
+  const grandes = montarPecasContinuas(setoresDemais, produtosPeca, "", CAB, ROD);
+  afirmar(grandes.length > 1, "destino grande demais vira mais de uma folha");
+  afirmar(
+    grandes.every((p) => p.folha !== undefined && p.titulo === "Filial Arthur Bernardes"),
+    "toda folha se identifica: nome da loja e 'folha N/M'"
+  );
+  afirmar(
+    grandes.reduce((s, p) => s + p.blocos.length, 0) === 40,
+    "nenhum setor se perde na divisao"
+  );
+  afirmar(
+    grandes.every((p) => p.altura <= 4000),
+    "nenhuma folha passa do limite seguro de canvas"
+  );
+  afirmar(
+    grandes.every((p) => p.totalDoDestino === 40),
+    "o rodape conta o DESTINO inteiro, nao so' o que coube na folha"
+  );
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);
