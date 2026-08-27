@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Padaria Pão de Mel — Produção e Perdas</title>
+
+    <!-- Instalação como app (ver vite.config.ts para o manifest completo). -->
+    <!-- Mesma cor de fundo do app (--cor-fundo). O vermelho da logomarca
+         foi testado aqui e reprovado (ago/2026): a barra do sistema em
+         vermelho forte brigava com a paleta calma de dentro do app, e a
+         emenda entre as duas ficava visível o tempo todo. Igualando a
+         barra ao fundo, a moldura some e sobra o conteúdo. -->
+    <meta name="theme-color" content="#faf7f2" />
+    <meta name="description" content="Cronograma de produção diária e registro de perdas da Padaria Pão de Mel." />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <!-- iOS ignora o manifest para o ícone: usa esta tag e as duas abaixo. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Pão de Mel" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

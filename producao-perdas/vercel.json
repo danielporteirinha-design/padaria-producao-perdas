@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/lembretes?tipo=lista", "schedule": "30 20 * * *" },
+    { "path": "/api/lembretes?tipo=reposicao", "schedule": "45 15 * * *" }
+  ]
+}
