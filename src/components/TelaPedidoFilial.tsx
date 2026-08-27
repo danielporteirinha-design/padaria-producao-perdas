@@ -19,7 +19,7 @@
  * pior que produzir sem ele.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { ItemPlanoProducao } from "../types/producao";
 import type { PedidoFilial } from "../types/pedido";
@@ -28,6 +28,7 @@ import { AtivarAvisos } from "./AtivarAvisos";
 import type { Loja } from "../lib/lojas";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
+import { proximaDataAlvo } from "../lib/dataAlvoDoDia";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { IconeCalendario, IconeConfere, IconeLixeira, IconeSeta } from "./Icones";
 
@@ -36,6 +37,8 @@ interface TelaPedidoFilialProps {
   produtos: Produto[];
   pedidos: PedidoFilial[];
   operador: string;
+  /** Data de hoje, viva — ver src/lib/useDiaCorrente.ts. */
+  hoje: string;
   /** Fornadas prontas hoje na matriz — base do pedido de reposição. */
   onSalvarPedido: (pedido: PedidoFilial) => Promise<void>;
 }
@@ -45,6 +48,7 @@ export function TelaPedidoFilial({
   produtos,
   pedidos,
   operador,
+  hoje,
   onSalvarPedido,
 }: TelaPedidoFilialProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
@@ -76,6 +80,23 @@ export function TelaPedidoFilial({
   const diaDaSemana = diaDaSemanaDeData(dataAlvo);
   const totalUnidades = itens.reduce((soma, i) => soma + i.quantidadeUnidades, 0);
   const jaEnviado = pedidoExistente?.status === "enviado";
+
+  /**
+   * Vira para o próximo dia útil quando o dia vira com o app aberto. A
+   * filial deixa o app aberto no balcão; sem isto, na quinta de manhã a
+   * tela ainda oferecia "Pedido para quinta" — a lista que já tinha sido
+   * mandada na véspera — e a de sexta ficava sem ser feita.
+   *
+   * "Trabalho na tela" aqui é rascunho: itens digitados que ainda não
+   * foram enviados. Pedido já enviado pode virar de data à vontade, o
+   * documento está gravado. A regra inteira em src/lib/dataAlvoDoDia.ts.
+   */
+  useEffect(() => {
+    const temRascunho = itens.length > 0 && !jaEnviado;
+    const proxima = proximaDataAlvo(dataAlvo, hoje, temRascunho);
+    if (proxima) setDataAlvo(proxima);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoje]);
 
   function produtosDaCategoria(chave: string): Produto[] {
     return produtos
@@ -322,9 +343,16 @@ export function TelaPedidoFilial({
         disabled={enviando || itens.length === 0}
         onClick={enviar}
       >
-        {enviando ? "Enviando..." : jaEnviado ? "Enviar pedido atualizado" : "Enviar pedido"}
+        {/* "Atualizar", e não "Enviar pedido atualizado" (ago/2026): a
+            frase longa fazia o botão quebrar em duas linhas no celular e
+            ainda repetia "pedido", que é o assunto da tela inteira. Uma
+            palavra diz o que o toque faz. */}
+        {enviando ? "Enviando..." : jaEnviado ? "Atualizar" : "Enviar pedido"}
       </button>
-      <p className="nota-rodape">Enviando como {operador}, pela {loja.nome}.</p>
+      <p className="nota-rodape">
+        Enviando como {operador}, pela {loja.nome}. Ao enviar, a lista também sai na impressora do
+        caixa da matriz.
+      </p>
     </div>
   );
 }

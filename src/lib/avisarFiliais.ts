@@ -75,6 +75,23 @@ export async function avisarMatriz(
 }
 
 /**
+ * Avisa a MATRIZ que esta filial acabou de enviar a lista do dia
+ * seguinte (ago/2026).
+ *
+ * É planejamento, não urgência — mas a matriz monta o cronograma no fim
+ * do expediente e, se uma filial atrasa, a produção sai sem ela e a loja
+ * abre no dia seguinte sem mercadoria. O aviso dá fim conhecido a essa
+ * espera, em vez de a matriz ficar reabrindo a tela para ver se chegou.
+ *
+ * Manda VARIEDADES, não unidades: "12 produtos" dá a dimensão da lista
+ * que vai chegar para separar; "195 unidades" não diz nada a quem lê de
+ * relance na tela bloqueada.
+ */
+export async function avisarListaEnviada(variedades: number): Promise<ResultadoAviso> {
+  return enviar({ listaDiaria: true, variedades });
+}
+
+/**
  * Avisa a filial que pediu qual foi o desfecho da reposição. Só a matriz
  * consegue endereçar uma loja específica — o servidor confere isso pela
  * conta de quem chamou, não por este parâmetro.
@@ -99,19 +116,45 @@ export async function testarAvisos(): Promise<ResultadoAviso> {
   return enviar({ teste: true });
 }
 
+/**
+ * Quanto esperar o servidor de avisos antes de desistir.
+ *
+ * Existe por um defeito real (ago/2026): `fetch` sem limite espera para
+ * sempre, e uma função serverless hibernada acordando devagar — ou uma
+ * conexão que trava sem fechar — deixava a chamada pendurada. Quem
+ * esperava por ela nunca era liberado. Doze segundos cobrem com folga o
+ * pior início de função frio; mais que isso, o aviso já perdeu a hora de
+ * qualquer forma.
+ */
+const SEGUNDOS_ATE_DESISTIR_DO_AVISO = 12_000;
+
 async function enviar(corpo: Record<string, unknown>): Promise<ResultadoAviso> {
   const usuario = auth.currentUser;
   if (!usuario) throw new ErroAviso("Sessão não encontrada para avisar as filiais.");
 
   const token = await usuario.getIdToken();
-  const resposta = await fetch("/api/notificar-fornada", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(corpo),
-  });
+  const desistir = new AbortController();
+  const relogio = setTimeout(() => desistir.abort(), SEGUNDOS_ATE_DESISTIR_DO_AVISO);
+  let resposta: Response;
+  try {
+    resposta = await fetch("/api/notificar-fornada", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(corpo),
+      signal: desistir.signal,
+    });
+  } catch (erro) {
+    throw new ErroAviso(
+      desistir.signal.aborted
+        ? "O servidor de avisos não respondeu a tempo. O que você fez já está gravado."
+        : "Não foi possível falar com o servidor de avisos."
+    );
+  } finally {
+    clearTimeout(relogio);
+  }
 
   if (!resposta.ok) {
     const corpo = await resposta.json().catch(() => ({}));

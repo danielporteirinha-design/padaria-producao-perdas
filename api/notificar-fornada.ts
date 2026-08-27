@@ -200,10 +200,25 @@ export default async function handler(req: any, res: any) {
       motivo?: string;
       desfecho?: "confirmado" | "cancelado";
       teste?: boolean;
+      /** Aviso de lista diária enviada — não fala de um produto só. */
+      listaDiaria?: boolean;
+      variedades?: number;
     } = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {});
-    const { nomeProduto, codigoPdv, vezesHoje, quantidade, paraLojaId, motivo, desfecho, teste } =
-      corpoBruto;
-    if (!teste && (!nomeProduto || typeof codigoPdv !== "number")) {
+    const {
+      nomeProduto,
+      codigoPdv,
+      vezesHoje,
+      quantidade,
+      paraLojaId,
+      motivo,
+      desfecho,
+      teste,
+      listaDiaria,
+      variedades,
+    } = corpoBruto;
+    // O aviso de lista diária e o de teste não falam de um produto — os
+    // outros, sim, e sem o nome o celular receberia um aviso em branco.
+    if (!teste && !listaDiaria && (!nomeProduto || typeof codigoPdv !== "number")) {
       throw new ErroNotificacao("Faltou o produto no pedido de aviso.", 400);
     }
 
@@ -258,6 +273,8 @@ export default async function handler(req: any, res: any) {
     let titulo: string;
     let corpo: string;
     let etiqueta: string;
+    /** Aba que o toque no aviso abre — ver src/lib/rota.ts. */
+    let destinoNoApp = "/?aba=fornada";
 
     if (desfecho && destinoDirigido) {
       // Resposta à reposição. O motivo vai no corpo do aviso, não numa
@@ -274,6 +291,25 @@ export default async function handler(req: any, res: any) {
           ? "A matriz separou e manda na próxima entrega."
           : motivo || "A matriz cancelou o pedido.";
       etiqueta = `reposicao-resposta-${codigoPdv}`;
+    } else if (listaDiaria) {
+      /**
+       * Lista diária enviada pela filial (ago/2026). É planejamento, não
+       * urgência — mas a matriz monta o cronograma no fim do expediente e,
+       * se uma filial atrasa, a produção sai sem ela e a loja abre no dia
+       * seguinte sem mercadoria. O aviso existe para essa espera ter fim
+       * conhecido, em vez de a matriz ficar reabrindo a tela para ver se
+       * chegou.
+       *
+       * Uma etiqueta por LOJA: a filial que reenvia a lista corrigida
+       * substitui o próprio aviso, e as duas lojas continuam somando.
+       */
+      titulo = `${quemChamou.nome} enviou a lista`;
+      corpo =
+        typeof variedades === "number" && variedades > 0
+          ? `${variedades} ${variedades === 1 ? "produto" : "produtos"} para amanhã. Toque para ver no Cronograma.`
+          : "Lista do dia seguinte enviada. Toque para ver no Cronograma.";
+      etiqueta = `lista-${quemChamou.id}`;
+      destinoNoApp = "/?aba=cronograma";
     } else if (teste) {
       titulo = "Padaria Pão de Mel";
       corpo = "Teste de aviso. Se você está vendo isto, as notificações estão funcionando.";
@@ -320,7 +356,7 @@ export default async function handler(req: any, res: any) {
        * src/App.tsx. É um caminho relativo de propósito: `fcmOptions.link`
        * exigiria URL absoluta e não é usado aqui (ver abaixo).
        */
-      data: { titulo, corpo, tag: etiqueta, url: "/?aba=fornada" },
+      data: { titulo, corpo, tag: etiqueta, url: destinoNoApp },
       /**
        * Sem `fcmOptions.link` de propósito. O FCM exige que esse campo,
        * quando presente, seja uma URL HTTPS COMPLETA — um caminho relativo

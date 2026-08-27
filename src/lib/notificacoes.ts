@@ -178,7 +178,7 @@ export function ouvirAvisosEmPrimeiroPlano(
       // aberto o service worker não é acionado, e uma faixa interna não
       // resolve o caso real: no PC do caixa a janela está atrás da
       // planilha ou do PDV, e ninguém vê aviso nenhum.
-      void mostrarNotificacaoLocal(titulo, corpo, dados.tag);
+      void mostrarNotificacaoLocal(titulo, corpo, dados.tag, dados.url);
     });
   } catch (erro) {
     console.warn("Avisos em primeiro plano indisponíveis:", erro);
@@ -199,7 +199,8 @@ export function ouvirAvisosEmPrimeiroPlano(
 export async function mostrarNotificacaoLocal(
   titulo: string,
   corpo: string,
-  tag?: string
+  tag?: string,
+  url?: string
 ): Promise<void> {
   try {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
@@ -213,7 +214,17 @@ export async function mostrarNotificacaoLocal(
       badge: "/badge-96x96.png",
       tag: tag ?? "padaria",
       silent: false,
-    });
+      /**
+       * `renotify` é o que faz um aviso que SUBSTITUI outro da mesma tag
+       * alertar de novo em vez de trocar a linha em silêncio. Sem ele, a
+       * segunda reposição do mesmo produto chegava calada.
+       */
+      renotify: true,
+      // Vibração é o único canal que o sistema não silencia sozinho com o
+      // app em primeiro plano. No bolso do avental é o que se percebe.
+      vibrate: [180, 90, 180],
+      data: { url },
+    } as NotificationOptions);
   } catch (erro) {
     // Notificação é acessório: se não der, a faixa dentro do app continua
     // valendo e a operação não pode parar por causa disso.

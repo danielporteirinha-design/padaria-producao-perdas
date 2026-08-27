@@ -64,6 +64,32 @@ messaging.onBackgroundMessage((payload) => {
      */
     data: { url: dados.url || "/" },
   });
+
+  /**
+   * O SOM, quando a janela está aberta mas ATRÁS de outra (ago/2026).
+   *
+   * No PC do balcão o app fica aberto o dia inteiro, atrás do PDV. Nesse
+   * estado o FCM entrega o aviso AQUI, no service worker — e não no
+   * `onMessage` da página —, então o som que a página gera nunca tocava.
+   * A notificação aparecia muda e ninguém percebia.
+   *
+   * Service worker não toca áudio: não tem WebAudio. Mas ele pode falar
+   * com as janelas abertas, e a página, mesmo sem foco, toca normalmente
+   * (o contexto de áudio já foi destravado no primeiro toque do dia).
+   *
+   * `includeUncontrolled` é essencial: a janela pode não estar sob o
+   * controle DESTE service worker — ele é o do Firebase, e o do PWA é
+   * outro — e sem isso a lista voltaria vazia.
+   */
+  return clients
+    .matchAll({ type: "window", includeUncontrolled: true })
+    .then((janelas) => {
+      for (const janela of janelas) janela.postMessage({ tipo: "tocar-aviso" });
+    })
+    .catch(() => {
+      // Sem janela aberta não há quem toque, e tudo bem: o sistema já
+      // mostrou a notificação, que é o canal que sempre funciona.
+    });
 });
 
 /**

@@ -15,15 +15,26 @@
  * perda lançada hoje, em qualquer aba do app, com um botão que leva
  * direto para a tela de Perdas.
  *
- * O botão "hoje não teve perda" existe de propósito: zero perda é um
- * resultado legítimo e diferente de "esqueci de lançar". Sem essa saída,
- * o aviso ficaria na tela o dia inteiro num dia bom e o operador
- * aprenderia a ignorá-lo — que é exatamente como um alerta perde a
- * função. A dispensa vale só para o dia corrente (a chave leva a data),
- * então amanhã o aviso volta sozinho.
+ * "LANÇAR MAIS TARDE", E NÃO "HOJE NÃO TEVE PERDA" (ago/2026)
+ * ------------------------------------------------------------
+ * A saída anterior pedia uma AFIRMAÇÃO: quem tocava estava declarando
+ * que o dia fechou sem desperdício. Só que ninguém toca ali por isso —
+ * toca porque está no meio de outra coisa e o aviso está no caminho. O
+ * app então registrava como "dia sem perda" um dia que ninguém tinha
+ * conferido ainda, e o aviso não voltava mais.
+ *
+ * "Lançar mais tarde" diz a verdade sobre o que o toque significa, e por
+ * isso pode voltar: o aviso adormece por algumas horas e reaparece,
+ * ainda dentro do expediente, quando dá tempo de pesar e lançar. Num dia
+ * realmente sem perda ele some sozinho no fim do dia, sem exigir
+ * declaração nenhuma.
+ *
+ * O adiamento é gravado com a HORA de volta, e não com um "sim". Assim o
+ * pior caso continua sendo bom: o operador vê o lembrete de novo em vez
+ * de o dia inteiro passar em silêncio.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { RegistroPerda } from "../types/perda";
@@ -39,8 +50,32 @@ interface AvisoPerdaPendenteProps {
   onIrParaPerdas: () => void;
 }
 
-function chaveDispensa(dia: string): string {
-  return `padaria:sem-perdas:${dia}`;
+/**
+ * Quanto tempo o aviso fica quieto depois de "lançar mais tarde".
+ *
+ * Duas horas: curto o bastante para caber no mesmo expediente — o
+ * lançamento tem que acontecer HOJE, e o aviso que só voltasse amanhã não
+ * serviria para nada — e longo o bastante para não virar insistência
+ * enquanto a pessoa termina o que estava fazendo.
+ */
+const HORAS_ADIADAS = 2;
+
+/**
+ * A chave leva a DATA para o adiamento nunca atravessar o dia: seja qual
+ * for a hora gravada, amanhã o aviso nasce de novo.
+ */
+function chaveAdiado(dia: string): string {
+  return `padaria:perda-adiada:${dia}`;
+}
+
+/** Lê o adiamento gravado hoje. Valor ausente, inválido ou vencido = 0. */
+function lerAdiamento(dia: string): number {
+  try {
+    const bruto = Number(localStorage.getItem(chaveAdiado(dia)));
+    return Number.isFinite(bruto) && bruto > Date.now() ? bruto : 0;
+  } catch {
+    return 0;
+  }
 }
 
 export function AvisoPerdaPendente({
@@ -51,9 +86,25 @@ export function AvisoPerdaPendente({
   onIrParaPerdas,
 }: AvisoPerdaPendenteProps) {
   const hoje = dataDeHojeIso();
-  const [dispensado, setDispensado] = useState(
-    () => localStorage.getItem(chaveDispensa(hoje)) === "1"
-  );
+  /** Instante (ms) até quando o aviso fica quieto. 0 = aparecendo. */
+  const [adiadoAte, setAdiadoAte] = useState(() => lerAdiamento(hoje));
+
+  /**
+   * Faz o aviso VOLTAR quando o adiamento vence, sem depender de a
+   * pessoa navegar. Sem isto, "mais tarde" viraria "nunca" num app que
+   * fica aberto o dia inteiro na mesma tela — que é o defeito que a
+   * versão anterior tinha em outra forma.
+   */
+  useEffect(() => {
+    if (adiadoAte === 0) return;
+    const falta = adiadoAte - Date.now();
+    if (falta <= 0) {
+      setAdiadoAte(0);
+      return;
+    }
+    const id = setTimeout(() => setAdiadoAte(0), falta);
+    return () => clearTimeout(id);
+  }, [adiadoAte]);
 
   const temFornadaHoje = useMemo(
     () => calcularCandidatosPerda(hoje, produtos, planos).length > 0,
@@ -61,11 +112,18 @@ export function AvisoPerdaPendente({
   );
   const jaLancouHoje = useMemo(() => perdas.some((p) => p.data === hoje), [perdas, hoje]);
 
-  if (!visivel || dispensado || jaLancouHoje || !temFornadaHoje) return null;
+  const adiado = adiadoAte > Date.now();
+  if (!visivel || adiado || jaLancouHoje || !temFornadaHoje) return null;
 
-  function marcarSemPerda() {
-    localStorage.setItem(chaveDispensa(hoje), "1");
-    setDispensado(true);
+  function lancarMaisTarde() {
+    const volta = Date.now() + HORAS_ADIADAS * 60 * 60 * 1000;
+    try {
+      localStorage.setItem(chaveAdiado(hoje), String(volta));
+    } catch {
+      /* armazenamento bloqueado: o aviso segue na tela, que é o lado
+         seguro de errar */
+    }
+    setAdiadoAte(volta);
   }
 
   return (
@@ -81,8 +139,8 @@ export function AvisoPerdaPendente({
         <button type="button" className="primario" onClick={onIrParaPerdas}>
           Lançar perda agora
         </button>
-        <button type="button" className="link" onClick={marcarSemPerda}>
-          hoje não teve perda
+        <button type="button" className="link" onClick={lancarMaisTarde}>
+          lançar mais tarde
         </button>
       </div>
     </div>

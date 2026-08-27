@@ -8,11 +8,19 @@
  *
  * Duas decisões importantes aqui, ambas sobre NÃO servir versão velha:
  *
- * 1. registerType "autoUpdate": a cada `git push` o Vercel publica uma
- *    versão nova. Com autoUpdate o service worker baixa a nova versão em
- *    segundo plano e assume no próximo carregamento, sem o operador
- *    precisar limpar cache. Sem isso, um app instalado pode ficar preso
- *    numa versão antiga indefinidamente — o erro clássico de PWA.
+ * 1. registerType "prompt" (ago/2026, revisado de "autoUpdate"): a cada
+ *    `git push` o Vercel publica uma versão nova. Com autoUpdate o
+ *    service worker assumia SOZINHO no próximo carregamento — sem cache
+ *    velho, mas também sem ninguém saber que a versão mudou. Na prática
+ *    isso produziu duas conversas repetidas: "a correção já entrou aqui?"
+ *    e, pior, telas que mudavam de comportamento no meio do expediente
+ *    sem explicação.
+ *
+ *    Com "prompt" o service worker novo BAIXA e ESPERA. O app avisa na
+ *    tela que há versão nova e o operador toca em "Atualizar agora", que
+ *    ativa o service worker e recarrega — ver src/lib/atualizacao.ts e
+ *    src/components/AvisoDeAtualizacao.tsx. Continua não existindo o
+ *    risco de ficar preso numa versão antiga: o aviso não some sozinho.
  *
  * 2. As rotas /api/* ficam FORA do cache do service worker. Elas chamam
  *    o Gemini (sugestão e insights) e não podem ser respondidas por uma
@@ -86,7 +94,11 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
+      // O registro é feito à mão em src/main.tsx, pelo módulo virtual —
+      // é o que dá acesso ao callback de "há versão nova esperando".
+      // Deixar a injeção automática ligada registraria duas vezes.
+      injectRegister: null,
       includeAssets: ["favicon-32x32.png", "apple-touch-icon.png"],
       manifest: {
         name: "Produção e Perdas — Padaria Pão de Mel",
@@ -98,10 +110,24 @@ export default defineConfig({
         scope: "/",
         display: "standalone",
         orientation: "portrait",
-        background_color: "#faf7f2",
-        // Mesma cor de fundo do app. Ver o comentário em index.html sobre
-        // por que o vermelho da marca não ficou aqui.
-        theme_color: "#faf7f2",
+        /**
+         * BRANCO, e não o creme do app (ago/2026, decisão do dono do
+         * negócio). Este é o fundo da tela de abertura: o sistema mostra
+         * o ícone de 512 sobre ela enquanto o app carrega. Com o ícone
+         * agora em fundo branco, o creme aqui punha um quadrado branco no
+         * meio de uma tela creme — a moldura aparecia, que é exatamente o
+         * contrário do que um splash deve fazer.
+         *
+         * O preço é um piscar branco→creme na entrada, e ele é curto: a
+         * abertura dura menos de um segundo num app já instalado.
+         */
+        background_color: "#ffffff",
+        // BRANCO também (ago/2026): junto do background_color acima, é o
+        // que a pessoa vê na abertura. Tem que casar com o index.html —
+        // valores diferentes nos dois lugares produzem uma troca de cor
+        // visível no meio do carregamento. Ver lá o registro da troca
+        // aceita: barra branca sobre app creme deixa uma emenda no topo.
+        theme_color: "#ffffff",
         icons: [
           { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
           { src: "pwa-512x512.png", sizes: "512x512", type: "image/png" },

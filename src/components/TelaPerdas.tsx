@@ -13,7 +13,7 @@
  * perda veio, nunca para autorizar o lançamento (ver janelaValidade.ts).
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { RegistroPerda } from "../types/perda";
 import type { PlanoDeProducaoDiario } from "../types/producao";
@@ -23,15 +23,25 @@ import { perdaEstaValida } from "../types/perda";
 import { CATEGORIAS_PRODUCAO } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
 import { IconeSeta } from "./Icones";
+import { CampoDeBusca } from "./CampoDeBusca";
 import { LOJA_MATRIZ, nomeDaLoja, type Loja } from "../lib/lojas";
 import { IconeLixeira } from "./Icones";
-import { dataDeHojeIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
+import { diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 
 interface TelaPerdasProps {
   produtos: Produto[];
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   operador: string;
+  /**
+   * A data de hoje, vinda do App (ver src/lib/useDiaCorrente.ts).
+   *
+   * Não é calculada aqui de propósito: calculada aqui, ela só mudaria
+   * quando algo fizesse o React renderizar — e com o app aberto a noite
+   * inteira nada faz. A tela ficava no dia anterior sem que nada
+   * indicasse isso.
+   */
+  hoje: string;
   /** Loja desta sessão — define o que a tela mostra e o que permite. */
   loja: Loja;
   /**
@@ -90,6 +100,7 @@ export function TelaPerdas({
   loja,
   operador,
   ehMatriz,
+  hoje,
   onAnularPerda,
   onRegistrarPerda,
 }: TelaPerdasProps) {
@@ -113,8 +124,33 @@ export function TelaPerdas({
   const [anulando, setAnulando] = useState(false);
   const [codigoSelecionado, setCodigoSelecionado] = useState<number | "">("");
 
-  const hoje = dataDeHojeIso();
   const diaDaSemana = diaDaSemanaDeData(hoje);
+
+  /**
+   * VIRADA DE DIA COM O APP ABERTO (ago/2026)
+   *
+   * No PC do caixa o app fica aberto a noite inteira, parado nesta aba.
+   * Na quinta de manhã a tela ainda era a de quarta: o produto que sobrou
+   * selecionado, a sanfona aberta na categoria de ontem, a busca com o
+   * termo de ontem — e as perdas da quarta listadas como "lançadas hoje".
+   * Os DADOS estavam certos; a tela é que nunca soube que o dia mudou.
+   *
+   * `hoje` agora chega de fora e muda sozinho na virada (ver
+   * src/lib/useDiaCorrente.ts). Isto aqui limpa o que sobrou da sessão
+   * anterior, para o dia começar como começa de verdade: formulário
+   * vazio, sanfona fechada, pronto para o primeiro lançamento.
+   *
+   * O modal de anulação também fecha: ele carrega um registro do dia que
+   * acabou, e confirmar uma anulação sem reler qual era o lançamento é
+   * exatamente o tipo de engano que a senha existe para evitar.
+   */
+  useEffect(() => {
+    setCodigoSelecionado("");
+    setBuscaProduto("");
+    setCategoriasAbertas({});
+    setPerdaAAnular(null);
+    setMotivoAnulacao("");
+  }, [hoje]);
 
   /**
    * TODO produto ativo do catálogo pode receber perda, nas três lojas
@@ -185,6 +221,9 @@ export function TelaPerdas({
 
   const candidatoSelecionado = candidatos.find((c) => c.produto.codigoPdv === codigoSelecionado);
 
+  /** Nomes que a IA pode escolher ao interpretar o que foi ditado. */
+  const nomesDosCandidatos = useMemo(() => candidatos.map((c) => c.produto.nome), [candidatos]);
+
   const resultadosDaBusca = useMemo(() => {
     const termo = buscaProduto.trim();
     if (!termo) return [];
@@ -214,11 +253,13 @@ export function TelaPerdas({
               Busca no topo para quem sabe o nome, acordeão por categoria
               para quem está procurando; o mesmo padrão da tela de Pedido,
               que o operador já conhece (ago/2026). */}
-          <input
+          <CampoDeBusca
             className="campo-busca"
+            valor={buscaProduto}
+            onMudar={setBuscaProduto}
             placeholder="Buscar produto pelo nome..."
-            value={buscaProduto}
-            onChange={(e) => setBuscaProduto(e.target.value)}
+            rotulo="Buscar produto pelo nome para lançar a perda"
+            nomesParaVoz={nomesDosCandidatos}
           />
 
           {buscaProduto.trim() ? (
@@ -250,7 +291,11 @@ export function TelaPerdas({
                       }
                     >
                       <span className="nome-sessao">{categoria.rotulo}</span>
-                      <span className="contagem-itens">{daCategoria.length}</span>
+                      {/* Sem contagem (ago/2026, decisão do dono do
+                          negócio). Aqui ela mostrava quantos produtos a
+                          categoria TEM no catálogo, não quantos foram
+                          perdidos — número grande, sempre igual, que não
+                          decidia nada e ainda parecia contar lançamento. */}
                       <IconeSeta className="seta-sessao" />
                     </button>
                   </div>

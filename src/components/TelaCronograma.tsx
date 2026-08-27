@@ -18,11 +18,12 @@
  * automático: o operador revisa e ajusta antes de confirmar.
  */
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Produto } from "../types/produto";
 import type { ItemPlanoProducao, PlanoDeProducaoDiario, SessaoProducao } from "../types/producao";
 import type { RegistroPerda } from "../types/perda";
-import { dataDeHojeIso, dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
+import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
+import { proximaDataAlvo } from "../lib/dataAlvoDoDia";
 import { gerarId } from "../lib/id";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
@@ -39,6 +40,7 @@ import {
   itensParaLoja,
   type ItemConsolidado,
 } from "../lib/consolidacao";
+import { agruparPorCategoria } from "../lib/blocosDeImpressao";
 import { IconeCalendario, IconeLixeira, IconeSeta } from "./Icones";
 
 interface TelaCronogramaProps {
@@ -54,6 +56,8 @@ interface TelaCronogramaProps {
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   operador: string;
+  /** Data de hoje, viva — ver src/lib/useDiaCorrente.ts. */
+  hoje: string;
   onSalvarPlano: (plano: PlanoDeProducaoDiario) => Promise<void>;
 }
 
@@ -79,6 +83,7 @@ export function TelaCronograma({
   planos,
   perdas,
   operador,
+  hoje,
   onSalvarPlano,
 }: TelaCronogramaProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
@@ -129,7 +134,7 @@ export function TelaCronograma({
    * o plano usado aqui é o do dia corrente, independente da data que o
    * operador estiver planejando na tela.
    */
-  const hojeIso = dataDeHojeIso();
+  const hojeIso = hoje;
   const planoDeHoje = useMemo(
     () => planos.find((p) => p.data === hojeIso && p.status === "confirmado"),
     [planos, hojeIso]
@@ -253,17 +258,12 @@ export function TelaCronograma({
 
   function blocosDeSeparacao(consolidado: ItemConsolidado[], lojaId: string) {
     // Agrupado por categoria também no romaneio: quem separa anda pela
-    // padaria por setor, não por ordem alfabética de produto.
-    const itens = itensParaLoja(consolidado, lojaId);
-    const porCategoria = new Map<string, typeof itens>();
-    for (const item of itens) {
-      const categoria = produtos.find((p) => p.codigoPdv === item.codigoPdv)?.categoria ?? "OUTROS";
-      porCategoria.set(categoria, [...(porCategoria.get(categoria) ?? []), item]);
-    }
-    return [...porCategoria.entries()].map(([categoria, lista]) => ({
-      rotuloSessao: rotuloDaCategoria(categoria),
-      itens: lista,
-    }));
+    // padaria por setor, não por ordem alfabética de produto. A regra
+    // mora em src/lib/blocosDeImpressao.ts — o pedido que a filial manda
+    // direto para a impressora usa exatamente a mesma, e dois papéis do
+    // mesmo dia com os setores em ordens diferentes seriam impossíveis de
+    // conferir um contra o outro.
+    return agruparPorCategoria(itensParaLoja(consolidado, lojaId), produtos);
   }
 
   function trocarData(novaData: string) {
@@ -276,6 +276,19 @@ export function TelaCronograma({
   }
 
   const totalItens = Object.values(itensPorGrupo).reduce((soma, itens) => soma + itens.length, 0);
+
+  /**
+   * Vira a data-alvo quando o dia vira com o app aberto — mas só quando
+   * não há trabalho na tela para perder. A regra inteira, com o porquê de
+   * cada guarda, está em src/lib/dataAlvoDoDia.ts.
+   */
+  useEffect(() => {
+    const proxima = proximaDataAlvo(dataAlvo, hoje, totalItens > 0);
+    if (proxima) trocarData(proxima);
+    // `trocarData` e `totalItens` são recalculados a cada render; o que
+    // dispara isto é a virada do dia, e é só ela que precisa estar aqui.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoje]);
   const totalUnidades = Object.values(itensPorGrupo)
     .flat()
     .reduce((soma, i) => soma + i.quantidadeUnidades, 0);
@@ -565,6 +578,21 @@ export function TelaCronograma({
 
   const itensDoPlanoDeHoje = planoDeHoje ? itensPlanejados(planoDeHoje).length : 0;
   const hojeJaConfirmado = planoDeHoje ? producaoFoiConfirmada(planoDeHoje) : false;
+  /**
+   * Quantos itens de hoje saíram do forno, dos que foram pedidos.
+   *
+   * Antes o cabeçalho mostrava só o tamanho da lista ("14 itens"), que é
+   * a mesma informação dos cards das lojas e não dizia nada sobre o
+   * assunto DESTE card. "12 de 14 confirmados" responde a pergunta que
+   * traz alguém aqui — falta alguma coisa? — sem abrir o card.
+   *
+   * Antes da conferência do fim do dia, nada foi confirmado ainda: o
+   * número parte de zero em vez de fingir que tudo saiu.
+   */
+  const confirmadosDeHoje =
+    planoDeHoje && hojeJaConfirmado
+      ? itensDoPlanoDeHoje - (planoDeHoje.producaoRealizada?.codigosNaoProduzidos.length ?? 0)
+      : 0;
 
   return (
     <div className="tela">
@@ -576,10 +604,37 @@ export function TelaCronograma({
         deixou de ser botão: a porta da montagem passou a ser o card da
         Programação geral, que é onde a montagem de fato mora.
       */}
-      <p className="destaque-data titulo-do-dia">
-        <IconeCalendario tamanho={20} />
-        <span className="titulo-planejamento">Produção de {dataFormatada}</span>
-      </p>
+      <div className="destaque-data titulo-do-dia">
+        <div className="linha-titulo-do-dia">
+          {/* Ícone e data num invólucro só: quando o botão desce para a
+              linha de baixo, o calendário desce COM o texto dele. Soltos
+              no mesmo flex, o ícone ficava sozinho numa linha. */}
+          <span className="marca-titulo-do-dia">
+            <IconeCalendario tamanho={20} />
+            <span className="titulo-planejamento">Produção de {dataFormatada}</span>
+          </span>
+          {/* A troca de data mora AQUI, e não dentro da Programação geral
+              (ago/2026). Lá ela era um link discreto no meio da montagem,
+              e ficou invisível: quem quer planejar outro dia procura ao
+              lado da DATA, que é o que ele quer mudar. */}
+          <button
+            type="button"
+            className="secundario trocar-data"
+            aria-expanded={mostrarSeletorData}
+            onClick={() => setMostrarSeletorData((v) => !v)}
+          >
+            {mostrarSeletorData ? "amanhã" : "outra data"}
+          </button>
+        </div>
+        {mostrarSeletorData && (
+          <input
+            type="date"
+            aria-label="Data da produção"
+            value={dataAlvo}
+            onChange={(e) => trocarData(e.target.value)}
+          />
+        )}
+      </div>
 
       {/*
         CARD 1 — PROGRAMAÇÃO GERAL (ago/2026)
@@ -616,13 +671,6 @@ export function TelaCronograma({
               reimprimir
             </button>
           </p>
-        )}
-
-        <button type="button" className="link" onClick={() => setMostrarSeletorData((v) => !v)}>
-          {mostrarSeletorData ? "usar amanhã (padrão)" : "planejar para outra data"}
-        </button>
-        {mostrarSeletorData && (
-          <input type="date" value={dataAlvo} onChange={(e) => trocarData(e.target.value)} />
         )}
 
         {GRUPOS.map((chave) => {
@@ -777,13 +825,16 @@ export function TelaCronograma({
       */}
       {planoDeHoje && (
         <CardCronograma
-          nome="Confirmação de hoje"
+          nome="Confirmar o que foi produzido"
+          /* Confirmado não mostra segunda linha (ago/2026): "produção
+             confirmada" logo abaixo de um título que já diz o assunto era
+             a mesma frase duas vezes, e o número à direita já conta a
+             história inteira. Pendente continua avisando, porque aí falta
+             uma ação. */
           situacao={
-            hojeJaConfirmado
-              ? { texto: "produção confirmada", tom: "ok" }
-              : { texto: "confirmação pendente", tom: "pendente" }
+            hojeJaConfirmado ? null : { texto: "ainda não confirmado", tom: "pendente" }
           }
-          contagem={contagemDeItens(itensDoPlanoDeHoje)}
+          contagem={`${confirmadosDeHoje} de ${itensDoPlanoDeHoje} confirmados`}
           aberto={!!cardsAbertos.confirmacao}
           onAlternar={() => alternarCard("confirmacao")}
         >
@@ -877,7 +928,8 @@ interface SituacaoDoCard {
 
 interface CardCronogramaProps {
   nome: string;
-  situacao: SituacaoDoCard;
+  /** `null` quando não há nada a dizer além do nome e da contagem. */
+  situacao: SituacaoDoCard | null;
   /** Tamanho da lista, em VARIEDADES: "12 itens". */
   contagem: string;
   aberto: boolean;
@@ -903,7 +955,7 @@ function CardCronograma({ nome, situacao, contagem, aberto, onAlternar, children
       <button type="button" className="cabecalho-card" aria-expanded={aberto} onClick={onAlternar}>
         <span className="texto-card">
           <span className="nome-card">{nome}</span>
-          <span className={`situacao-card ${situacao.tom}`}>{situacao.texto}</span>
+          {situacao && <span className={`situacao-card ${situacao.tom}`}>{situacao.texto}</span>}
         </span>
         <span className="contagem-card">{contagem}</span>
         <IconeSeta className="seta-sessao" />

@@ -12,6 +12,7 @@
 import { useMemo, useState } from "react";
 import type { NovoProdutoInput, Produto, UnidadeProducao } from "../types/produto";
 import { ConfirmarComSenha } from "./ConfirmarComSenha";
+import { CampoDeBusca } from "./CampoDeBusca";
 import { IconeLixeira } from "./Icones";
 import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
@@ -48,6 +49,8 @@ export function TelaCadastroProdutos({
   const [form, setForm] = useState<NovoProdutoInput>(VALOR_INICIAL);
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
+  /** Nomes que a IA pode escolher ao interpretar o que foi ditado. */
+  const nomesDoCatalogo = useMemo(() => produtos.map((p) => p.nome), [produtos]);
   /**
    * As abas "Sem categoria" e "Fora de escopo" foram removidas (ago/2026).
    * Eram ferramentas da migração inicial do catálogo do PDV (881 -> 89
@@ -227,11 +230,13 @@ export function TelaCadastroProdutos({
 
       {abaAtiva === "lista" && (
         <div>
-          <input
+          <CampoDeBusca
             className="campo-busca"
+            valor={busca}
+            onMudar={setBusca}
             placeholder="Buscar por nome ou categoria..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+            rotulo="Buscar produto por nome ou categoria"
+            nomesParaVoz={nomesDoCatalogo}
           />
           <div className="tabela-scroll">
             <table className="tabela-simples">
