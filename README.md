@@ -1143,6 +1143,78 @@ Enquanto a `CHAVE_VAPID` estiver vazia, o app não quebra: a tela da filial
 mostra "avisos ainda não configurados" e as fornadas continuam aparecendo
 ao abrir o app.
 
+## Um card por loja no Cronograma (ago/2026)
+
+Substituiu o quadro único "Quanto vai para cada loja". Cada loja é um
+card; abre em sanfona por sessão; dentro da sessão, os itens com a
+quantidade daquela loja.
+
+```
+Matriz              montando          400 un  ⌄
+Arthur Bernardes    lista enviada     145 un  ⌃
+   PÃES E ROSCAS
+     PÃO FRANCÊS                      120 un
+   BISCOITOS
+     BISCOITO DE POLVILHO              25 un
+Benjamin Constant   lista pendente         —  ⌄
+```
+
+Duas razões:
+
+1. **Quem separa de manhã separa UMA loja de cada vez**, sessão por
+   sessão. A tabela com uma coluna por loja obrigava a matriz a cruzar
+   linha e coluna de cabeça.
+2. **O status da lista mora dentro do card.** Antes era preciso decorar
+   quem tinha enviado para saber se aquele número já estava completo.
+
+Na filial o status é sobre a lista (enviada/pendente); na matriz, sobre o
+cronograma que ela mesma monta (montando/confirmado).
+
+## Tela branca ao entrar no Resumo — defeito e lição (ago/2026)
+
+Clicar em "Ir para o Resumo" deixava o app **em branco**, exigindo fechar
+e abrir. Erro no console: *"Rendered fewer hooks than expected."*
+
+Causa: os `useMemo` do bloco consolidado tinham sido escritos **depois**
+dos `if (fase === ...) return`. Ao entrar no Resumo o componente retornava
+antes de executá-los, o React contava menos hooks que na renderização
+anterior e derrubava a árvore inteira.
+
+Foi introduzido por mim ao adicionar o consolidado, e passou por `tsc`
+limpo, build limpo e 190 asserções — nenhum deles executa a tela. Só
+apareceu clicando no botão.
+
+Regra registrada no próprio arquivo, acima do primeiro hook: **hook novo
+entra ANTES do primeiro return, sempre.**
+
+## Lembretes automáticos por push (ago/2026)
+
+`api/lembretes.ts`, disparado por agendador:
+
+| Hora (São Paulo) | Para quem | Mensagem |
+|---|---|---|
+| 17:30 | Filiais **que ainda não enviaram** a lista de amanhã | "Falta a lista de amanhã" |
+| 12:45 | Todas as filiais | "Precisa de reposição hoje?" |
+
+O de 17:30 **consulta os pedidos antes de mandar** e avisa só quem está
+devendo. Lembrete que chega para quem já cumpriu a tarefa ensina a
+ignorar lembretes — e aí, no dia em que a loja realmente esquecer, o
+aviso chega e ninguém lê. Se as duas já enviaram, ninguém recebe nada.
+
+O de 12:45 é para todas: não cobra tarefa atrasada, abre uma janela.
+
+Protegido por `CRON_SECRET`: o Vercel injeta o cabeçalho sozinho nos cron
+jobs, e um agendador externo precisa mandá-lo à mão. Sem isso, um endereço
+público dispararia push para os celulares da padaria a qualquer hora.
+
+### Precisão de horário depende do plano do Vercel
+
+No plano **Hobby** a precisão é **por hora (±59 min)**: um cron marcado
+para 17:30 dispara em algum momento entre 17:00 e 17:59. O plano **Pro**
+tem precisão por minuto. Para horário exato sem pagar Pro, um agendador
+externo (cron-job.org, GitHub Actions) chama a mesma URL com o
+`CRON_SECRET` no cabeçalho.
+
 ## O balão do título carrega o estado (ago/2026)
 
 No Cronograma da matriz eram três blocos empilhados dizendo coisas sobre
@@ -1476,6 +1548,7 @@ producao-perdas/
     sugestao-producao.ts       # Função serverless — sugestão de quantidades de produção
     insights-catalogo.ts        # Função serverless — insights de catálogo (sobra, produto parado, etc.)
     notificar-fornada.ts         # Função serverless — avisa as filiais que a fornada saiu (FCM)
+    lembretes.ts                  # Função serverless — lembretes diários de lista (17:30) e reposição (12:45)
   src/
     types/
       produto.ts                # Modelo de Produto

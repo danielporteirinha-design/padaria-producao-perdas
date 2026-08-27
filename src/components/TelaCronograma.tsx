@@ -36,7 +36,6 @@ import { FILIAIS, LOJA_MATRIZ, nomeDaLoja } from "../lib/lojas";
 import {
   consolidarProducao,
   itensParaLoja,
-  quantidadeDaLoja,
   type ItemConsolidado,
 } from "../lib/consolidacao";
 import { IconeCalendario, IconeLixeira, IconeSeta } from "./Icones";
@@ -90,7 +89,7 @@ export function TelaCronograma({
    * Quem vai montar toca uma vez e entra.
    */
   const [planejamentoAberto, setPlanejamentoAberto] = useState(false);
-  const [consolidadoAberto, setConsolidadoAberto] = useState(false);
+  const [lojasAbertas, setLojasAbertas] = useState<Record<string, boolean>>({});
 
   const planoExistente = useMemo(() => planos.find((p) => p.data === dataAlvo), [planos, dataAlvo]);
 
@@ -159,6 +158,68 @@ export function TelaCronograma({
    * marcada por uma faixa preta com o nome da loja — ver
    * desenharMarcadorDeDestino em gerarImagemLista.ts.
    */
+  /**
+   * ATENÇÃO — HOOKS FICAM TODOS AQUI EM CIMA.
+   *
+   * Estes três useMemo já moraram depois dos `if (fase === ...) return`
+   * e derrubaram o app: ao entrar no Resumo o componente retornava antes
+   * de executá-los, o React contava menos hooks que na renderização
+   * anterior e a tela ficava BRANCA, sem mensagem nenhuma — só reabrindo
+   * o app (ago/2026).
+   *
+   * Regra do React: a mesma quantidade de hooks, na mesma ordem, em toda
+   * renderização. Qualquer hook novo entra ANTES do primeiro return.
+   */
+  /**
+   * O que vai ser produzido, aberto por destino.
+   *
+   * Junta o que a MATRIZ esta montando agora (rascunho na tela) com os
+   * pedidos que as filiais ja enviaram para a mesma data. E a conta que o
+   * padeiro executa e que a separacao da manha confere - ate hoje ela so
+   * existia depois de "Ir para o Resumo", e conferir exigia sair do meio
+   * da montagem.
+   */
+  const consolidadoDaData = useMemo(
+    () =>
+      consolidarProducao(
+        GRUPOS.flatMap((chave) => itensPorGrupo[chave] ?? []),
+        pedidosDoDia,
+        LOJA_MATRIZ.id
+      ),
+    [itensPorGrupo, pedidosDoDia]
+  );
+
+  /**
+   * O que vai para CADA loja, quebrado por sessão.
+   *
+   * Uma loja é um card; dentro dele, as sessões; dentro da sessão, os
+   * itens com a quantidade daquela loja. É a mesma forma do trabalho
+   * real: quem separa de manhã separa uma loja de cada vez, sessão por
+   * sessão — e a tabela de colunas obrigava a matriz a fazer essa leitura
+   * de cabeça, cruzando linha e coluna.
+   */
+  const porLoja = useMemo(
+    () =>
+      [LOJA_MATRIZ, ...FILIAIS].map((loja) => {
+        const itens = itensParaLoja(consolidadoDaData, loja.id);
+        const sessoes = GRUPOS.map((chave) => ({
+          chave,
+          rotulo: rotuloDaCategoria(chave),
+          itens: itens.filter(
+            (i) => produtos.find((p) => p.codigoPdv === i.codigoPdv)?.categoria === chave
+          ),
+        })).filter((sessao) => sessao.itens.length > 0);
+
+        return {
+          loja,
+          sessoes,
+          total: itens.reduce((soma, i) => soma + i.quantidadeUnidades, 0),
+          variedades: itens.length,
+        };
+      }),
+    [consolidadoDaData, produtos]
+  );
+
   const documentos = useMemo(() => {
     const lista = [{ id: "producao", rotulo: "Produção" }];
     if (filiaisQueEnviaram.length > 1) lista.push({ id: "todas-filiais", rotulo: "Filiais (todas)" });
@@ -492,47 +553,6 @@ export function TelaCronograma({
   // ------------------------------------------------------------------
 
   /**
-   * O que vai ser produzido, aberto por destino.
-   *
-   * Junta o que a MATRIZ esta montando agora (rascunho na tela) com os
-   * pedidos que as filiais ja enviaram para a mesma data. E a conta que o
-   * padeiro executa e que a separacao da manha confere - ate hoje ela so
-   * existia depois de "Ir para o Resumo", e conferir exigia sair do meio
-   * da montagem.
-   */
-  const consolidadoDaData = useMemo(
-    () =>
-      consolidarProducao(
-        GRUPOS.flatMap((chave) => itensPorGrupo[chave] ?? []),
-        pedidosDoDia,
-        LOJA_MATRIZ.id
-      ),
-    [itensPorGrupo, pedidosDoDia]
-  );
-
-  /** O consolidado quebrado por sessao, que e como a producao acontece. */
-  const consolidadoPorSessao = useMemo(
-    () =>
-      GRUPOS.map((chave) => ({
-        chave,
-        rotulo: rotuloDaCategoria(chave),
-        itens: consolidadoDaData.filter(
-          (item) => produtos.find((p) => p.codigoPdv === item.codigoPdv)?.categoria === chave
-        ),
-      })).filter((sessao) => sessao.itens.length > 0),
-    [consolidadoDaData, produtos]
-  );
-
-  /** Lojas que viram coluna: so as que tem alguma quantidade. */
-  const colunasDeLoja = useMemo(
-    () =>
-      [LOJA_MATRIZ, ...FILIAIS].filter((l) =>
-        consolidadoDaData.some((item) => quantidadeDaLoja(item, l.id) > 0)
-      ),
-    [consolidadoDaData]
-  );
-
-  /**
    * Estado do plano em três palavras, para caber na linha do título.
    * "confirmado" é o único que encerra o assunto; os outros dois dizem
    * que ainda falta alguém fazer alguma coisa, e por isso ficam em âmbar.
@@ -621,67 +641,86 @@ export function TelaCronograma({
         do dia, que na maioria das vezes é a única coisa que se queria
         saber.
       */}
-      {consolidadoPorSessao.length > 0 && (
-        <div className={`bloco-consolidado ${consolidadoAberto ? "aberto" : ""}`}>
-          <button
-            type="button"
-            className="cabecalho-consolidado"
-            aria-expanded={consolidadoAberto}
-            onClick={() => setConsolidadoAberto((v) => !v)}
-          >
-            <span className="titulo-consolidado">Quanto vai para cada loja</span>
-            <span className="total-consolidado">
-              {arred(consolidadoDaData.reduce((soma, i) => soma + i.totalUnidades, 0))} un
-            </span>
-            <IconeSeta className="seta-sessao" />
-          </button>
+      {/*
+        UM CARD POR LOJA (ago/2026).
+        Substituiu o quadro único "Quanto vai para cada loja". A tabela
+        com uma coluna por loja obrigava a matriz a cruzar linha e coluna
+        de cabeça; e quem separa de manhã separa UMA loja de cada vez,
+        sessão por sessão. O card agora tem a forma do trabalho real.
 
-          {consolidadoAberto && (
-            <div className="corpo-consolidado">
-              {/*
-                UMA LINHA POR PRODUTO, e não uma coluna por loja.
+        O status do pedido do dia seguinte mora dentro do próprio card:
+        antes era preciso decorar quem tinha enviado para saber se aquele
+        número já estava completo.
+      */}
+      {porLoja.map(({ loja: destino, sessoes, total, variedades }) => {
+        const ehFilial = destino.papel === "filial";
+        const enviou = filiaisQueEnviaram.some((f) => f.id === destino.id);
+        const aberto = !!lojasAbertas[destino.id];
 
-                A tabela larga foi testada em 390px e reprovada: com três
-                lojas, a coluna TOTAL — o número que o padeiro executa —
-                saía fora da tela e só aparecia rolando de lado. Esconder
-                o total num quadro que existe para mostrar o total é o
-                oposto do objetivo.
+        // Filial: o que importa é se a lista chegou. Matriz: em que pé
+        // está o cronograma que ela mesma monta.
+        const situacao = ehFilial
+          ? enviou
+            ? { texto: "lista enviada", tom: "ok" }
+            : { texto: "lista pendente", tom: "pendente" }
+          : planoExistente?.status === "confirmado"
+            ? { texto: "cronograma confirmado", tom: "ok" }
+            : { texto: "montando", tom: "pendente" };
 
-                Aqui o total fica à direita, no tamanho do dado, e a
-                repartição vem embaixo em uma linha só. Nada rola.
-              */}
-              {consolidadoPorSessao.map((sessao) => (
-                <div key={sessao.chave} className="sessao-consolidada">
-                  <h4>{sessao.rotulo}</h4>
-                  {sessao.itens.map((item) => (
-                    <div key={item.codigoPdv} className="linha-consolidada">
-                      <div className="topo-consolidado">
-                        <span className="nome-consolidado">{nomeDoProduto(item.codigoPdv)}</span>
-                        <span className="qtd-consolidada">{arred(item.totalUnidades)} un</span>
+        return (
+          <div key={destino.id} className={`card-loja ${aberto ? "aberto" : ""}`}>
+            <button
+              type="button"
+              className="cabecalho-loja"
+              aria-expanded={aberto}
+              onClick={() =>
+                setLojasAbertas((atual) => ({ ...atual, [destino.id]: !atual[destino.id] }))
+              }
+            >
+              <span className="texto-loja">
+                <span className="nome-loja">{destino.nomeCurto}</span>
+                <span className={`situacao-loja ${situacao.tom}`}>{situacao.texto}</span>
+              </span>
+              <span className="total-loja">
+                {total > 0 ? `${arred(total)} un` : "—"}
+              </span>
+              <IconeSeta className="seta-sessao" />
+            </button>
+
+            {aberto && (
+              <div className="corpo-loja">
+                {sessoes.length === 0 ? (
+                  <p className="nota-rodape">
+                    {ehFilial && !enviou
+                      ? "Esta filial ainda não enviou o pedido do dia."
+                      : "Nada destinado a esta loja neste cronograma."}
+                  </p>
+                ) : (
+                  <>
+                    {sessoes.map((sessao) => (
+                      <div key={sessao.chave} className="sessao-da-loja">
+                        <h4>{sessao.rotulo}</h4>
+                        {sessao.itens.map((item) => (
+                          <div key={item.codigoPdv} className="item-da-loja">
+                            <span className="nome-item-loja">{nomeDoProduto(item.codigoPdv)}</span>
+                            <span className="qtd-item-loja">
+                              {arred(item.quantidadeUnidades)} un
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                      <span className="reparticao-consolidada">
-                        {colunasDeLoja
-                          .map((l) => ({ l, quanto: quantidadeDaLoja(item, l.id) }))
-                          .filter(({ quanto }) => quanto > 0)
-                          .map(({ l, quanto }) => `${l.nomeCurto.split(" ")[0]} ${arred(quanto)}`)
-                          .join("  ·  ")}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-
-              {filiaisQueEnviaram.length < FILIAIS.length && (
-                <p className="nota-rodape">
-                  Só entram filiais que já enviaram o pedido do dia — {FILIAIS.length -
-                    filiaisQueEnviaram.length}{" "}
-                  ainda não enviou.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                    ))}
+                    <p className="nota-rodape">
+                      {variedades} {variedades === 1 ? "produto" : "produtos"} · {arred(total)}{" "}
+                      unidades
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       {!planejamentoAberto ? null : (
       <>

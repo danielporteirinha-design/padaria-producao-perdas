@@ -1534,3 +1534,70 @@ button.perigo:hover { background: #822525; }
 /* Nome de produto pode quebrar: é a coluna elástica da tabela, e travá-la
    numa linha só espremia as colunas de número. */
 .tabela-simples td:first-child { overflow-wrap: anywhere; }
+
+/* ---------------------------------------------------------------
+   Um card por loja no Cronograma (ago/2026)
+   Substituiu o quadro único com uma coluna por loja: quem separa de
+   manhã separa UMA loja de cada vez, sessão por sessão, e a tabela
+   obrigava a matriz a cruzar linha e coluna de cabeça.
+   --------------------------------------------------------------- */
+.card-loja {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  margin-bottom: 10px;
+}
+.cabecalho-loja {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--cor-texto);
+  text-align: left;
+  font-family: inherit;
+}
+.texto-loja { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nome-loja { font-size: 15px; font-weight: 700; }
+/* O status da lista mora aqui dentro: antes era preciso decorar quem
+   tinha enviado para saber se o número do card já estava completo. */
+.situacao-loja { font-size: 13px; font-weight: 600; }
+.situacao-loja.ok { color: var(--cor-sucesso); }
+.situacao-loja.pendente { color: var(--cor-alerta); }
+.total-loja {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cor-acento);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.card-loja .seta-sessao { flex-shrink: 0; transition: transform 0.2s ease; }
+.card-loja.aberto .seta-sessao { transform: rotate(180deg); }
+
+.corpo-loja { padding: 0 14px 12px; }
+.sessao-da-loja h4 {
+  margin: 12px 0 4px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cor-texto-suave);
+}
+.item-da-loja {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px solid var(--cor-borda);
+}
+.sessao-da-loja .item-da-loja:first-of-type { border-top: none; }
+.nome-item-loja { font-size: 15px; overflow-wrap: anywhere; }
+.qtd-item-loja {
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
