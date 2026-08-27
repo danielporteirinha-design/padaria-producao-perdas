@@ -60,6 +60,12 @@ import { abaDaUrl, urlDaAba } from "../src/lib/rota";
 import { agruparPorCategoria } from "../src/lib/blocosDeImpressao";
 import { proximaDataAlvo } from "../src/lib/dataAlvoDoDia";
 import {
+  chaveDoRascunho,
+  mapaDoPlano,
+  mapasIguais,
+  rascunhosVencidos,
+} from "../src/lib/rascunhoCronograma";
+import {
   codigosComFornadaNoDia,
   fornadasDoProduto,
   idDaFornada,
@@ -2468,6 +2474,121 @@ const perdas: RegistroPerda[] = [
     recortar(catalogo, [planoDoDia], perdasDasLojas, "2026-10-01", janela, [pedidoDaFilial])
   );
   afirmar(forA.produzido === 0 && forA.perdido === 0, "fora do periodo, o recorte fica vazio");
+}
+
+// ---------------------------------------------------------------
+// Caso 29: rascunho do cronograma (ago/2026)
+//
+// Defeito relatado: "apaguei a sessao Paes e Roscas, sai da aba, voltei,
+// e ela estava la de novo". A montagem vivia so' na memoria do
+// componente; trocar de aba desmontava a tela e ela era reconstruida a
+// partir do plano GRAVADO. Nao era so' a limpeza: acrescentar item,
+// corrigir quantidade, remover produto — tudo se perdia igual, e em
+// silencio, com numeros plausiveis no lugar.
+//
+// Aqui ficam travadas as duas pecas puras: a comparacao que decide se ha
+// "alteracoes nao confirmadas", e a expiracao dos rascunhos velhos.
+// ---------------------------------------------------------------
+{
+  const plano: PlanoDeProducaoDiario = {
+    id: "p-rascunho",
+    data: "2026-08-28",
+    diaDaSemana: "sexta",
+    sessoes: [
+      { id: "s1", categoria: "PÃES E ROSCAS", itens: [
+        { codigoPdv: 1, quantidadeUnidades: 400 },
+        { codigoPdv: 2, quantidadeUnidades: 20 },
+      ] },
+      { id: "s2", categoria: "BOLOS", itens: [{ codigoPdv: 9, quantidadeUnidades: 4 }] },
+    ],
+    status: "confirmado",
+    criadoPor: "Daniel",
+    criadoEm: "2026-08-27T20:00:00.000Z",
+    confirmadoEm: "2026-08-27T20:05:00.000Z",
+  };
+
+  const doPlano = mapaDoPlano(plano);
+  afirmar(Object.keys(doPlano).length === 2, "o mapa do plano tem uma entrada por sessao");
+  afirmar(doPlano["PÃES E ROSCAS"].length === 2, "os itens da sessao atravessam o mapa");
+  afirmar(Object.keys(mapaDoPlano(undefined)).length === 0, "sem plano, o mapa nasce vazio");
+
+  // Igual a si mesmo.
+  afirmar(mapasIguais(doPlano, mapaDoPlano(plano)), "o mesmo plano se compara igual");
+
+  // ORDEM nao conta: remover e re-adicionar o mesmo produto muda a ordem
+  // sem mudar o pedido, e um alarme nesse caso seria falso.
+  const trocado = {
+    BOLOS: [{ codigoPdv: 9, quantidadeUnidades: 4 }],
+    "PÃES E ROSCAS": [
+      { codigoPdv: 2, quantidadeUnidades: 20 },
+      { codigoPdv: 1, quantidadeUnidades: 400 },
+    ],
+  };
+  afirmar(mapasIguais(doPlano, trocado), "ordem de sessao e de item nao conta como alteracao");
+
+  // Categoria vazia é o mesmo que categoria ausente.
+  afirmar(
+    mapasIguais(doPlano, { ...trocado, SALGADOS: [] }),
+    "sessao vazia nao conta como alteracao"
+  );
+
+  // O CASO RELATADO: sessao inteira apagada tem que contar como alteracao.
+  const semPaes = { BOLOS: [{ codigoPdv: 9, quantidadeUnidades: 4 }] };
+  afirmar(!mapasIguais(doPlano, semPaes), "apagar a sessao inteira e' alteracao");
+
+  // As outras formas de editar, que se perdiam do mesmo jeito.
+  afirmar(
+    !mapasIguais(doPlano, {
+      ...doPlano,
+      "PÃES E ROSCAS": [
+        { codigoPdv: 1, quantidadeUnidades: 500 },
+        { codigoPdv: 2, quantidadeUnidades: 20 },
+      ],
+    }),
+    "mudar a quantidade e' alteracao"
+  );
+  afirmar(
+    !mapasIguais(doPlano, {
+      ...doPlano,
+      "PÃES E ROSCAS": [{ codigoPdv: 1, quantidadeUnidades: 400 }],
+    }),
+    "remover um item e' alteracao"
+  );
+  afirmar(
+    !mapasIguais(doPlano, { ...doPlano, BISCOITOS: [{ codigoPdv: 7, quantidadeUnidades: 30 }] }),
+    "acrescentar uma sessao e' alteracao"
+  );
+
+  // --- expiracao ---
+  const HOJE = "2026-08-27";
+  const chaves = [
+    chaveDoRascunho("2026-08-28"), // amanha
+    chaveDoRascunho(HOJE),
+    chaveDoRascunho("2026-08-26"), // ontem
+    chaveDoRascunho("2026-08-25"), // anteontem — ainda no prazo
+    chaveDoRascunho("2026-08-20"), // vencido
+    "padaria:operador:MATRIZ", // de outra coisa: nao pode ser tocado
+    "padaria:fornadas-vistas:MATRIZ:2026-08-20",
+  ];
+  const vencidos = rascunhosVencidos(chaves, HOJE);
+  afirmar(
+    vencidos.length === 1 && vencidos[0] === chaveDoRascunho("2026-08-20"),
+    `so' o rascunho vencido sai (obtidos: ${vencidos.length})`
+  );
+  afirmar(
+    !vencidos.includes("padaria:operador:MATRIZ") &&
+      !vencidos.includes("padaria:fornadas-vistas:MATRIZ:2026-08-20"),
+    "chave de outra coisa nunca e' apagada"
+  );
+  afirmar(
+    !vencidos.includes(chaveDoRascunho("2026-08-28")),
+    "rascunho de data futura nunca vence — planejar a semana e' uso legitimo"
+  );
+  // Chave estragada pode ir embora: nao da' para saber de que dia e'.
+  afirmar(
+    rascunhosVencidos([`padaria:rascunho-cronograma:sexta`], HOJE).length === 1,
+    "chave de rascunho com data invalida e' descartada"
+  );
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

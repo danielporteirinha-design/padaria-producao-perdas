@@ -24,6 +24,14 @@ import type { ItemPlanoProducao, PlanoDeProducaoDiario, SessaoProducao } from ".
 import type { RegistroPerda } from "../types/perda";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 import { proximaDataAlvo } from "../lib/dataAlvoDoDia";
+import {
+  apagarRascunho,
+  gravarRascunho,
+  lerRascunho,
+  limparRascunhosAntigos,
+  mapaDoPlano,
+  mapasIguais,
+} from "../lib/rascunhoCronograma";
 import { gerarId } from "../lib/id";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
@@ -107,8 +115,17 @@ export function TelaCronograma({
 
   const planoExistente = useMemo(() => planos.find((p) => p.data === dataAlvo), [planos, dataAlvo]);
 
-  const [itensPorGrupo, setItensPorGrupo] = useState<Record<string, ItemPlanoProducao[]>>(() =>
-    mapaInicial(planoExistente)
+  /**
+   * A montagem começa pelo RASCUNHO do aparelho, quando existe, e só cai
+   * no plano gravado quando não existe.
+   *
+   * Antes vivia só na memória do componente: trocar de aba desmontava a
+   * tela, e ao voltar tudo que tinha sido digitado desde a última
+   * confirmação sumia — em silêncio, com números plausíveis no lugar. Ver
+   * src/lib/rascunhoCronograma.ts.
+   */
+  const [itensPorGrupo, setItensPorGrupo] = useState<Record<string, ItemPlanoProducao[]>>(
+    () => lerRascunho(dataAlvo) ?? mapaDoPlano(planoExistente)
   );
   const [expandido, setExpandido] = useState<Record<string, boolean>>({});
   const [produtoAtivo, setProdutoAtivo] = useState<number | null>(null);
@@ -122,6 +139,20 @@ export function TelaCronograma({
   const [documentoAtivo, setDocumentoAtivo] = useState<string>("producao");
   const [statusSugestao, setStatusSugestao] = useState<Record<string, StatusSugestao>>({});
   const [mensagemSugestao, setMensagemSugestao] = useState<Record<string, string>>({});
+
+  /**
+   * Grava o rascunho a cada mudança. Barato: é uma linha de texto no
+   * aparelho, não uma ida à nuvem — e é o que faz o trabalho sobreviver a
+   * trocar de aba, fechar o app e recarregar a página.
+   */
+  useEffect(() => {
+    gravarRascunho(dataAlvo, itensPorGrupo);
+  }, [dataAlvo, itensPorGrupo]);
+
+  /** Rascunho de dia que já passou não serve para nada — sai do aparelho. */
+  useEffect(() => {
+    limparRascunhosAntigos(hoje);
+  }, [hoje]);
 
   const diaDaSemana = diaDaSemanaDeData(dataAlvo);
   const dataFormatada = `${rotuloDoDia(diaDaSemana)}, ${formatarDataBr(dataAlvo)}`;
@@ -270,7 +301,8 @@ export function TelaCronograma({
     setDataAlvo(novaData);
     setSessaoAConfirmarLimpeza(null);
     const plano = planos.find((p) => p.data === novaData);
-    setItensPorGrupo(mapaInicial(plano));
+    // O rascunho daquele dia vem primeiro, como na montagem inicial.
+    setItensPorGrupo(lerRascunho(novaData) ?? mapaDoPlano(plano));
     setFase("montar");
     setProdutoAtivo(null);
   }
@@ -406,6 +438,10 @@ export function TelaCronograma({
     };
     try {
       await onSalvarPlano(plano);
+      // Confirmado, o rascunho cumpriu a função: o plano gravado passa a
+      // ser a verdade. Mantê-lo faria a tela voltar a mostrar "alterações
+      // não confirmadas" sobre algo que acabou de ser confirmado.
+      apagarRascunho(dataAlvo);
       setPlanoConfirmado(plano);
       setFase("exportar");
     } catch {
@@ -576,6 +612,18 @@ export function TelaCronograma({
 
   const contagemDeItens = (quantos: number) => `${quantos} ${quantos === 1 ? "item" : "itens"}`;
 
+  /**
+   * A tela está diferente do que está gravado?
+   *
+   * Só faz sentido quando existe plano confirmado: antes disso, "montando"
+   * já diz tudo, e chamar de "não confirmado" o que nunca foi confirmado
+   * seria alarme falso — e alarme que aparece sempre é alarme que se
+   * aprende a ignorar.
+   */
+  const temAlteracoesNaoConfirmadas =
+    planoExistente?.status === "confirmado" &&
+    !mapasIguais(itensPorGrupo, mapaDoPlano(planoExistente));
+
   const itensDoPlanoDeHoje = planoDeHoje ? itensPlanejados(planoDeHoje).length : 0;
   const hojeJaConfirmado = planoDeHoje ? producaoFoiConfirmada(planoDeHoje) : false;
   /**
@@ -646,12 +694,18 @@ export function TelaCronograma({
       */}
       <CardCronograma
         nome="Programação geral"
+        /* Um plano confirmado com edições na tela não pode dizer
+           "confirmado": quem separa de manhã leria a lista antiga, e quem
+           editou acharia que já tinha salvo. O aviso só aparece quando o
+           que está na tela DIFERE do que está gravado. */
         situacao={
-          planoExistente?.status === "confirmado"
-            ? { texto: "cronograma confirmado", tom: "ok" }
-            : totalItens > 0
-              ? { texto: "montando", tom: "pendente" }
-              : { texto: "sem itens ainda", tom: "pendente" }
+          temAlteracoesNaoConfirmadas
+            ? { texto: "alterações não confirmadas", tom: "pendente" }
+            : planoExistente?.status === "confirmado"
+              ? { texto: "cronograma confirmado", tom: "ok" }
+              : totalItens > 0
+                ? { texto: "montando", tom: "pendente" }
+                : { texto: "sem itens ainda", tom: "pendente" }
         }
         contagem={contagemDeItens(totalItens)}
         aberto={!!cardsAbertos.programacao}
@@ -965,15 +1019,6 @@ function CardCronograma({ nome, situacao, contagem, aberto, onAlternar, children
       </div>
     </div>
   );
-}
-
-function mapaInicial(plano: PlanoDeProducaoDiario | undefined): Record<string, ItemPlanoProducao[]> {
-  if (!plano) return {};
-  const mapa: Record<string, ItemPlanoProducao[]> = {};
-  for (const sessao of plano.sessoes) {
-    mapa[sessao.categoria] = sessao.itens;
-  }
-  return mapa;
 }
 
 function arred(valor: number): number {

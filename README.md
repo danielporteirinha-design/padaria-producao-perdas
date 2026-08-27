@@ -262,6 +262,46 @@ caminho de volta ("N itens fora da lista · mostrar de novo") fica fora da lista
 porque é justamente quando alguém tira o último item que ele precisa estar
 visível.
 
+## A montagem do cronograma não sobrevivia a trocar de aba (ago/2026)
+
+**Defeito relatado:** "apaguei a sessão Pães e Roscas, a contagem atualizou, saí
+da aba, voltei — e a sessão estava lá de novo".
+
+A causa era maior que o sintoma. A montagem vivia **só na memória do
+componente**: trocar de aba desmonta a tela, e ao voltar ela era reconstruída a
+partir do plano GRAVADO. Não era só a limpeza de sessão — acrescentar item,
+corrigir quantidade, remover um produto, tudo se perdia igual. E se perdia **em
+silêncio**, que é o pior: a tela voltava com números plausíveis, e o operador
+seguia achando que tinha montado.
+
+O plano só era gravado em "Confirmar produção". Tudo antes disso era volátil.
+
+**A correção:** a montagem passou a ser gravada no aparelho a cada mudança
+(`src/lib/rascunhoCronograma.ts`), com a chave levando a data. Ao abrir a tela, o
+rascunho daquele dia vem primeiro; o plano gravado só entra quando não há
+rascunho. Confirmar apaga o rascunho — a partir dali o plano gravado é a verdade.
+
+**No aparelho, e não na nuvem.** Gravar cada tecla no Firestore reescreveria um
+plano que pode estar confirmado, e quem separa de manhã leria uma lista que
+ninguém confirmou. A confirmação continua sendo o único momento em que o plano
+muda de verdade.
+
+**O card passou a dizer a verdade sobre o estado.** Um plano confirmado com
+edições na tela não pode exibir "cronograma confirmado": quem separa leria a
+lista antiga e quem editou acharia que já tinha salvo. Agora aparece **"alterações
+não confirmadas"** — e só quando o que está na tela realmente difere do que está
+gravado. A comparação ignora ordem de sessão e de item (remover e re-adicionar o
+mesmo produto muda a ordem sem mudar o pedido) e trata sessão vazia como sessão
+ausente. Alarme que aparece sempre é alarme que se aprende a ignorar.
+
+Rascunho de dia que já passou é varrido do aparelho depois de dois dias — cobre o
+esquecimento de uma noite e o feriado emendado, sem acumular lixo. Rascunho de
+data futura nunca vence: planejar a semana que vem é uso legítimo.
+
+Verificado ponta a ponta, desmontando e remontando o componente como a troca de
+aba faz: 3 itens / "confirmado" → limpa a sessão → 1 item / "alterações não
+confirmadas" → sai e volta → **1 item**, o estado preservado.
+
 ## `npm run conferir` — a resposta para "apliquei e nada mudou" (ago/2026)
 
 O projeto é atualizado aplicando um pacote por cima da pasta. Quando um arquivo

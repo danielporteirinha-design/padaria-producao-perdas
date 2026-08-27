@@ -81,6 +81,9 @@ const CONFERENCIAS = [
   ["vite.config.ts", '"#ffffff"', "Splash branco"],
   ["scripts/gerar_icones.py", "FUNDO_ICONE", "Ícones com fundo branco"],
 
+  // --- Rascunho do cronograma
+  ["src/lib/rascunhoCronograma.ts", "mapasIguais", "Rascunho do cronograma sobrevive à troca de aba"],
+
   // --- Análises
   ["src/lib/analises.ts", "fornecimento", "Análises: denominador por loja"],
   ["src/lib/analises.ts", "fornadasPorFaixaDeHora", "Análises: relatório do forno"],
