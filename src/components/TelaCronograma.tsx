@@ -18,7 +18,7 @@
  * automático: o operador revisa e ajusta antes de confirmar.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { Produto } from "../types/produto";
 import type { ItemPlanoProducao, PlanoDeProducaoDiario, SessaoProducao } from "../types/producao";
 import type { RegistroPerda } from "../types/perda";
@@ -27,6 +27,7 @@ import { gerarId } from "../lib/id";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProducao } from "../lib/sugestaoProducao";
+import { itensPlanejados, producaoFoiConfirmada } from "../lib/producaoRealizada";
 import { ExportarFita } from "./ExportarFita";
 import { ConfirmarProducao } from "./ConfirmarProducao";
 import { ehPedidoDiario, type PedidoFilial } from "../types/pedido";
@@ -83,13 +84,21 @@ export function TelaCronograma({
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
   const [mostrarSeletorData, setMostrarSeletorData] = useState(false);
   /**
-   * A sanfona do planejamento nasce FECHADA. Quem abre a aba na maior
-   * parte do dia só quer conferir se a produção de amanhã já está
-   * montada — e essa resposta agora está no próprio balão do título.
-   * Quem vai montar toca uma vez e entra.
+   * CINCO CARDS IGUAIS, TODOS NASCENDO FECHADOS (ago/2026)
+   * ------------------------------------------------------
+   * A tela virou uma pilha de cards do mesmo tamanho: programação geral,
+   * confirmação do que saiu hoje e uma loja por card. Um único mapa de
+   * abertura serve aos cinco — estados separados (um booleano para o
+   * planejamento, um mapa para as lojas) deixavam a regra "só o que você
+   * abriu fica aberto" espalhada em dois lugares.
+   *
+   * Fechados por padrão porque a maior parte das aberturas da aba é
+   * CONSULTA: o cabeçalho de cada card já responde "quantos itens" e "em
+   * que pé está". Quem vai agir toca uma vez e entra.
    */
-  const [planejamentoAberto, setPlanejamentoAberto] = useState(false);
-  const [lojasAbertas, setLojasAbertas] = useState<Record<string, boolean>>({});
+  const [cardsAbertos, setCardsAbertos] = useState<Record<string, boolean>>({});
+  const alternarCard = (chave: string) =>
+    setCardsAbertos((atual) => ({ ...atual, [chave]: !atual[chave] }));
 
   const planoExistente = useMemo(() => planos.find((p) => p.data === dataAlvo), [planos, dataAlvo]);
 
@@ -552,79 +561,242 @@ export function TelaCronograma({
   // Fase: Montar (padrão)
   // ------------------------------------------------------------------
 
-  /**
-   * Estado do plano em três palavras, para caber na linha do título.
-   * "confirmado" é o único que encerra o assunto; os outros dois dizem
-   * que ainda falta alguém fazer alguma coisa, e por isso ficam em âmbar.
-   */
-  const estadoDoPlano =
-    planoExistente?.status === "confirmado"
-      ? { texto: "Plano confirmado", tom: "ok" }
-      : planoExistente
-        ? { texto: "Rascunho salvo", tom: "pendente" }
-        : { texto: "Ainda não montado", tom: "pendente" };
+  const contagemDeItens = (quantos: number) => `${quantos} ${quantos === 1 ? "item" : "itens"}`;
 
-  const faltantes = FILIAIS.filter((f) => !filiaisQueEnviaram.some((e) => e.id === f.id));
-  const filiaisFaltando = faltantes.length;
-  /**
-   * Uma frase, não dois cartões. O que a matriz decide com isto é uma
-   * coisa só: dá para confirmar a produção agora, ou ainda falta pedido
-   * de alguém? O nome de quem falta aparece quando é UMA loja — com duas
-   * faltando, o número já basta e o nome só alongaria a linha.
-   */
-  const resumoDasFiliais =
-    filiaisFaltando === 0
-      ? "as duas filiais já pediram"
-      : filiaisFaltando === FILIAIS.length
-        ? "nenhuma filial pediu ainda"
-        : `falta ${faltantes[0].nomeCurto}`;
+  const itensDoPlanoDeHoje = planoDeHoje ? itensPlanejados(planoDeHoje).length : 0;
+  const hojeJaConfirmado = planoDeHoje ? producaoFoiConfirmada(planoDeHoje) : false;
 
   return (
     <div className="tela">
       {/*
-        O BALÃO DO TÍTULO CARREGA O ESTADO, E É A PORTA DO PLANEJAMENTO
+        A DATA É O TÍTULO DA PÁGINA, NÃO UM CARD
         ---------------------------------------------------------------
-        Antes eram três blocos empilhados dizendo coisas sobre o mesmo
-        dia: a data num balão, "Rascunho salvo — carregado abaixo" em
-        outro, e os cartões de "enviou / não enviou" das filiais num
-        terceiro. Três caixas para uma frase só — "a produção de quinta
-        está assim" —, e a lista de produtos começava lá embaixo.
-
-        Agora é um balão só: data, estado do plano e situação das filiais
-        juntos, e ele é o botão que abre a sanfona do planejamento. Quem
-        entra na aba responde de relance "está pronto?"; quem vai montar
-        toca e entra.
+        Os cinco cards abaixo falam todos do mesmo dia — repetir a data
+        dentro de cada um seria ruído. Ela fica aqui em cima, uma vez, e
+        deixou de ser botão: a porta da montagem passou a ser o card da
+        Programação geral, que é onde a montagem de fato mora.
       */}
-      <button
-        type="button"
-        className={`destaque-data cabecalho-planejamento ${planejamentoAberto ? "aberto" : ""}`}
-        aria-expanded={planejamentoAberto}
-        onClick={() => setPlanejamentoAberto((v) => !v)}
-      >
+      <p className="destaque-data titulo-do-dia">
         <IconeCalendario tamanho={20} />
-        <span className="texto-planejamento">
-          <span className="titulo-planejamento">Produção de {dataFormatada}</span>
-          <span className="linha-estado">
-            {/* Sem separador entre os dois: quando a linha quebra, o "·"
-                ficava órfão no fim da primeira metade. O espaço já separa. */}
-            <span className={`estado-plano ${estadoDoPlano.tom}`}>{estadoDoPlano.texto}</span>
-            <span className={`estado-filiais ${filiaisFaltando === 0 ? "ok" : "pendente"}`}>
-              {resumoDasFiliais}
-            </span>
-          </span>
-        </span>
-        <IconeSeta className="seta-sessao" />
-      </button>
+        <span className="titulo-planejamento">Produção de {dataFormatada}</span>
+      </p>
 
+      {/*
+        CARD 1 — PROGRAMAÇÃO GERAL (ago/2026)
+        ---------------------------------------------------------------
+        A lista inteira: a sanfona das 5 sessões e, dentro de cada uma,
+        os produtos com a quantidade pedida. Vem primeiro porque é o
+        assunto da aba — os cards das lojas abaixo são o mesmo conteúdo
+        repartido por destino.
+      */}
+      <CardCronograma
+        nome="Programação geral"
+        situacao={
+          planoExistente?.status === "confirmado"
+            ? { texto: "cronograma confirmado", tom: "ok" }
+            : totalItens > 0
+              ? { texto: "montando", tom: "pendente" }
+              : { texto: "sem itens ainda", tom: "pendente" }
+        }
+        contagem={contagemDeItens(totalItens)}
+        aberto={!!cardsAbertos.programacao}
+        onAlternar={() => alternarCard("programacao")}
+      >
+        {planoExistente?.status === "confirmado" && (
+          <p className="callout-inline">
+            Plano confirmado.{" "}
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                setPlanoConfirmado(planoExistente);
+                setFase("exportar");
+              }}
+            >
+              reimprimir
+            </button>
+          </p>
+        )}
+
+        <button type="button" className="link" onClick={() => setMostrarSeletorData((v) => !v)}>
+          {mostrarSeletorData ? "usar amanhã (padrão)" : "planejar para outra data"}
+        </button>
+        {mostrarSeletorData && (
+          <input type="date" value={dataAlvo} onChange={(e) => trocarData(e.target.value)} />
+        )}
+
+        {GRUPOS.map((chave) => {
+          const rotulo = rotuloDaCategoria(chave);
+          const itensDoGrupo = itensPorGrupo[chave] ?? [];
+          const aberto = !!expandido[chave];
+          const listaProdutos = produtosDaCategoria(chave);
+          const statusIA = statusSugestao[chave] ?? "";
+          const mensagemIA = mensagemSugestao[chave] ?? "";
+
+          return (
+            <div key={chave} className={`acordeao-sessao ${aberto ? "aberta" : ""}`}>
+              {/* O cabeçalho deixou de ser um botão único (ago/2026) para
+                  caber "limpar" ao lado da contagem, longe do "remover"
+                  de cada produto — os dois botões vizinhos estavam sendo
+                  confundidos. Botão não pode aninhar botão, daí a div. */}
+              <div className="cabecalho-sessao">
+                <button
+                  type="button"
+                  className="abrir-sessao"
+                  aria-expanded={aberto}
+                  onClick={() => setExpandido((atual) => ({ ...atual, [chave]: !atual[chave] }))}
+                >
+                  <span className="nome-sessao">{rotulo}</span>
+                  <span className="contagem-itens">
+                    {itensDoGrupo.length > 0 ? contagemDeItens(itensDoGrupo.length) : ""}
+                  </span>
+                  <IconeSeta className="seta-sessao" />
+                </button>
+
+                {itensDoGrupo.length > 0 &&
+                  (sessaoAConfirmarLimpeza === chave ? (
+                    <span className="confirmar-limpeza">
+                      <button type="button" className="perigo" onClick={() => limparSessao(chave)}>
+                        Apagar {itensDoGrupo.length}?
+                      </button>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => setSessaoAConfirmarLimpeza(null)}
+                      >
+                        não
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="botao-limpar-sessao"
+                      title={`Limpar ${rotulo}`}
+                      aria-label={`Limpar os itens de ${rotulo}`}
+                      onClick={() => setSessaoAConfirmarLimpeza(chave)}
+                    >
+                      <IconeLixeira tamanho={17} />
+                    </button>
+                  ))}
+              </div>
+
+              {aberto && (
+                <div className="corpo-sessao">
+                  <div className="linha-sugestao-ia">
+                    <button
+                      type="button"
+                      className="secundario"
+                      disabled={statusIA === "carregando"}
+                      onClick={() => gerarSugestaoIA(chave)}
+                    >
+                      {statusIA === "carregando" ? "Gerando sugestão..." : "✨ Sugerir quantidades com IA"}
+                    </button>
+                  </div>
+                  {mensagemIA && (
+                    <p className={statusIA === "erro" ? "erro-conversao" : "nota-rodape"}>{mensagemIA}</p>
+                  )}
+
+                  {listaProdutos.length === 0 && (
+                    <p className="nota-rodape">Nenhum produto ativo nesta categoria ainda.</p>
+                  )}
+
+                  {listaProdutos.map((produto) => {
+                    const itemSalvo = itensDoGrupo.find((i) => i.codigoPdv === produto.codigoPdv);
+                    const editando = produtoAtivo === produto.codigoPdv;
+                    return (
+                      <div key={produto.codigoPdv} className="linha-produto-cronograma">
+                        <button
+                          type="button"
+                          className={`item-produto ${itemSalvo ? "confirmado" : ""}`}
+                          onClick={() => abrirEdicao(produto.codigoPdv, chave)}
+                        >
+                          <span>{produto.nome}</span>
+                          {itemSalvo && <span className="valor-confirmado">{itemSalvo.quantidadeUnidades} un ✓</span>}
+                        </button>
+
+                        {editando && (
+                          <div className="editor-quantidade">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              pattern="[0-9]*[.,]?[0-9]*"
+                              autoFocus
+                              placeholder="Quantidade em unidades"
+                              value={valorEditando}
+                              onChange={(e) => setValorEditando(sanitizarEntradaNumerica(e.target.value))}
+                            />
+                            <span className="unidade-fixa">un</span>
+                            <button
+                              type="button"
+                              className="primario"
+                              disabled={!ehNumeroValidoPositivo(valorEditando)}
+                              onClick={() => confirmarQuantidade(chave, produto.codigoPdv)}
+                            >
+                              Confirmar
+                            </button>
+                          </div>
+                        )}
+
+                        {itemSalvo && !editando && (
+                          <button
+                            type="button"
+                            className="link"
+                            onClick={() => removerItem(chave, produto.codigoPdv)}
+                          >
+                            remover
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <div className="acoes">
+          <button
+            type="button"
+            className="primario"
+            disabled={totalItens === 0}
+            onClick={() => setFase("resumo")}
+          >
+            Ir para o Resumo ({contagemDeItens(totalItens)})
+          </button>
+        </div>
+      </CardCronograma>
+
+      {/*
+        CARD 2 — CONFIRMAÇÃO DO QUE FOI PRODUZIDO HOJE
+        ---------------------------------------------------------------
+        Fica logo abaixo da programação porque é a outra metade do mesmo
+        ciclo: o card de cima diz o que foi PEDIDO, este diz o que
+        realmente SAIU. Só aparece quando existe plano confirmado hoje —
+        sem plano não há o que conferir.
+      */}
       {planoDeHoje && (
-        <ConfirmarProducao
-          plano={planoDeHoje}
-          produtos={produtos}
-          operador={operador}
-          totaisPedidos={totaisPedidosDeHoje}
-          codigosComFornada={codigosComFornadaNoDia(fornadas, hojeIso)}
-          onConfirmar={(codigos) => onConfirmarProducao(planoDeHoje.id, codigos)}
-        />
+        <CardCronograma
+          nome="Confirmação de hoje"
+          situacao={
+            hojeJaConfirmado
+              ? { texto: "produção confirmada", tom: "ok" }
+              : { texto: "confirmação pendente", tom: "pendente" }
+          }
+          contagem={contagemDeItens(itensDoPlanoDeHoje)}
+          aberto={!!cardsAbertos.confirmacao}
+          onAlternar={() => alternarCard("confirmacao")}
+        >
+          <ConfirmarProducao
+            embutido
+            plano={planoDeHoje}
+            produtos={produtos}
+            operador={operador}
+            totaisPedidos={totaisPedidosDeHoje}
+            codigosComFornada={codigosComFornadaNoDia(fornadas, hojeIso)}
+            onConfirmar={(codigos) => onConfirmarProducao(planoDeHoje.id, codigos)}
+          />
+        </CardCronograma>
       )}
 
       {/* As reposições saíram desta tela (ago/2026): elas são de HOJE e
@@ -632,34 +804,24 @@ export function TelaCronograma({
           durante o expediente. O Cronograma é sobre AMANHÃ. */}
 
       {/*
-        QUANTO VAI PARA CADA UM — antes só existia depois de "Ir para o
-        Resumo". Conferir se o pedido da filial já entrou na conta obrigava
-        a sair do meio da montagem e voltar, e quem monta confere isso
-        várias vezes enquanto digita.
-
-        Sanfona fechada: é consulta, não etapa. O cabeçalho já diz o total
-        do dia, que na maioria das vezes é a única coisa que se queria
-        saber.
-      */}
-      {/*
-        UM CARD POR LOJA (ago/2026).
+        CARDS 3 A 5 — UM POR LOJA (ago/2026).
         Substituiu o quadro único "Quanto vai para cada loja". A tabela
         com uma coluna por loja obrigava a matriz a cruzar linha e coluna
         de cabeça; e quem separa de manhã separa UMA loja de cada vez,
-        sessão por sessão. O card agora tem a forma do trabalho real.
+        sessão por sessão. O card tem a forma do trabalho real.
 
-        O status do pedido do dia seguinte mora dentro do próprio card:
-        antes era preciso decorar quem tinha enviado para saber se aquele
-        número já estava completo.
+        O cabeçalho conta VARIEDADES, não unidades (ago/2026): "12 itens"
+        é o tamanho da lista que alguém vai separar. O total em unidades
+        continua no rodapé do card, junto dos produtos — lá ele tem
+        contexto; no cabeçalho ele só competia com o número que importa.
       */}
       {porLoja.map(({ loja: destino, sessoes, total, variedades }) => {
         const ehFilial = destino.papel === "filial";
         const enviou = filiaisQueEnviaram.some((f) => f.id === destino.id);
-        const aberto = !!lojasAbertas[destino.id];
 
         // Filial: o que importa é se a lista chegou. Matriz: em que pé
         // está o cronograma que ela mesma monta.
-        const situacao = ehFilial
+        const situacao: SituacaoDoCard = ehFilial
           ? enviou
             ? { texto: "lista enviada", tom: "ok" }
             : { texto: "lista pendente", tom: "pendente" }
@@ -668,224 +830,87 @@ export function TelaCronograma({
             : { texto: "montando", tom: "pendente" };
 
         return (
-          <div key={destino.id} className={`card-loja ${aberto ? "aberto" : ""}`}>
-            <button
-              type="button"
-              className="cabecalho-loja"
-              aria-expanded={aberto}
-              onClick={() =>
-                setLojasAbertas((atual) => ({ ...atual, [destino.id]: !atual[destino.id] }))
-              }
-            >
-              <span className="texto-loja">
-                <span className="nome-loja">{destino.nomeCurto}</span>
-                <span className={`situacao-loja ${situacao.tom}`}>{situacao.texto}</span>
-              </span>
-              <span className="total-loja">
-                {total > 0 ? `${arred(total)} un` : "—"}
-              </span>
-              <IconeSeta className="seta-sessao" />
-            </button>
-
-            {aberto && (
-              <div className="corpo-loja">
-                {sessoes.length === 0 ? (
-                  <p className="nota-rodape">
-                    {ehFilial && !enviou
-                      ? "Esta filial ainda não enviou o pedido do dia."
-                      : "Nada destinado a esta loja neste cronograma."}
-                  </p>
-                ) : (
-                  <>
-                    {sessoes.map((sessao) => (
-                      <div key={sessao.chave} className="sessao-da-loja">
-                        <h4>{sessao.rotulo}</h4>
-                        {sessao.itens.map((item) => (
-                          <div key={item.codigoPdv} className="item-da-loja">
-                            <span className="nome-item-loja">{nomeDoProduto(item.codigoPdv)}</span>
-                            <span className="qtd-item-loja">
-                              {arred(item.quantidadeUnidades)} un
-                            </span>
-                          </div>
-                        ))}
+          <CardCronograma
+            key={destino.id}
+            nome={destino.nomeCurto}
+            situacao={situacao}
+            contagem={variedades > 0 ? contagemDeItens(variedades) : "—"}
+            aberto={!!cardsAbertos[destino.id]}
+            onAlternar={() => alternarCard(destino.id)}
+          >
+            {sessoes.length === 0 ? (
+              <p className="nota-rodape">
+                {ehFilial && !enviou
+                  ? "Esta filial ainda não enviou o pedido do dia."
+                  : "Nada destinado a esta loja neste cronograma."}
+              </p>
+            ) : (
+              <>
+                {sessoes.map((sessao) => (
+                  <div key={sessao.chave} className="sessao-do-card">
+                    <h4>{sessao.rotulo}</h4>
+                    {sessao.itens.map((item) => (
+                      <div key={item.codigoPdv} className="item-da-loja">
+                        <span className="nome-item-loja">{nomeDoProduto(item.codigoPdv)}</span>
+                        <span className="qtd-item-loja">{arred(item.quantidadeUnidades)} un</span>
                       </div>
                     ))}
-                    <p className="nota-rodape">
-                      {variedades} {variedades === 1 ? "produto" : "produtos"} · {arred(total)}{" "}
-                      unidades
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
-
-      {!planejamentoAberto ? null : (
-      <>
-      {planoExistente?.status === "confirmado" && (
-        <p className="callout-inline">
-          Plano confirmado.{" "}
-          <button
-            type="button"
-            className="link"
-            onClick={() => {
-              setPlanoConfirmado(planoExistente);
-              setFase("exportar");
-            }}
-          >
-            reimprimir
-          </button>
-        </p>
-      )}
-
-      <button type="button" className="link" onClick={() => setMostrarSeletorData((v) => !v)}>
-        {mostrarSeletorData ? "usar amanhã (padrão)" : "planejar para outra data"}
-      </button>
-      {mostrarSeletorData && (
-        <input type="date" value={dataAlvo} onChange={(e) => trocarData(e.target.value)} />
-      )}
-
-      {GRUPOS.map((chave) => {
-        const rotulo = rotuloDaCategoria(chave);
-        const itensDoGrupo = itensPorGrupo[chave] ?? [];
-        const aberto = !!expandido[chave];
-        const listaProdutos = produtosDaCategoria(chave);
-        const statusIA = statusSugestao[chave] ?? "";
-        const mensagemIA = mensagemSugestao[chave] ?? "";
-
-        return (
-          <div key={chave} className={`acordeao-sessao ${aberto ? "aberta" : ""}`}>
-            {/* O cabeçalho deixou de ser um botão único (ago/2026) para
-                caber "limpar" ao lado da contagem, longe do "remover"
-                de cada produto — os dois botões vizinhos estavam sendo
-                confundidos. Botão não pode aninhar botão, daí a div. */}
-            <div className="cabecalho-sessao">
-              <button
-                type="button"
-                className="abrir-sessao"
-                aria-expanded={aberto}
-                onClick={() => setExpandido((atual) => ({ ...atual, [chave]: !atual[chave] }))}
-              >
-                <span className="nome-sessao">{rotulo}</span>
-                <span className="contagem-itens">
-                  {itensDoGrupo.length > 0
-                    ? `${itensDoGrupo.length} ${itensDoGrupo.length === 1 ? "item" : "itens"}`
-                    : ""}
-                </span>
-                <IconeSeta className="seta-sessao" />
-              </button>
-
-              {itensDoGrupo.length > 0 &&
-                (sessaoAConfirmarLimpeza === chave ? (
-                  <span className="confirmar-limpeza">
-                    <button type="button" className="perigo" onClick={() => limparSessao(chave)}>
-                      Apagar {itensDoGrupo.length}?
-                    </button>
-                    <button
-                      type="button"
-                      className="link"
-                      onClick={() => setSessaoAConfirmarLimpeza(null)}
-                    >
-                      não
-                    </button>
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className="botao-limpar-sessao"
-                    title={`Limpar ${rotulo}`}
-                    aria-label={`Limpar os itens de ${rotulo}`}
-                    onClick={() => setSessaoAConfirmarLimpeza(chave)}
-                  >
-                    <IconeLixeira tamanho={17} />
-                  </button>
+                  </div>
                 ))}
-            </div>
-
-            {aberto && (
-              <div className="corpo-sessao">
-                <div className="linha-sugestao-ia">
-                  <button
-                    type="button"
-                    className="secundario"
-                    disabled={statusIA === "carregando"}
-                    onClick={() => gerarSugestaoIA(chave)}
-                  >
-                    {statusIA === "carregando" ? "Gerando sugestão..." : "✨ Sugerir quantidades com IA"}
-                  </button>
-                </div>
-                {mensagemIA && (
-                  <p className={statusIA === "erro" ? "erro-conversao" : "nota-rodape"}>{mensagemIA}</p>
-                )}
-
-                {listaProdutos.length === 0 && (
-                  <p className="nota-rodape">Nenhum produto ativo nesta categoria ainda.</p>
-                )}
-
-                {listaProdutos.map((produto) => {
-                  const itemSalvo = itensDoGrupo.find((i) => i.codigoPdv === produto.codigoPdv);
-                  const editando = produtoAtivo === produto.codigoPdv;
-                  return (
-                    <div key={produto.codigoPdv} className="linha-produto-cronograma">
-                      <button
-                        type="button"
-                        className={`item-produto ${itemSalvo ? "confirmado" : ""}`}
-                        onClick={() => abrirEdicao(produto.codigoPdv, chave)}
-                      >
-                        <span>{produto.nome}</span>
-                        {itemSalvo && <span className="valor-confirmado">{itemSalvo.quantidadeUnidades} un ✓</span>}
-                      </button>
-
-                      {editando && (
-                        <div className="editor-quantidade">
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            pattern="[0-9]*[.,]?[0-9]*"
-                            autoFocus
-                            placeholder="Quantidade em unidades"
-                            value={valorEditando}
-                            onChange={(e) => setValorEditando(sanitizarEntradaNumerica(e.target.value))}
-                          />
-                          <span className="unidade-fixa">un</span>
-                          <button
-                            type="button"
-                            className="primario"
-                            disabled={!ehNumeroValidoPositivo(valorEditando)}
-                            onClick={() => confirmarQuantidade(chave, produto.codigoPdv)}
-                          >
-                            Confirmar
-                          </button>
-                        </div>
-                      )}
-
-                      {itemSalvo && !editando && (
-                        <button
-                          type="button"
-                          className="link"
-                          onClick={() => removerItem(chave, produto.codigoPdv)}
-                        >
-                          remover
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                <p className="nota-rodape">
+                  {contagemDeItens(variedades)} · {arred(total).toLocaleString("pt-BR")} unidades
+                </p>
+              </>
             )}
-          </div>
+          </CardCronograma>
         );
       })}
+    </div>
+  );
+}
 
-      <div className="acoes">
-        <button type="button" className="primario" disabled={totalItens === 0} onClick={() => setFase("resumo")}>
-          Ir para o Resumo ({totalItens} itens)
-        </button>
+/** Estado curto que cada card mostra no próprio cabeçalho. */
+interface SituacaoDoCard {
+  texto: string;
+  tom: "ok" | "pendente";
+}
+
+interface CardCronogramaProps {
+  nome: string;
+  situacao: SituacaoDoCard;
+  /** Tamanho da lista, em VARIEDADES: "12 itens". */
+  contagem: string;
+  aberto: boolean;
+  onAlternar: () => void;
+  children: ReactNode;
+}
+
+/**
+ * A casca dos cinco cards do Cronograma (ago/2026).
+ *
+ * Um componente só, e não cinco blocos parecidos, para que "mesmo
+ * tamanho, mesmo visual" seja uma consequência do código e não uma
+ * disciplina de quem edita: qualquer ajuste no cabeçalho vale para os
+ * cinco de uma vez.
+ *
+ * O corpo é ESCONDIDO, não desmontado: a confirmação do dia guarda as
+ * caixas que o operador desmarcou, e recolher o card por engano não pode
+ * jogar essa conferência fora.
+ */
+function CardCronograma({ nome, situacao, contagem, aberto, onAlternar, children }: CardCronogramaProps) {
+  return (
+    <div className={`card-cronograma ${aberto ? "aberto" : ""}`}>
+      <button type="button" className="cabecalho-card" aria-expanded={aberto} onClick={onAlternar}>
+        <span className="texto-card">
+          <span className="nome-card">{nome}</span>
+          <span className={`situacao-card ${situacao.tom}`}>{situacao.texto}</span>
+        </span>
+        <span className="contagem-card">{contagem}</span>
+        <IconeSeta className="seta-sessao" />
+      </button>
+      <div className="corpo-card" hidden={!aberto}>
+        {children}
       </div>
-      </>
-      )}
     </div>
   );
 }

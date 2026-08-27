@@ -164,6 +164,94 @@ Sem a chave configurada, o botão continua visível mas mostra uma mensagem
 clara pedindo a configuração — nunca trava a tela nem impede montar o
 cronograma manualmente.
 
+## Cronograma: cinco cards do mesmo tamanho (ago/2026)
+
+A aba deixou de ser uma pilha de blocos de formatos diferentes. São cinco
+cards com a MESMA casca (`CardCronograma`, em `TelaCronograma.tsx`), nesta
+ordem:
+
+| # | Card | O que abre dentro |
+|---|---|---|
+| 1 | **Programação geral** | A sanfona das 5 sessões e, dentro de cada uma, os produtos com a quantidade pedida. É onde a lista de amanhã é montada e de onde se vai ao Resumo |
+| 2 | **Confirmação de hoje** | O que realmente saiu do forno (`ConfirmarProducao`, embutido). Só aparece quando existe plano confirmado hoje |
+| 3–5 | **Matriz · Arthur Bernardes · Benjamin Constant** | O que vai para cada loja, quebrado por sessão |
+
+Cards 1 e 2 são as duas metades do mesmo ciclo — o de cima diz o que foi
+**pedido**, o de baixo o que realmente **saiu**. Os três de baixo são esse
+mesmo conteúdo repartido por destino.
+
+Decisões que sustentam o desenho:
+
+- **Uma casca só, e não cinco blocos parecidos.** "Mesmo tamanho, mesmo
+  visual" vira consequência do código em vez de disciplina de quem edita:
+  fechados, os cinco cabeçalhos medem exatamente 70px, e qualquer ajuste no
+  cabeçalho vale para os cinco de uma vez.
+- **A contagem do cabeçalho é em VARIEDADES, não em unidades.** "12 itens" é
+  o tamanho da lista que alguém vai separar ou conferir. O total em unidades
+  continua no rodapé do corpo, junto dos produtos, onde tem contexto — no
+  cabeçalho ele só competia com o número que importa.
+- **A data é o título da página, não um card.** Os cinco falam do mesmo dia;
+  repetir a data em cada um seria ruído. Ela deixou de ser botão: a porta da
+  montagem passou a ser o card da Programação geral, que é onde a montagem
+  mora.
+- **Todos nascem fechados.** A maior parte das aberturas da aba é consulta, e
+  o cabeçalho já responde "quantos itens" e "em que pé está". A confirmação
+  pendente aparece em laranja no próprio cabeçalho — mais visível do que
+  quando o bloco vivia aberto e era preciso ler para descobrir.
+- **O corpo é escondido, não desmontado** (`hidden`, não condicional). A
+  confirmação do dia guarda as caixas que o operador desmarcou; recolher o
+  card por engano não pode jogar essa conferência fora.
+
+`ConfirmarProducao` ganhou a prop `embutido`: sem moldura, sem título próprio
+e sem o parágrafo que explica o momento — o card já carrega os três, e dois
+parágrafos longos empurrariam as caixas de marcar para baixo da dobra.
+
+## Relatório do forno em Análises (ago/2026)
+
+A marcação de fornada virou hábito porque custa um toque. O efeito colateral
+é um dado que não existia em lugar nenhum na padaria: **a hora em que cada
+coisa fica pronta, todos os dias**. A tela de Análises agora lê esse
+histórico, abaixo dos gráficos de perda, numa seção própria — "O que saiu do
+forno".
+
+| Bloco | O que responde |
+|---|---|
+| Fornadas por dia / 1ª fornada (típica) / total no período / dias com marcação | O ritmo geral e a que horas a padaria de fato começa a entregar. A "1ª fornada típica" é a **mediana** da primeira marcação de cada dia — uma madrugada atípica não desloca o número |
+| Ritmo do forno ao longo do dia | Média de fornadas por faixa de 3h, num dia típico. Faixa vazia à tarde é balcão descoberto no fim do expediente — e sobra da manhã encalhando |
+| Itens que mais repetem fornada | Quantas vezes por dia cada item sai. Número alto é candidato a lote maior (menos setup); perto de 1 é item que sai uma vez e acabou |
+
+Três decisões que valem registrar:
+
+- **A janela é aplicada sobre a MARCAÇÃO, não sobre a lista de produção.**
+  Cada fornada carrega a própria data e a própria hora. Uma lista montada em
+  outro dia não entra na conta do período — o relatório responde "o que
+  aconteceu no forno nestes N dias", e não "o que estava planejado".
+- **O valor plotado é MÉDIA POR DIA, não total.** Em 90 dias qualquer faixa
+  acumula número grande e o ritmo de um dia típico some. "Saem 3 fornadas
+  entre 4h e 7h" é acionável; "saíram 270 em 90 dias" não é. A média divide
+  pelos **dias com fornada**, não pelo tamanho da janela — senão abrir "90
+  dias" com 5 dias de dado diluiria tudo a zero e o gráfico mentiria dizendo
+  que o forno está parado.
+- **Zero de verdade não desenha barra.** O piso de 2% de largura existe para
+  que uma taxa baixíssima ainda se veja; aplicá-lo a uma faixa com ZERO
+  fornada desenharia atividade onde não houve nenhuma — justamente o buraco
+  no dia que o gráfico serve para denunciar.
+
+O histórico é buscado **sob demanda**, só quando alguém abre Análises
+(`Repositorio.listarFornadasNoPeriodo`). O dia a dia carrega apenas as
+fornadas de hoje: elas acumulam rápido (um item que sai 6 vezes ao dia, vezes
+dezenas de produtos, vezes 30 dias) e trazer tudo na abertura do app queimaria
+leitura sem servir para nada. A consulta usa intervalo em **um campo só**
+(`data`), sem outro filtro nem ordenação por campo diferente — assim o
+Firestore resolve com o índice que já existe e ninguém precisa criar índice
+composto à mão. Loja e categoria são recortadas no cliente, sobre o que já
+veio; mexer nesses filtros não dispara consulta nova.
+
+Cobertura em `scripts/verificar_logica.ts`, caso 23: virada de mês e de ano na
+janela, marcação fora do período, filtro de categoria, faixa fora do
+expediente, concordância de singular/plural no detalhe, período vazio (sem
+divisão por zero) e produto marcado que depois saiu do catálogo.
+
 ## Insights de catálogo com IA (Gemini)
 
 Na tela de Análises, botão "✨ Gerar insights com IA": reúne um resumo por

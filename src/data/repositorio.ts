@@ -79,6 +79,16 @@ export interface Repositorio {
 
   /** Fornadas prontas do dia — marcadas pela matriz ao longo do expediente. */
   listarFornadas(data: string): Promise<FornadaPronta[]>;
+  /**
+   * Fornadas de um intervalo, para as análises.
+   *
+   * Separado de `listarFornadas` de propósito: o dia a dia carrega SÓ o
+   * dia corrente (fornadas acumulam rápido e a tela do forno só olha
+   * hoje). O período só é buscado quando alguém abre Análises — quem
+   * consulta relatório aceita esperar; quem está marcando fornada às 5h
+   * da manhã, não.
+   */
+  listarFornadasNoPeriodo(dataInicio: string, dataFim: string): Promise<FornadaPronta[]>;
   /** Mesma ideia de observarPedidos, para as fornadas do dia. */
   observarFornadas(data: string, aoMudar: (fornadas: FornadaPronta[]) => void): () => void;
   marcarFornada(fornada: FornadaPronta): Promise<void>;

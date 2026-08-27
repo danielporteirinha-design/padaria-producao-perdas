@@ -34,16 +34,44 @@
 import { useState } from "react";
 import { formatarPercentual, type BarraAnalise } from "../lib/analises";
 
+/**
+ * Como escrever o valor da barra. Os gráficos de perda plotam TAXA; os de
+ * fornada plotam CONTAGEM MÉDIA POR DIA. Escrever "3,2%" onde o dado é
+ * "3,2 fornadas por dia" não é um detalhe de formatação — é um número
+ * errado na tela.
+ */
+export type FormatoDaBarra = "percentual" | "media";
+
 interface GraficoBarrasProps {
   titulo: string;
   descricao?: string;
   barras: BarraAnalise[];
   /** Texto quando não há dado suficiente para desenhar. */
   vazio: string;
+  /** Padrão: percentual (os três gráficos de perda). */
+  formato?: FormatoDaBarra;
+  /**
+   * Sufixo colado no valor do formato "media" — ex.: "/dia". Curto de
+   * propósito: em tela de 390px, "por dia" repetido em toda barra rouba
+   * largura da própria barra, que é o dado.
+   */
+  sufixo?: string;
 }
 
-export function GraficoBarras({ titulo, descricao, barras, vazio }: GraficoBarrasProps) {
+export function GraficoBarras({
+  titulo,
+  descricao,
+  barras,
+  vazio,
+  formato = "percentual",
+  sufixo = "",
+}: GraficoBarrasProps) {
   const [detalhe, setDetalhe] = useState<string | null>(null);
+
+  const escrever = (valor: number): string =>
+    formato === "percentual"
+      ? formatarPercentual(valor)
+      : `${valor.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}${sufixo}`;
 
   const comValor = barras.filter((b) => b.valor !== null);
   if (comValor.length === 0) {
@@ -69,6 +97,12 @@ export function GraficoBarras({ titulo, descricao, barras, vazio }: GraficoBarra
       <div className="barras">
         {barras.map((barra) => {
           const semDado = barra.valor === null;
+          // Zero de verdade não ganha o traço mínimo. O piso de 2% existe
+          // para que uma taxa baixíssima ainda se veja; usá-lo em quem
+          // marcou ZERO fornada desenharia atividade onde não houve
+          // nenhuma — exatamente o buraco no dia que o gráfico serve para
+          // denunciar.
+          const zerado = barra.valor === 0;
           const largura = semDado ? 0 : ((barra.valor ?? 0) / maiorValor) * 100;
           const aberto = detalhe === barra.rotulo;
           return (
@@ -77,16 +111,22 @@ export function GraficoBarras({ titulo, descricao, barras, vazio }: GraficoBarra
               type="button"
               className={`linha-barra ${aberto ? "aberta" : ""}`}
               onClick={() => setDetalhe(aberto ? null : barra.rotulo)}
-              aria-label={`${barra.rotulo}: ${semDado ? "sem produção" : `${formatarPercentual(barra.valor ?? 0)} de perda`}`}
+              // Leitor de tela recebe a frase inteira quando ela existe:
+              // "3,2/dia" vira "três vírgula dois barra dia" na fala, que
+              // não informa nada.
+              aria-label={
+                barra.detalhe ??
+                `${barra.rotulo}: ${semDado ? "sem dados no período" : escrever(barra.valor ?? 0)}`
+              }
             >
               <span className="rotulo-barra">{barra.rotulo}</span>
               <span className="trilha-barra">
                 <span
                   className="preenchimento-barra"
-                  style={{ width: `${Math.max(largura, semDado ? 0 : 2)}%` }}
+                  style={{ width: `${semDado || zerado ? 0 : Math.max(largura, 2)}%` }}
                 />
               </span>
-              <span className="valor-barra">{semDado ? "—" : formatarPercentual(barra.valor ?? 0)}</span>
+              <span className="valor-barra">{semDado ? "—" : escrever(barra.valor ?? 0)}</span>
             </button>
           );
         })}
@@ -97,6 +137,10 @@ export function GraficoBarras({ titulo, descricao, barras, vazio }: GraficoBarra
           {(() => {
             const b = barras.find((x) => x.rotulo === detalhe);
             if (!b) return null;
+            // A barra que sabe contar a própria história tem prioridade:
+            // fornada conta EVENTOS, e "un perdidas de un produzidas"
+            // descreveria outro gráfico.
+            if (b.detalhe) return b.detalhe;
             if (b.valor === null) return `${b.rotulo}: nenhuma produção registrada no período.`;
             return `${b.rotulo}: ${b.perdido} un perdidas de ${b.produzido} un produzidas.`;
           })()}

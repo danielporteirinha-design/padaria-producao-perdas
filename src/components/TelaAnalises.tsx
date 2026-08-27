@@ -23,22 +23,27 @@
  * comparáveis.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { RegistroPerda } from "../types/perda";
+import type { FornadaPronta } from "../types/fornada";
 import {
   calcularTotais,
+  fornadasPorFaixaDeHora,
   perdaPorDiaDaSemana,
   perdaPorSemanaDoMes,
   formatarPercentual,
+  produtosPorNumeroDeFornadas,
   recortar,
+  recortarFornadas,
   topProdutosPorPerda,
+  totaisDeFornadas,
   type FiltroAnalise,
 } from "../lib/analises";
 import { CATEGORIAS_PRODUCAO } from "../lib/categorias";
 import { LOJAS } from "../lib/lojas";
-import { dataDeHojeIso } from "../lib/data";
+import { dataDeHojeIso, somarDias } from "../lib/data";
 import {
   buscarInsightsCatalogo,
   construirResumoParaInsights,
@@ -51,6 +56,12 @@ interface TelaAnalisesProps {
   produtos: Produto[];
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
+  /**
+   * Busca as fornadas do período. Vem de fora porque o app inteiro só
+   * carrega as fornadas de HOJE (elas acumulam rápido) — o histórico é
+   * buscado sob demanda, quando alguém de fato abre esta tela.
+   */
+  carregarFornadas: (dataInicio: string, dataFim: string) => Promise<FornadaPronta[]>;
 }
 
 const PERIODOS = [
@@ -59,7 +70,7 @@ const PERIODOS = [
   { dias: 90, rotulo: "90 dias" },
 ];
 
-export function TelaAnalises({ produtos, planos, perdas }: TelaAnalisesProps) {
+export function TelaAnalises({ produtos, planos, perdas, carregarFornadas }: TelaAnalisesProps) {
   const [filtro, setFiltro] = useState<FiltroAnalise>({ dias: 30 });
   const hoje = dataDeHojeIso();
 
@@ -72,6 +83,55 @@ export function TelaAnalises({ produtos, planos, perdas }: TelaAnalisesProps) {
   const porDia = useMemo(() => perdaPorDiaDaSemana(recorte), [recorte]);
   const porSemana = useMemo(() => perdaPorSemanaDoMes(recorte), [recorte]);
   const porProduto = useMemo(() => topProdutosPorPerda(recorte), [recorte]);
+
+  // ---------------------------------------------------------------
+  // Fornadas: o relatório do que SAI DO FORNO
+  //
+  // Dado independente do cronograma de propósito. Cada marcação carrega a
+  // própria data e a própria hora, então a janela é aplicada sobre as
+  // MARCAÇÕES — uma lista de produção montada em outro dia não entra na
+  // conta, nem para mais nem para menos. É o que faz o número responder
+  // "o que aconteceu no forno nestes N dias" em vez de "o que estava
+  // planejado".
+  // ---------------------------------------------------------------
+  const [fornadas, setFornadas] = useState<FornadaPronta[]>([]);
+  const [statusFornadas, setStatusFornadas] = useState<"carregando" | "pronto" | "erro">(
+    "carregando"
+  );
+
+  useEffect(() => {
+    let cancelado = false;
+    const inicio = somarDias(hoje, -(filtro.dias - 1));
+    setStatusFornadas("carregando");
+    carregarFornadas(inicio, hoje)
+      .then((lista) => {
+        if (cancelado) return;
+        setFornadas(lista);
+        setStatusFornadas("pronto");
+      })
+      .catch((erro) => {
+        if (cancelado) return;
+        console.error("Falha ao carregar fornadas do período:", erro);
+        setStatusFornadas("erro");
+      });
+    // Só o tamanho da janela dispara nova busca: loja e categoria são
+    // recortados aqui mesmo, e ir ao banco de novo por causa de um select
+    // gastaria leitura sem trazer nenhum dado novo.
+    return () => {
+      cancelado = true;
+    };
+  }, [carregarFornadas, hoje, filtro.dias]);
+
+  const recorteFornadas = useMemo(
+    () => recortarFornadas(fornadas, produtos, hoje, filtro),
+    [fornadas, produtos, hoje, filtro]
+  );
+  const totaisFornadas = useMemo(() => totaisDeFornadas(recorteFornadas), [recorteFornadas]);
+  const porFaixaDeHora = useMemo(() => fornadasPorFaixaDeHora(recorteFornadas), [recorteFornadas]);
+  const porRepeticao = useMemo(
+    () => produtosPorNumeroDeFornadas(recorteFornadas, produtos),
+    [recorteFornadas, produtos]
+  );
 
   const [insights, setInsights] = useState<InsightCatalogo[] | null>(null);
   const [statusInsights, setStatusInsights] = useState<"" | "carregando" | "erro">("");
@@ -211,6 +271,77 @@ export function TelaAnalises({ produtos, planos, perdas }: TelaAnalisesProps) {
           />
         </>
       )}
+
+      {/* O que sai do forno. Fica FORA do bloco acima de propósito: a
+          fornada é marcada mesmo em período sem lançamento de perda, e
+          esconder o relatório do forno porque não houve perda seria
+          esconder o dado justamente no mês em que ele está mais limpo. */}
+      <section className="secao-fornadas">
+        <h3>O que saiu do forno</h3>
+        <p className="nota-rodape">
+          Vem das marcações de fornada — cada uma com a hora em que o item ficou pronto. Conta
+          EVENTOS de forno, não unidades: um item que sai seis vezes por dia aparece seis vezes.
+        </p>
+
+        {statusFornadas === "carregando" && (
+          <p className="nota-rodape">Carregando as fornadas do período...</p>
+        )}
+
+        {statusFornadas === "erro" && (
+          <p className="erro-conversao" role="alert">
+            Não foi possível carregar o histórico de fornadas agora. O resto da tela continua
+            valendo.
+          </p>
+        )}
+
+        {statusFornadas === "pronto" && totaisFornadas.total === 0 && (
+          <p className="callout-inline">
+            Nenhuma fornada marcada neste recorte. Marque na aba Nova Fornada ao longo do dia — em
+            uma semana já dá para ler o ritmo do forno aqui.
+          </p>
+        )}
+
+        {statusFornadas === "pronto" && totaisFornadas.total > 0 && (
+          <>
+            <div className="linha-kpis">
+              <div className="kpi">
+                <span className="valor-kpi">{formatar(totaisFornadas.mediaPorDia)}</span>
+                <span className="rotulo-kpi">Fornadas por dia</span>
+              </div>
+              <div className="kpi">
+                <span className="valor-kpi">{totaisFornadas.primeiraHoraTipica}</span>
+                <span className="rotulo-kpi">1ª fornada (típica)</span>
+              </div>
+              <div className="kpi">
+                <span className="valor-kpi">{formatar(totaisFornadas.total)}</span>
+                <span className="rotulo-kpi">Fornadas no período</span>
+              </div>
+              <div className="kpi">
+                <span className="valor-kpi">{formatar(totaisFornadas.diasComFornada)}</span>
+                <span className="rotulo-kpi">Dias com marcação</span>
+              </div>
+            </div>
+
+            <GraficoBarras
+              titulo="Ritmo do forno ao longo do dia"
+              descricao="Média de fornadas por faixa de hora, num dia típico. Faixa vazia à tarde é balcão descoberto no fim do expediente — e sobra da manhã encalhando."
+              barras={porFaixaDeHora}
+              formato="media"
+              sufixo="/dia"
+              vazio="Ainda não há fornadas marcadas neste recorte."
+            />
+
+            <GraficoBarras
+              titulo="Itens que mais repetem fornada"
+              descricao="Quantas vezes por dia cada item sai do forno. Número alto é candidato a lote maior; número perto de 1 é item que sai uma vez e acabou."
+              barras={porRepeticao}
+              formato="media"
+              sufixo="/dia"
+              vazio="Ainda não há fornadas marcadas neste recorte."
+            />
+          </>
+        )}
+      </section>
 
       <div className="cartao-insights">
         <div className="cabecalho-insights">

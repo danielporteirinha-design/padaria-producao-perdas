@@ -84,3 +84,15 @@ export const ORDEM_DIAS: DiaDaSemana[] = [
   "sabado",
   "domingo",
 ];
+
+/**
+ * Data ISO deslocada em N dias (negativo volta no tempo). Sempre em
+ * horário local, pelo mesmo motivo de `diasEntreDatas`: montar a data em
+ * UTC faria a janela "pular" um dia perto da meia-noite, e uma janela de
+ * análise que começa no dia errado devolve número errado sem avisar.
+ */
+export function somarDias(dataIso: string, dias: number): string {
+  const [ano, mes, dia] = dataIso.split("-").map(Number);
+  const base = new Date(ano, (mes ?? 1) - 1, (dia ?? 1) + dias);
+  return formatarDataIso(base);
+}

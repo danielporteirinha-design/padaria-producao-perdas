@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import type { Produto, NovoProdutoInput } from "./types/produto";
 import type { PlanoDeProducaoDiario } from "./types/producao";
@@ -520,6 +520,20 @@ export default function App() {
   }
 
   /**
+   * Histórico de fornadas para a tela de Análises.
+   *
+   * useCallback e não uma função solta: a tela busca dentro de um
+   * useEffect que depende desta referência. Recriada a cada render, ela
+   * dispararia uma consulta nova a cada render — laço infinito de leitura
+   * no Firestore, que é conta paga.
+   */
+  const carregarFornadasDoPeriodo = useCallback(
+    (dataInicio: string, dataFim: string): Promise<FornadaPronta[]> =>
+      repositorio ? repositorio.listarFornadasNoPeriodo(dataInicio, dataFim) : Promise.resolve([]),
+    [repositorio]
+  );
+
+  /**
    * Marca que uma fornada do produto acabou de sair do forno. Um toque,
    * sem quantidade — ver src/types/fornada.ts sobre por quê.
    */
@@ -945,7 +959,14 @@ export default function App() {
             onRegistrarPerda={handleRegistrarPerda}
           />
         )}
-        {abaAtual === "analises" && <TelaAnalises produtos={produtos} planos={planos} perdas={perdas} />}
+        {abaAtual === "analises" && (
+          <TelaAnalises
+            produtos={produtos}
+            planos={planos}
+            perdas={perdas}
+            carregarFornadas={carregarFornadasDoPeriodo}
+          />
+        )}
       </main>
 
       {/* Carimbo de versão (ver vite.config.ts). Existe para dar resposta

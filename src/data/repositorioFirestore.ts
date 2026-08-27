@@ -291,6 +291,21 @@ export class RepositorioFirestore implements Repositorio {
       .sort((a, b) => a.marcadaEm.localeCompare(b.marcadaEm));
   }
 
+  async listarFornadasNoPeriodo(dataInicio: string, dataFim: string): Promise<FornadaPronta[]> {
+    // Intervalo em UM campo só (`data`), sem outro filtro nem ordenação
+    // por campo diferente: assim o Firestore resolve com o índice que já
+    // existe e a consulta não exige índice composto criado à mão — a
+    // armadilha que travou a fila de impressão por uma tarde inteira.
+    const snap = await getDocs(
+      query(
+        collection(db, COL_FORNADAS),
+        where("data", ">=", dataInicio),
+        where("data", "<=", dataFim)
+      )
+    );
+    return snap.docs.map((d) => d.data() as FornadaPronta);
+  }
+
   observarFornadas(data: string, aoMudar: (fornadas: FornadaPronta[]) => void): () => void {
     return onSnapshot(
       query(collection(db, COL_FORNADAS), where("data", "==", data)),

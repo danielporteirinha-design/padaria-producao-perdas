@@ -49,6 +49,13 @@ import { fornadasNaoVistas, marcarFornadasComoVistas } from "../src/lib/fornadas
 import { comoLiberarNotificacao, plataformaAtual } from "../src/lib/plataforma";
 import { contemBusca, paraBusca } from "../src/lib/texto";
 import {
+  fornadasPorFaixaDeHora,
+  produtosPorNumeroDeFornadas,
+  recortarFornadas,
+  totaisDeFornadas,
+} from "../src/lib/analises";
+import { somarDias } from "../src/lib/data";
+import {
   codigosComFornadaNoDia,
   fornadasDoProduto,
   idDaFornada,
@@ -1820,6 +1827,146 @@ const perdas: RegistroPerda[] = [
   // Não pode virar um filtro que aceita qualquer coisa.
   afirmar(!contemBusca("PÃO FRANCÊS", "bolo"), "termo que nao existe continua sem resultado");
   afirmar(contemBusca("PÃO FRANCÊS", ""), "termo vazio nao exclui nada");
+}
+
+// ---------------------------------------------------------------
+// Caso 23: relatorio das fornadas (ago/2026)
+//
+// Pedido do dono do negocio: usar a marcacao de fornada, que ja virou
+// habito, para produzir analise. O que precisa ficar travado aqui:
+//
+//   1. a janela e aplicada sobre a MARCACAO, nao sobre a lista de
+//      producao — fornada de outro dia nao entra na conta do periodo;
+//   2. o valor plotado e MEDIA POR DIA, nao total: em 90 dias qualquer
+//      faixa acumula numero grande e o ritmo do dia some;
+//   3. a media divide pelos dias COM fornada, nao pelo tamanho da
+//      janela — senao abrir "90 dias" com 5 dias de dado dilui tudo a
+//      zero e o grafico mente dizendo que o forno esta parado.
+// ---------------------------------------------------------------
+{
+  const HOJE = "2026-08-25";
+  const catalogo: Produto[] = [
+    {
+      codigoPdv: 1,
+      nome: "PAO FRANCES",
+      categoria: "PÃES E ROSCAS",
+      unidadeProducao: "un",
+      statusVenda: "Ativo",
+      ativoNaProducao: true,
+      pesoMedioUnitarioGramas: 50,
+    },
+    {
+      codigoPdv: 2,
+      nome: "BOLO DE FUBA",
+      categoria: "CONFEITARIA",
+      unidadeProducao: "un",
+      statusVenda: "Ativo",
+      ativoNaProducao: true,
+      pesoMedioUnitarioGramas: 800,
+    },
+  ];
+
+  const marcar = (data: string, codigoPdv: number, hora: number, minuto = 0): FornadaPronta => ({
+    id: `${data}_${codigoPdv}_${hora}${minuto}`,
+    data,
+    codigoPdv,
+    marcadaPor: "Daniel",
+    marcadaEm: new Date(
+      Number(data.slice(0, 4)),
+      Number(data.slice(5, 7)) - 1,
+      Number(data.slice(8, 10)),
+      hora,
+      minuto
+    ).toISOString(),
+  });
+
+  // somarDias e a base da janela: comecar um dia errado desloca o
+  // relatorio inteiro sem nenhum sinal na tela.
+  afirmar(somarDias(HOJE, -6) === "2026-08-19", "janela de 7 dias comeca 6 dias atras");
+  afirmar(somarDias("2026-03-01", -1) === "2026-02-28", "somarDias atravessa a virada de mes");
+  afirmar(somarDias("2026-01-01", -1) === "2025-12-31", "somarDias atravessa a virada de ano");
+  afirmar(diasEntreDatas(somarDias(HOJE, -6), HOJE) === 6, "a janela de 7 dias cobre 7 datas");
+
+  const fornadas: FornadaPronta[] = [
+    marcar(HOJE, 1, 5),
+    marcar(HOJE, 1, 5, 40),
+    marcar(HOJE, 1, 9),
+    marcar(HOJE, 2, 8),
+    marcar("2026-08-24", 1, 6),
+    marcar("2026-08-24", 1, 11),
+    // Fora da janela de 7 dias — nao pode entrar em conta nenhuma.
+    marcar("2026-07-01", 1, 6),
+    // Fora do expediente mapeado (23h): tem que aparecer, e nao sumir.
+    marcar(HOJE, 1, 23),
+  ];
+
+  const semana = recortarFornadas(fornadas, catalogo, HOJE, { dias: 7 });
+  afirmar(semana.length === 7, `janela de 7 dias deixa a marcacao antiga de fora (obtido: ${semana.length})`);
+  afirmar(
+    semana.every((f) => f.data !== "2026-07-01"),
+    "marcacao de outro mes nao entra na janela"
+  );
+
+  // Categoria recorta aqui tambem, junto com o resto da tela.
+  const soConfeitaria = recortarFornadas(fornadas, catalogo, HOJE, { dias: 7, categoria: "CONFEITARIA" });
+  afirmar(soConfeitaria.length === 1 && soConfeitaria[0].codigoPdv === 2, "filtro de categoria recorta as fornadas");
+
+  const totais = totaisDeFornadas(semana);
+  afirmar(totais.total === 7, `total conta cada marcacao (obtido: ${totais.total})`);
+  afirmar(totais.diasComFornada === 2, `dois dias com marcacao (obtido: ${totais.diasComFornada})`);
+  afirmar(totais.mediaPorDia === 3.5, `media divide pelos dias COM fornada (obtido: ${totais.mediaPorDia})`);
+  // Primeira fornada: 5h num dia, 6h no outro. A mediana nao pode virar
+  // "00h" so porque a lista tem tamanho par.
+  afirmar(
+    totais.primeiraHoraTipica === "06h",
+    `primeira hora tipica sai formatada em duas casas (obtido: "${totais.primeiraHoraTipica}")`
+  );
+
+  // Sem nenhuma fornada o relatorio precisa devolver zero, e nao dividir
+  // por zero nem estourar Math.min com lista vazia.
+  const vazio = totaisDeFornadas([]);
+  afirmar(
+    vazio.total === 0 && vazio.diasComFornada === 0 && vazio.mediaPorDia === 0,
+    "periodo sem fornada devolve zeros"
+  );
+  afirmar(vazio.primeiraHoraTipica === "—", "sem fornada nao inventa hora");
+
+  const faixas = fornadasPorFaixaDeHora(semana);
+  const faixaDe = (rotulo: string) => faixas.find((f) => f.rotulo === rotulo);
+  // 04h-07h: 5h, 5h40 (hoje) + 6h (ontem) = 3 marcacoes em 2 dias.
+  afirmar(faixaDe("04h–07h")?.valor === 1.5, `faixa da madrugada em media por dia (obtido: ${faixaDe("04h–07h")?.valor})`);
+  afirmar(faixaDe("07h–10h")?.valor === 1, "faixa da manha em media por dia");
+  afirmar(faixaDe("10h–13h")?.valor === 0.5, "faixa do meio-dia em media por dia");
+  afirmar(faixaDe("13h–16h")?.valor === 0, "faixa sem fornada aparece zerada, e nao some");
+  afirmar(faixaDe("outros horários")?.valor === 0.5, "marcacao fora do expediente nao e descartada");
+  afirmar(
+    (faixaDe("04h–07h")?.detalhe ?? "").includes("3 fornadas em 2 dias"),
+    `o detalhe conta o numero inteiro por tras da media (obtido: "${faixaDe("04h–07h")?.detalhe}")`
+  );
+  afirmar(
+    (faixaDe("13h–16h")?.detalhe ?? "").includes("nenhuma fornada"),
+    "faixa zerada explica que nao houve marcacao"
+  );
+
+  // Singular/plural: o app fala portugues, e "1 fornadas em 1 dias" e o
+  // tipo de detalhe que faz o operador desconfiar do numero todo.
+  const umDia = fornadasPorFaixaDeHora([marcar(HOJE, 1, 5)]);
+  afirmar(
+    (umDia.find((f) => f.rotulo === "04h–07h")?.detalhe ?? "").includes("1 fornada em 1 dia"),
+    `singular concorda (obtido: "${umDia.find((f) => f.rotulo === "04h–07h")?.detalhe}")`
+  );
+
+  const repeticao = produtosPorNumeroDeFornadas(semana, catalogo);
+  afirmar(repeticao[0].rotulo === "PAO FRANCES", "o item que mais repete fornada vem primeiro");
+  // Pao frances: 6 marcacoes em 2 dias = 3/dia. Bolo: 1 em 2 = 0,5/dia.
+  afirmar(repeticao[0].valor === 3, `repeticao em media por dia (obtido: ${repeticao[0].valor})`);
+  afirmar(repeticao[1].rotulo === "BOLO DE FUBA" && repeticao[1].valor === 0.5, "item de fornada unica fica embaixo");
+  afirmar(produtosPorNumeroDeFornadas([], catalogo).length === 0, "sem fornada, nenhuma barra");
+
+  // Produto marcado e depois excluido do catalogo nao pode derrubar a
+  // tela nem aparecer como "undefined".
+  const orfa = produtosPorNumeroDeFornadas([marcar(HOJE, 99, 5)], catalogo);
+  afirmar(orfa[0].rotulo === "#99", `produto fora do catalogo aparece pelo codigo (obtido: "${orfa[0].rotulo}")`);
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

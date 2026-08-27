@@ -146,6 +146,12 @@ export class RepositorioLocalStorage implements Repositorio {
     return ler<FornadaPronta[]>("padaria:fornadas", []).filter((f) => f.data === data);
   }
 
+  async listarFornadasNoPeriodo(dataInicio: string, dataFim: string): Promise<FornadaPronta[]> {
+    return ler<FornadaPronta[]>("padaria:fornadas", []).filter(
+      (f) => f.data >= dataInicio && f.data <= dataFim
+    );
+  }
+
   observarFornadas(data: string, aoMudar: (fornadas: FornadaPronta[]) => void): () => void {
     void this.listarFornadas(data).then(aoMudar);
     return () => {};

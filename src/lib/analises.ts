@@ -145,11 +145,18 @@ export function calcularTotais(recorte: RecorteAnalise): Totais {
 
 export interface BarraAnalise {
   rotulo: string;
-  /** Percentual de perda — o valor plotado. */
+  /** O valor plotado. Percentual nos gráficos de perda, média por dia nos de fornada. */
   valor: number | null;
   /** Contexto do tooltip. */
   produzido: number;
   perdido: number;
+  /**
+   * Frase pronta do detalhe, quando "X un perdidas de Y produzidas" não
+   * descreve o gráfico. Os gráficos de fornada contam EVENTOS, não
+   * unidades — deixar o componente montar a frase faria ele precisar
+   * saber de que gráfico veio cada barra.
+   */
+  detalhe?: string;
 }
 
 /**
@@ -253,4 +260,162 @@ export function formatarPercentual(valor: number): string {
 
 function arredondar(valor: number): number {
   return Math.round(valor * 100) / 100;
+}
+
+// ---------------------------------------------------------------
+// Análises das FORNADAS (ago/2026)
+//
+// Marcar fornada custa um toque e virou hábito rápido. O que se ganhou
+// com isso é um dado que não existia em lugar nenhum: a HORA em que cada
+// coisa fica pronta, todos os dias.
+//
+// Duas perguntas que esse dado responde e que a taxa de perda não:
+//
+//   1. O forno está concentrado ou espalhado no dia? Um pico às 6h e
+//      nada às 15h significa balcão vazio à tarde — e sobra de manhã.
+//   2. Que itens saem em muitas fornadas pequenas? São os candidatos a
+//      lote maior (menos setup) ou a produção sob demanda.
+//
+// Tudo aqui é PURO, como o resto do arquivo. A hora é lida do próprio
+// carimbo da marcação, no fuso do aparelho que marcou — que é o da
+// padaria.
+// ---------------------------------------------------------------
+
+import type { FornadaPronta } from "../types/fornada";
+
+/** Faixas de hora do expediente. Fora delas, entra em "outros horários". */
+const FAIXAS_DE_HORA: { inicio: number; fim: number; rotulo: string }[] = [
+  { inicio: 4, fim: 7, rotulo: "04h–07h" },
+  { inicio: 7, fim: 10, rotulo: "07h–10h" },
+  { inicio: 10, fim: 13, rotulo: "10h–13h" },
+  { inicio: 13, fim: 16, rotulo: "13h–16h" },
+  { inicio: 16, fim: 19, rotulo: "16h–19h" },
+];
+
+function horaDaMarcacao(fornada: FornadaPronta): number {
+  return new Date(fornada.marcadaEm).getHours();
+}
+
+/** Fornadas dentro da janela do filtro, respeitando a categoria. */
+export function recortarFornadas(
+  fornadas: FornadaPronta[],
+  produtos: Produto[],
+  dataReferencia: string,
+  filtro: FiltroAnalise
+): FornadaPronta[] {
+  const codigos = new Set(
+    produtos
+      .filter((p) => !filtro.categoria || p.categoria === filtro.categoria)
+      .map((p) => p.codigoPdv)
+  );
+  return fornadas.filter((f) => {
+    const dias = diasEntreDatas(f.data, dataReferencia);
+    return dias >= 0 && dias < filtro.dias && codigos.has(f.codigoPdv);
+  });
+}
+
+/**
+ * Quantas fornadas saem em cada faixa de hora, em MÉDIA POR DIA.
+ *
+ * Média, e não total: em 90 dias qualquer faixa acumula número grande, e
+ * o que interessa é o ritmo de um dia típico. "Saem 3 fornadas entre 4h
+ * e 7h" é acionável; "saíram 270 em 90 dias" não é.
+ */
+export function fornadasPorFaixaDeHora(fornadas: FornadaPronta[]): BarraAnalise[] {
+  const dias = new Set(fornadas.map((f) => f.data)).size || 1;
+  const contagem = new Map<string, number>();
+  let foraDoExpediente = 0;
+
+  for (const fornada of fornadas) {
+    const hora = horaDaMarcacao(fornada);
+    const faixa = FAIXAS_DE_HORA.find((f) => hora >= f.inicio && hora < f.fim);
+    if (!faixa) {
+      foraDoExpediente += 1;
+      continue;
+    }
+    contagem.set(faixa.rotulo, (contagem.get(faixa.rotulo) ?? 0) + 1);
+  }
+
+  const barras: BarraAnalise[] = FAIXAS_DE_HORA.map((faixa) =>
+    montarBarraDeFornada(faixa.rotulo, contagem.get(faixa.rotulo) ?? 0, dias)
+  );
+
+  if (foraDoExpediente > 0) {
+    barras.push(montarBarraDeFornada("outros horários", foraDoExpediente, dias));
+  }
+  return barras;
+}
+
+/**
+ * Itens que mais vezes saem do forno, em média por dia.
+ *
+ * Não é volume: é REPETIÇÃO. Um item com 6 fornadas por dia sai de pouco
+ * em pouco o dia inteiro — o oposto de um item que sai uma vez e acabou.
+ */
+export function produtosPorNumeroDeFornadas(
+  fornadas: FornadaPronta[],
+  produtos: Produto[],
+  quantos = 8
+): BarraAnalise[] {
+  const dias = new Set(fornadas.map((f) => f.data)).size || 1;
+  const contagem = new Map<number, number>();
+  for (const fornada of fornadas) {
+    contagem.set(fornada.codigoPdv, (contagem.get(fornada.codigoPdv) ?? 0) + 1);
+  }
+
+  const nome = (codigo: number) =>
+    produtos.find((p) => p.codigoPdv === codigo)?.nome ?? `#${codigo}`;
+
+  return [...contagem.entries()]
+    .map(([codigo, total]) => montarBarraDeFornada(nome(codigo), total, dias))
+    .sort((a, b) => (b.valor ?? 0) - (a.valor ?? 0))
+    .slice(0, quantos);
+}
+
+/**
+ * Barra de fornada: o valor plotado é a MÉDIA POR DIA, e o detalhe conta
+ * o número inteiro por trás dela. Sem o detalhe, "0,4" no gráfico não
+ * distingue "2 fornadas em 5 dias" de "40 em 100" — leituras muito
+ * diferentes para decidir alguma coisa.
+ */
+function montarBarraDeFornada(rotulo: string, total: number, dias: number): BarraAnalise {
+  return {
+    rotulo,
+    valor: arredondar(total / dias),
+    produzido: dias,
+    perdido: total,
+    detalhe:
+      total === 0
+        ? `${rotulo}: nenhuma fornada marcada nesta faixa.`
+        : `${rotulo}: ${total} ${total === 1 ? "fornada" : "fornadas"} em ${dias} ${dias === 1 ? "dia" : "dias"} com produção.`,
+  };
+}
+
+/** Números-cabeçalho das fornadas. */
+export function totaisDeFornadas(fornadas: FornadaPronta[]): {
+  total: number;
+  diasComFornada: number;
+  mediaPorDia: number;
+  primeiraHoraTipica: string;
+} {
+  const dias = new Set(fornadas.map((f) => f.data));
+  const total = fornadas.length;
+
+  // Hora da PRIMEIRA fornada de cada dia, e a mediana disso: é a hora em
+  // que a padaria realmente começa a entregar, sem se deixar levar por um
+  // dia atípico de madrugada.
+  const primeiras = [...dias]
+    .map((dia) => {
+      const doDia = fornadas.filter((f) => f.data === dia);
+      return Math.min(...doDia.map(horaDaMarcacao));
+    })
+    .sort((a, b) => a - b);
+  const mediana = primeiras.length > 0 ? primeiras[Math.floor(primeiras.length / 2)] : null;
+
+  return {
+    total,
+    diasComFornada: dias.size,
+    mediaPorDia: dias.size > 0 ? arredondar(total / dias.size) : 0,
+    primeiraHoraTipica: mediana === null ? "—" : `${String(mediana).padStart(2, "0")}h`,
+  };
 }

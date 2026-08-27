@@ -856,11 +856,15 @@ button.perigo:hover { background: #822525; }
 .ja-pedido svg { vertical-align: -2px; }
 .linha-fornada .editor-quantidade { width: 100%; }
 
+/* Sem fundo âmbar (ago/2026). Na aba Nova fornada este era o único bloco
+   colorido, e a cor de alerta gritava o dia inteiro por algo que na maior
+   parte do tempo é rotina. O que precisa de cor é o CONTADOR de pedidos
+   esperando, dentro do cabeçalho de cada loja — não a caixa inteira. */
 .cartao-reposicoes {
   margin-top: 10px;
   padding: 10px 12px;
-  background: var(--cor-alerta-fundo);
-  border: 1px solid var(--cor-alerta);
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
   border-radius: var(--raio);
   font-size: 14px;
 }
@@ -1306,38 +1310,13 @@ button.perigo:hover { background: #822525; }
 .caminho-permissao .secundario { margin-top: 8px; padding: 6px 12px; font-size: 14px; }
 
 /* ---------------------------------------------------------------
-   Balão-cabeçalho do planejamento (TelaCronograma.tsx, ago/2026)
-   Data, estado do plano e situação das filiais numa caixa só — e ela é
-   o botão que abre a sanfona do planejamento. Antes eram três blocos
-   empilhados dizendo coisas sobre o mesmo dia.
+   Título do dia no Cronograma (TelaCronograma.tsx, ago/2026)
+   Os cinco cards abaixo falam todos do mesmo dia; a data aparece uma
+   vez, aqui, e deixou de ser botão — a porta da montagem passou a ser o
+   card da Programação geral, que é onde a montagem mora.
    --------------------------------------------------------------- */
-.cabecalho-planejamento {
-  width: 100%;
-  align-items: center;
-  text-align: left;
-  font-family: inherit;
-  cursor: pointer;
-}
-.cabecalho-planejamento.aberto .seta-sessao { transform: rotate(180deg); }
-.cabecalho-planejamento .seta-sessao { flex-shrink: 0; transition: transform 0.2s ease; }
-.texto-planejamento { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.titulo-do-dia { align-items: center; }
 .titulo-planejamento { font-size: 16px; font-weight: 700; line-height: 1.3; }
-
-/* A linha de estado quebra em duas quando não couber: com nome de
-   filial longo, forçar uma linha só cortaria justamente a parte que diz
-   quem está faltando. */
-.linha-estado {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 12px;
-  font-size: 13px;
-  font-weight: 600;
-}
-.estado-plano.ok,
-.estado-filiais.ok { color: var(--cor-sucesso); }
-.estado-plano.pendente,
-.estado-filiais.pendente { color: var(--cor-alerta); }
 
 /* ---------------------------------------------------------------
    Reposições agrupadas por filial (ago/2026)
@@ -1348,6 +1327,7 @@ button.perigo:hover { background: #822525; }
    --------------------------------------------------------------- */
 .grupo-reposicao {
   background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
   border-radius: var(--raio);
   margin-bottom: 8px;
   overflow: hidden;
@@ -1536,18 +1516,26 @@ button.perigo:hover { background: #822525; }
 .tabela-simples td:first-child { overflow-wrap: anywhere; }
 
 /* ---------------------------------------------------------------
-   Um card por loja no Cronograma (ago/2026)
-   Substituiu o quadro único com uma coluna por loja: quem separa de
-   manhã separa UMA loja de cada vez, sessão por sessão, e a tabela
-   obrigava a matriz a cruzar linha e coluna de cabeça.
+   Os cinco cards do Cronograma (ago/2026)
+
+   Programação geral, confirmação do que saiu hoje e uma loja por card —
+   todos com a MESMA casca (ver CardCronograma em TelaCronograma.tsx).
+   Fechados, os cinco têm exatamente a mesma altura: cabeçalho com nome,
+   estado e contagem. É o que mantém a pilha legível de relance, sem um
+   card gritando mais alto que outro só por ser de outro assunto.
+
+   A contagem do cabeçalho é em VARIEDADES ("12 itens"), não em unidades:
+   é o tamanho da lista que alguém vai separar ou conferir. O total em
+   unidades vive no rodapé do corpo, junto dos produtos, onde tem
+   contexto.
    --------------------------------------------------------------- */
-.card-loja {
+.card-cronograma {
   background: var(--cor-superficie);
   border: 1px solid var(--cor-borda);
   border-radius: var(--raio);
   margin-bottom: 10px;
 }
-.cabecalho-loja {
+.cabecalho-card {
   width: 100%;
   display: flex;
   align-items: center;
@@ -1560,25 +1548,50 @@ button.perigo:hover { background: #822525; }
   text-align: left;
   font-family: inherit;
 }
-.texto-loja { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.nome-loja { font-size: 15px; font-weight: 700; }
+.texto-card { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nome-card { font-size: 15px; font-weight: 700; }
 /* O status da lista mora aqui dentro: antes era preciso decorar quem
    tinha enviado para saber se o número do card já estava completo. */
-.situacao-loja { font-size: 13px; font-weight: 600; }
-.situacao-loja.ok { color: var(--cor-sucesso); }
-.situacao-loja.pendente { color: var(--cor-alerta); }
-.total-loja {
+.situacao-card { font-size: 13px; font-weight: 600; }
+.situacao-card.ok { color: var(--cor-sucesso); }
+.situacao-card.pendente { color: var(--cor-alerta); }
+.contagem-card {
   font-size: 15px;
   font-weight: 700;
   color: var(--cor-acento);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.card-loja .seta-sessao { flex-shrink: 0; transition: transform 0.2s ease; }
-.card-loja.aberto .seta-sessao { transform: rotate(180deg); }
+.card-cronograma .seta-sessao { flex-shrink: 0; transition: transform 0.2s ease; }
+.card-cronograma.aberto .seta-sessao { transform: rotate(180deg); }
 
-.corpo-loja { padding: 0 14px 12px; }
-.sessao-da-loja h4 {
+/* Escondido, não desmontado: a confirmação do dia guarda as caixas que
+   o operador desmarcou, e recolher o card por engano não pode jogar essa
+   conferência fora. */
+.corpo-card[hidden] { display: none; }
+.corpo-card { padding: 0 14px 12px; }
+
+/* O componente de confirmação vive dentro do card 2 sem moldura própria
+   (prop `embutido`): caixa dentro de caixa engrossaria a borda e o
+   título apareceria duas vezes. */
+.corpo-confirmar-producao > button.primario { width: 100%; margin-top: 14px; }
+.corpo-confirmar-producao h4 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cor-texto-suave);
+}
+.resumo-producao-confirmada {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 4px;
+  font-size: 14px;
+}
+.sessao-do-card h4 {
   margin: 12px 0 4px;
   font-size: 13px;
   text-transform: uppercase;
@@ -1593,7 +1606,7 @@ button.perigo:hover { background: #822525; }
   padding: 7px 0;
   border-top: 1px solid var(--cor-borda);
 }
-.sessao-da-loja .item-da-loja:first-of-type { border-top: none; }
+.sessao-do-card .item-da-loja:first-of-type { border-top: none; }
 .nome-item-loja { font-size: 15px; overflow-wrap: anywhere; }
 .qtd-item-loja {
   font-size: 15px;
@@ -1601,3 +1614,19 @@ button.perigo:hover { background: #822525; }
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------------------------------------------------------
+   Relatório das fornadas (TelaAnalises.tsx, ago/2026).
+
+   Separado dos gráficos de perda por um filete e um respiro: são dados
+   de naturezas diferentes — um conta o que se JOGOU FORA, o outro conta
+   o que SAIU DO FORNO — e emendar os dois convidaria a ler uma barra
+   como se fosse da outra escala.
+   --------------------------------------------------------------- */
+.secao-fornadas {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cor-borda);
+}
+.secao-fornadas > h3 { margin: 0 0 4px; font-size: 17px; }
+.secao-fornadas > .nota-rodape { margin: 0 0 14px; }

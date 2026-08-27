@@ -47,6 +47,13 @@ interface ConfirmarProducaoProps {
    * nenhuma fornada já vem desmarcado, e o operador só confere.
    */
   codigosComFornada?: Set<number>;
+  /**
+   * Renderiza SEM a moldura e SEM o título próprios — para quando o
+   * componente mora dentro de um card que já tem os dois (ago/2026, tela
+   * de Cronograma). Sem isso vira caixa dentro de caixa e o título
+   * aparece duas vezes.
+   */
+  embutido?: boolean;
   onConfirmar: (codigosNaoProduzidos: number[]) => Promise<void>;
 }
 
@@ -56,6 +63,7 @@ export function ConfirmarProducao({
   operador,
   totaisPedidos,
   codigosComFornada,
+  embutido = false,
   onConfirmar,
 }: ConfirmarProducaoProps) {
   const jaConfirmado = producaoFoiConfirmada(plano);
@@ -102,7 +110,7 @@ export function ConfirmarProducao({
   if (!editando) {
     const faltaram = plano.producaoRealizada?.codigosNaoProduzidos ?? [];
     return (
-      <div className="cartao-producao-confirmada">
+      <div className={embutido ? "resumo-producao-confirmada" : "cartao-producao-confirmada"}>
         <div>
           <strong>Produção de hoje confirmada</strong>
           {faltaram.length === 0 ? (
@@ -123,19 +131,25 @@ export function ConfirmarProducao({
   }
 
   return (
-    <div className="cartao-confirmar-producao">
-      <h3>O que saiu do forno hoje?</h3>
+    <div className={embutido ? "corpo-confirmar-producao" : "cartao-confirmar-producao"}>
+      {!embutido && <h3>O que saiu do forno hoje?</h3>}
       <p className="nota-rodape">
         {codigosComFornada && codigosComFornada.size > 0
           ? "Já vem preenchido pelas fornadas marcadas durante o dia. Confira e corrija o que estiver errado."
           : "Tudo já vem marcado como produzido. Desmarque apenas o que não saiu."}{" "}
         É isso que faz a taxa de perda ser calculada sobre a produção real, e não sobre a lista.
       </p>
-      <p className="nota-rodape">
-        Feito no fim do expediente, de uma vez: é o momento em que dá para comparar tudo o que foi
-        pedido — pela matriz e pelas filiais — com o que realmente saiu, e ver de imediato onde o
-        gargalo travou a produção.
-      </p>
+      {/* O porquê do momento ("no fim do expediente, de uma vez") só
+          aparece na versão com moldura própria. Dentro do card do
+          Cronograma, dois parágrafos longos empurram as caixas de marcar
+          para baixo da dobra — e quem abriu o card veio marcar, não ler. */}
+      {!embutido && (
+        <p className="nota-rodape">
+          Feito no fim do expediente, de uma vez: é o momento em que dá para comparar tudo o que foi
+          pedido — pela matriz e pelas filiais — com o que realmente saiu, e ver de imediato onde o
+          gargalo travou a produção.
+        </p>
+      )}
 
       {plano.sessoes.map((sessao) => (
         <div key={sessao.id} className="grupo-confirmacao">
