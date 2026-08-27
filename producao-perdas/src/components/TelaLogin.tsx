@@ -19,6 +19,7 @@ import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import { LOJAS } from "../lib/lojas";
+import { BannerInstalar } from "./BannerInstalar";
 
 /**
  * Traduz os códigos do Firebase para algo que o operador entenda. A
@@ -79,6 +80,12 @@ export function TelaLogin() {
         height="115"
       />
       <p>Produção &amp; Perdas</p>
+
+      {/* O convite para instalar vive AQUI, e não só depois do login
+          (ago/2026). Quem recebe o endereço cai nesta tela, e antes o
+          único caminho para pôr o ícone no aparelho aparecia depois de
+          entrar — ou seja, nunca, para quem ainda não tinha senha. */}
+      <BannerInstalar emDestaque />
 
       <form onSubmit={entrar}>
         <label>

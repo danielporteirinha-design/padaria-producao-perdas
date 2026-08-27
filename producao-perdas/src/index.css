@@ -54,9 +54,14 @@ button, input, select, textarea { font: inherit; }
   border-bottom: 1px solid var(--cor-borda);
   overflow-x: auto;
 }
+/* 8px de folga lateral, e não 12 (ago/2026). As cinco abas da matriz não
+   cabem em 390px de qualquer jeito — a barra rola, e isso é normal —, mas
+   com "Nova fornada" o excesso era de 55px e agora, com "Hoje", é de 31.
+   Quanto menos sobra, menos "Análises" parece cortada por defeito. Abaixo
+   disso o alvo de toque começa a sofrer, e aí a conta se inverte. */
 .abas-principais button {
   flex: 1;
-  padding: 10px 12px;
+  padding: 10px 8px;
   border: none;
   background: transparent;
   border-radius: var(--raio);
@@ -485,6 +490,22 @@ button.link {
 .texto-banner-instalar { display: flex; flex-direction: column; gap: 2px; min-width: 200px; flex: 1; }
 .texto-banner-instalar span { font-size: 14px; color: var(--cor-texto-suave); }
 .acoes-banner-instalar { display: flex; align-items: center; gap: 10px; }
+
+/* Na tela de entrada o convite é o assunto, não um lembrete no meio do
+   trabalho: quem chegou pelo link veio para pôr o aplicativo no aparelho.
+   Empilhado e com o botão em largura cheia, ele é a única coisa a fazer
+   antes de ter senha. */
+.banner-instalar.destaque {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  margin: 4px 0 18px;
+  padding: 16px;
+  border-color: var(--cor-acento);
+}
+.banner-instalar.destaque .texto-banner-instalar { text-align: left; }
+.banner-instalar.destaque .texto-banner-instalar strong { font-size: 16px; }
+.banner-instalar.destaque .acoes-banner-instalar .primario { width: 100%; }
 
 /* ---------------------------------------------------------------
    Limpar uma sessão do cronograma (ver TelaCronograma.tsx).
@@ -1208,6 +1229,9 @@ button.perigo:hover { background: #822525; }
 .linha-reposicao:last-child { margin-bottom: 0; }
 .linha-reposicao .nome-filial { font-weight: 700; }
 .linha-reposicao .status-filial { flex: 1 1 100%; }
+/* Linha própria, logo abaixo do produto e ANTES dos botões: espremida ao
+   lado deles, a ressalva seria lida depois da decisão. */
+.linha-reposicao .marca-precisa-assar { flex: 1 1 100%; margin-bottom: 2px; }
 .acoes-reposicao { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .acoes-reposicao .primario { padding: 6px 12px; font-size: 14px; }
 .motivo-cancelamento {
@@ -1306,6 +1330,17 @@ button.perigo:hover { background: #822525; }
   margin-bottom: 10px;
 }
 .busca-forno input { flex: 1; min-width: 0; margin: 0; }
+/* Pedido de item que ainda não saiu do forno: a matriz precisa decidir se
+   dá tempo de ASSAR, e não só separar. Âmbar e com ícone — é uma
+   ressalva sobre a decisão, não um erro. */
+.marca-precisa-assar {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cor-alerta);
+}
 .busca-forno .link { flex-shrink: 0; }
 
 /* ---------------------------------------------------------------

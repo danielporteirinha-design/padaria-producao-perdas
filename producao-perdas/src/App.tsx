@@ -5,12 +5,14 @@ import type { PlanoDeProducaoDiario } from "./types/producao";
 import type { RegistroPerda, LancamentoPerdaInput } from "./types/perda";
 import { RepositorioFirestore } from "./data/repositorioFirestore";
 import { auth } from "./lib/firebase";
-import { lojaPorEmail } from "./lib/lojas";
+import { lojaPorEmail, nomeDaLoja } from "./lib/lojas";
 import { TelaLogin } from "./components/TelaLogin";
 import { ImportarDadosLocais } from "./components/ImportarDadosLocais";
 import { AvisoGlobal, type Aviso } from "./components/AvisoGlobal";
 import { ehFalhaTemporariaDeRede, mensagemDeFalhaAoSalvar } from "./lib/errosFirestore";
-import { dataDeHojeIso, diaDaSemanaDeData } from "./lib/data";
+import { dataDeHojeIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "./lib/data";
+import { agruparPorCategoria } from "./lib/blocosDeImpressao";
+import { gerarCanvasesFita } from "./lib/gerarImagemLista";
 import { incluirItemProduzido, planoDeHojeCom } from "./lib/producaoDeHoje";
 import { gerarId } from "./lib/id";
 import { TelaCronograma } from "./components/TelaCronograma";
@@ -22,7 +24,7 @@ import { AvisoPerdaPendente } from "./components/AvisoPerdaPendente";
 import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
 import { decidirReposicao, ehReposicao, type PedidoFilial } from "./types/pedido";
 import { base64DoDataUrl, resumoDaImpressao, type TrabalhoImpressao } from "./types/impressao";
-import { idDaFornada, type FornadaPronta } from "./types/fornada";
+import { codigosComFornadaNoDia, idDaFornada, type FornadaPronta } from "./types/fornada";
 import {
   avisarDesfechoReposicao,
   avisarFiliais,
@@ -38,6 +40,7 @@ import { PainelFornadasFilial } from "./components/PainelFornadasFilial";
 import { PainelPedidosFiliais } from "./components/PainelPedidosFiliais";
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "./lib/fornadasVistas";
 import { abaDaUrl } from "./lib/rota";
+import { useDiaCorrente } from "./lib/useDiaCorrente";
 import { prepararSom, tocarAvisoSonoro } from "./lib/somDeAviso";
 
 type Aba = "cronograma" | "fornada" | "cadastro" | "perdas" | "analises" | "pedido";
@@ -67,22 +70,42 @@ interface DefinicaoAba {
  * contador no próprio nome do botão avisa que há novidade sem precisar
  * de nada aberto na tela.
  *
- * Na matriz fica logo depois de Cronograma; na filial, antes de Pedido —
- * é o que é perecível: dá para agir sobre a fornada ainda hoje, enquanto
- * o pedido é para amanhã.
+ * HOJE E AMANHÃ (ago/2026, decisão do dono do negócio)
+ * -----------------------------------------------------
+ * Os rótulos "Nova fornada" e "Pedido" viraram "Hoje" e "Amanhã". O
+ * problema que isso resolve é de vocabulário, não de estética: as duas
+ * abas recebem PEDIDO, e os nomes antigos não diziam qual era qual —
+ * "Nova fornada" descrevia só metade do que a aba faz (a filial também
+ * pede por ali), e "Pedido" descrevia as duas.
+ *
+ * Nomeadas pelo prazo, a diferença vira óbvia sem explicação: "Hoje" é o
+ * que ainda dá para resolver no expediente de agora — a matriz anuncia o
+ * que sai do forno e a filial pede o que está faltando no balcão;
+ * "Amanhã" é a lista do próximo dia útil, montada no fim do expediente.
+ *
+ * As CHAVES internas continuam "fornada" e "pedido": elas aparecem nos
+ * links dos avisos (`/?aba=fornada`, ver src/lib/rota.ts) e renomeá-las
+ * quebraria o toque em qualquer notificação já entregue.
+ *
+ * Na matriz "Hoje" fica logo depois de Cronograma; na filial, antes de
+ * "Amanhã" — é o que é perecível.
  */
 const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
   matriz: [
     { chave: "cronograma", rotulo: "Cronograma" },
-    { chave: "fornada", rotulo: "Nova fornada" },
+    { chave: "fornada", rotulo: "Hoje" },
     { chave: "cadastro", rotulo: "Produtos" },
     { chave: "perdas", rotulo: "Perdas" },
     { chave: "analises", rotulo: "Análises" },
   ],
   filial: [
-    { chave: "fornada", rotulo: "Nova fornada" },
-    { chave: "pedido", rotulo: "Pedido" },
+    { chave: "fornada", rotulo: "Hoje" },
+    { chave: "pedido", rotulo: "Amanhã" },
     { chave: "perdas", rotulo: "Perdas" },
+    // Análises entrou para a filial em ago/2026, travada na própria loja:
+    // quem decide o que pedir amanhã é quem está no balcão, e até aqui
+    // ela pedia sem enxergar o próprio desperdício. Ver TelaAnalises.
+    { chave: "analises", rotulo: "Análises" },
   ],
 };
 
@@ -118,6 +141,22 @@ const SEGUNDOS_ATE_DESISTIR_DA_IMPRESSAO = 45_000;
  * lançou, e serve para rastrear quem preencheu o quê dentro da loja.
  */
 export default function App() {
+  /**
+   * A data de HOJE que nota a virada da meia-noite (ago/2026).
+   *
+   * `dataDeHojeIso()` sempre respondeu certo; o problema é que ela só era
+   * chamada quando algo fazia o React renderizar. No PC do caixa o app
+   * fica aberto a noite inteira, parado na mesma aba — e na quinta de
+   * manhã a tela de Perdas ainda era a de quarta, com as perdas de ontem
+   * aparecendo como "lançadas hoje".
+   *
+   * Este valor muda sozinho quando o dia vira, e é ele que as telas e a
+   * escuta de fornadas usam. Os HANDLERS continuam chamando
+   * `dataDeHojeIso()` na hora da ação: o que vale para carimbar um
+   * registro é o instante da gravação, não o que a tela achava.
+   */
+  const diaCorrente = useDiaCorrente();
+
   const [usuario, setUsuario] = useState<User | null>(null);
   const [autenticando, setAutenticando] = useState(true);
   const [migracaoResolvida, setMigracaoResolvida] = useState(false);
@@ -375,12 +414,15 @@ export default function App() {
       loja.papel === "filial" ? loja.id : undefined,
       setPedidos
     );
-    const desligarFornadas = repositorio.observarFornadas(dataDeHojeIso(), setFornadas);
+    // Reassina quando o dia vira: sem isto a escuta ficaria presa na data
+    // de ontem para sempre, e as fornadas de hoje nunca chegariam à tela
+    // de um app que não foi fechado.
+    const desligarFornadas = repositorio.observarFornadas(diaCorrente, setFornadas);
     return () => {
       desligarPedidos();
       desligarFornadas();
     };
-  }, [repositorio, loja, carregando]);
+  }, [repositorio, loja, carregando, diaCorrente]);
 
   /**
    * Fornadas que chegaram desde a última vez que esta pessoa abriu a aba.
@@ -443,8 +485,8 @@ export default function App() {
   const [fornadasNovas, setFornadasNovas] = useState(0);
   useEffect(() => {
     if (!loja) return;
-    setFornadasNovas(fornadasNaoVistas(loja.id, dataDeHojeIso(), fornadas));
-  }, [fornadas, loja]);
+    setFornadasNovas(fornadasNaoVistas(loja.id, diaCorrente, fornadas));
+  }, [fornadas, loja, diaCorrente]);
 
   /**
    * Abrir a aba É o ato de ver: o contador zera na entrada. Se
@@ -453,7 +495,7 @@ export default function App() {
    */
   function irParaAba(destino: Aba) {
     if (destino === "fornada" && loja) {
-      marcarFornadasComoVistas(loja.id, dataDeHojeIso(), fornadas);
+      marcarFornadasComoVistas(loja.id, diaCorrente, fornadas);
       setFornadasNovas(0);
     }
     setAba(destino);
@@ -703,6 +745,84 @@ export default function App() {
     } catch (erro) {
       console.warn("Pedido gravado, mas o aviso à matriz não saiu:", erro);
     }
+
+    /**
+     * A lista da filial também SAI NO PAPEL, na impressora do caixa da
+     * matriz (ago/2026, pedido do dono do negócio). Quem monta a produção
+     * de manhã trabalha com papel na mão, não com o celular — e até aqui
+     * a matriz precisava abrir o app, ir ao Cronograma, confirmar e só
+     * então imprimir para ter isso.
+     *
+     * Bloco próprio, e não junto do aviso acima: se o push falhar, o
+     * papel ainda tem que sair, e vice-versa.
+     */
+    if (!ehReposicao(pedido) && pedido.status === "enviado") {
+      await imprimirPedidoNoCaixa(pedido);
+    }
+  }
+
+  /**
+   * Enfileira a lista da filial para a impressora do caixa da matriz.
+   *
+   * A IMAGEM É GERADA AQUI, no aparelho da filial, e não na matriz: a
+   * matriz pode estar com o app fechado quando o pedido chega, e um papel
+   * que só sai quando alguém abre a tela não é impressão automática.
+   *
+   * A fila (`fila_impressao`) é compartilhada e o agente do caixa imprime
+   * tudo que estiver pendente, sem olhar de que loja veio — ver
+   * agente-impressao/agente.py. As regras do Firestore continuam exigindo
+   * que o trabalho seja carimbado com a loja de quem gravou, então cada
+   * papel é rastreável até quem o mandou.
+   */
+  async function imprimirPedidoNoCaixa(pedido: PedidoFilial) {
+    try {
+      const sessoes = agruparPorCategoria(pedido.itens, produtos);
+      if (sessoes.length === 0) return;
+
+      const agora = new Date();
+      const hora = agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      const canvases = gerarCanvasesFita({
+        titulo: `Pedido — ${nomeDaLoja(pedido.lojaId)}`,
+        dataFormatada: `${rotuloDoDia(diaDaSemanaDeData(pedido.data))}, ${formatarDataBr(pedido.data)}`,
+        sessoes,
+        produtos,
+        // A HORA vai junto de quem montou de propósito: a filial pode
+        // reenviar a lista corrigida, e aí saem dois papéis parecidos. Sem
+        // a hora, não há como saber qual dos dois é o que vale.
+        montadoPor: `${operador} · enviado ${hora}`,
+      });
+
+      const nomeBase = `pedido-${pedido.lojaId.toLowerCase()}-${pedido.data}`;
+      const criadoEm = agora.toISOString();
+      const trabalhos: TrabalhoImpressao[] = canvases.map((canvas, indice) => ({
+        id: `${nomeBase}-${indice + 1}-${agora.getTime()}`,
+        lojaId: loja!.id,
+        documento: `Pedido — ${nomeDaLoja(pedido.lojaId)}`,
+        nomeArquivo:
+          canvases.length > 1 ? `${nomeBase}-parte${indice + 1}.png` : `${nomeBase}.png`,
+        parte: indice + 1,
+        totalPartes: canvases.length,
+        imagemBase64: base64DoDataUrl(canvas.toDataURL("image/png"), nomeBase),
+        status: "pendente",
+        criadoPor: operador,
+        criadoEm,
+      }));
+
+      await repositorio!.enviarParaImpressao(trabalhos);
+    } catch (erro) {
+      /**
+       * O pedido JÁ está gravado e a matriz JÁ foi avisada por push — o
+       * papel é conveniência, não o canal. Por isso a mensagem diz o que
+       * continua valendo, em vez de sugerir que o envio falhou e precisa
+       * ser refeito.
+       */
+      console.warn("Pedido enviado, mas não foi para a impressora do caixa:", erro);
+      setAviso({
+        tipo: "erro",
+        texto:
+          "Pedido enviado para a matriz, mas não consegui mandar para a impressora do caixa. A matriz vê o pedido normalmente na tela dela.",
+      });
+    }
   }
 
   /**
@@ -945,7 +1065,7 @@ export default function App() {
 
   /** Cronograma confirmado de HOJE — é dele que sai a lista do forno. */
   const planoDeHojeParaFornada = planos.find(
-    (p) => p.data === dataDeHojeIso() && p.status === "confirmado"
+    (p) => p.data === diaCorrente && p.status === "confirmado"
   );
 
   return (
@@ -1020,6 +1140,7 @@ export default function App() {
             planos={planos}
             perdas={perdas}
             operador={operador}
+            hoje={diaCorrente}
             onSalvarPlano={handleSalvarPlano}
           />
         )}
@@ -1034,14 +1155,17 @@ export default function App() {
                   Cronograma, que é sobre amanhã. */}
               <PainelPedidosFiliais
                 pedidos={pedidos}
-                data={dataDeHojeIso()}
+                data={diaCorrente}
                 somenteReposicoes
                 reposicoesDeHoje={pedidos.filter(
-                  (p) => p.data === dataDeHojeIso() && p.tipo === "reposicao"
+                  (p) => p.data === diaCorrente && p.tipo === "reposicao"
                 )}
                 onDecidirReposicao={handleDecidirReposicao}
                 nomeDoProduto={(codigo) =>
                   produtos.find((p) => p.codigoPdv === codigo)?.nome ?? `#${codigo}`
+                }
+                saiuDoForno={(codigo) =>
+                  codigosComFornadaNoDia(fornadas, diaCorrente).has(codigo)
                 }
               />
               {/* Sem o `if` de antes (ago/2026): a busca do painel anuncia
@@ -1052,7 +1176,7 @@ export default function App() {
                 plano={planoDeHojeParaFornada}
                 produtos={produtos}
                 fornadas={fornadas}
-                dataHoje={dataDeHojeIso()}
+                dataHoje={diaCorrente}
                 onMarcarFornada={handleMarcarFornada}
               />
             </>
@@ -1073,6 +1197,7 @@ export default function App() {
             produtos={produtos}
             pedidos={pedidos}
             operador={operador}
+            hoje={diaCorrente}
             onSalvarPedido={handleSalvarPedido}
           />
         )}
@@ -1092,6 +1217,7 @@ export default function App() {
             loja={loja}
             operador={operador}
             ehMatriz={loja.papel === "matriz"}
+            hoje={diaCorrente}
             onAnularPerda={handleAnularPerda}
             onRegistrarPerda={handleRegistrarPerda}
           />
@@ -1101,6 +1227,9 @@ export default function App() {
             produtos={produtos}
             planos={planos}
             perdas={perdas}
+            pedidos={pedidos}
+            loja={loja}
+            ehMatriz={loja.papel === "matriz"}
             carregarFornadas={carregarFornadasDoPeriodo}
           />
         )}

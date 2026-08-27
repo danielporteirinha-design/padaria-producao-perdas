@@ -110,9 +110,21 @@ export default defineConfig({
         scope: "/",
         display: "standalone",
         orientation: "portrait",
-        background_color: "#faf7f2",
-        // Mesma cor de fundo do app. Ver o comentário em index.html sobre
-        // por que o vermelho da marca não ficou aqui.
+        /**
+         * BRANCO, e não o creme do app (ago/2026, decisão do dono do
+         * negócio). Este é o fundo da tela de abertura: o sistema mostra
+         * o ícone de 512 sobre ela enquanto o app carrega. Com o ícone
+         * agora em fundo branco, o creme aqui punha um quadrado branco no
+         * meio de uma tela creme — a moldura aparecia, que é exatamente o
+         * contrário do que um splash deve fazer.
+         *
+         * O preço é um piscar branco→creme na entrada, e ele é curto: a
+         * abertura dura menos de um segundo num app já instalado.
+         */
+        background_color: "#ffffff",
+        // A cor do app, não a do splash: é ela que pinta a barra do
+        // sistema enquanto o app está em uso. Ver o comentário em
+        // index.html sobre por que o vermelho da marca não ficou aqui.
         theme_color: "#faf7f2",
         icons: [
           { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },

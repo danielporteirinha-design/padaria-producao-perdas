@@ -164,6 +164,273 @@ Sem a chave configurada, o botão continua visível mas mostra uma mensagem
 clara pedindo a configuração — nunca trava a tela nem impede montar o
 cronograma manualmente.
 
+## O convite para instalar, e o evento que se perdia (ago/2026)
+
+**O defeito:** o Chrome dispara `beforeinstallprompt` UMA vez, logo depois que a
+página carrega. Quem não estiver escutando naquele instante perde o evento — e
+ele não volta enquanto a aba não for recarregada.
+
+O listener morava dentro de `BannerInstalar`, que só era montado **depois do
+login**. Na prática: o evento disparava na tela de entrada, ninguém escutava, e
+o botão "Instalar" nunca aparecia. Quem recebia o endereço ficava sem caminho
+nenhum para pôr o aplicativo no aparelho — justamente a primeira coisa que se
+faz ao receber um link.
+
+**A correção** foi tirar a escuta do componente e pôr em `src/lib/instalacao.ts`,
+que começa a trabalhar no carregamento do módulo, antes de o React desenhar
+qualquer coisa. O componente só assina as mudanças. E o convite passou a
+aparecer também na **tela de entrada**, em destaque, onde quem chegou pelo link
+de fato está.
+
+### O que não dá para fazer, e por quê
+
+Não existe instalar sem toque. `prompt()` só é aceito dentro de um gesto do
+usuário — é uma trava dos navegadores, não uma limitação deste app: sem ela,
+qualquer site colocaria ícone na tela de início de quem passasse por ele.
+
+| Aparelho | O que acontece ao abrir o link |
+|---|---|
+| **Android / Chrome** | Botão **Instalar** na tela de entrada → caixa do navegador → ícone criado. Dois toques |
+| **Windows / Chrome ou Edge** | Igual: instala em janela própria, com atalho na área de trabalho e no menu Iniciar |
+| **iPhone / Safari** | Não existe API. O banner mostra o caminho do menu Compartilhar → Adicionar à Tela de Início. E **push só funciona instalado assim** |
+
+Verificado com navegador real servindo o `dist/`: no perfil iPhone o banner
+aparece com as instruções do Safari; no perfil Chrome, com o evento disparado
+**antes** do bundle rodar (que era exatamente o caso que falhava), o botão
+aparece e chamar nele executa o `prompt()` do navegador.
+
+## Análises para as filiais — e o denominador que estava errado (ago/2026)
+
+A aba de Análises passou a existir para as filiais, travada na própria loja:
+quem decide o que pedir amanhã é quem está no balcão, e até aqui ela pedia sem
+enxergar o próprio desperdício.
+
+Liberar a tela expôs um defeito que já existia e ninguém tinha como ver.
+
+### O defeito
+
+A tela sempre deixou filtrar por loja — mas o filtro só alcançava as **perdas**.
+O denominador continuava sendo a produção inteira da padaria, as três lojas
+somadas. A taxa de uma filial saía dividida por um número várias vezes maior
+que o certo:
+
+| | Antes | Agora |
+|---|---|---|
+| Filial perdeu 10 un, pediu 50, matriz produziu 150 | 10 / 150 = **6,7%** | 10 / 50 = **20%** |
+
+6,7% é tranquilizador. 20% é uma loja jogando fora um quinto do que recebe. O
+número errado era o que parecia bom — que é o pior tipo de número num painel de
+decisão. Enquanto só a matriz via a tela, o erro ficou invisível; liberar para
+as filiais o tornou urgente.
+
+### A correção
+
+O denominador passou a acompanhar o filtro, usando a **mesma consolidação da
+fita de produção** (`src/lib/consolidacao.ts`):
+
+- **Sem filtro** — tudo que saiu do forno (matriz + o que as filiais pediram).
+  Antes era só a lista da matriz, o que já subestimava o total.
+- **Matriz** — o que ela planejou para si.
+- **Filial** — o que ela pediu, e portanto recebeu.
+
+Parte de `itensProduzidos`, não do plano cru: item marcado como "não saiu" no
+fim do expediente não foi disponibilizado a ninguém, e contá-lo afrouxaria a
+taxa de todo mundo. Rascunho e reposição ficam de fora — um não foi confirmado
+pela filial, o outro é entrega de hoje, por fora do planejamento.
+
+Sem pedido no período, a filial não recebeu nada e a taxa é **nula**, não zero:
+"não sei" e "não desperdicei" são respostas diferentes.
+
+O rótulo mudou junto: **"Recebido (un)"** na filial, "Produzido (un)" na matriz.
+Não é sinônimo — a filial não produz nada, e chamar de produção o que ela
+recebeu foi exatamente o que escondeu o erro.
+
+O caso 28 de `scripts/verificar_logica.ts` cobre a conta nos três recortes, e o
+caso antigo que afirmava o contrário foi reescrito **com o registro de por que
+a resposta mudou** — o comentário antigo justificava o número errado com um
+argumento que parecia bom.
+
+### O que a filial NÃO vê
+
+O seletor de loja não aparece para ela (em vez de aparecer desabilitado, que só
+ofereceria um caminho terminando em nada), e o botão de **insights com IA** fica
+de fora: ele lê o catálogo inteiro para achar padrão e cruza as três lojas —
+seria a única porta da tela por onde número de outra unidade entraria. As regras
+do Firestore deixam qualquer loja LER as perdas de todas (a matriz precisa da
+visão consolidada), então o que separa as unidades aqui é esta trava.
+
+## Ícone da tela de início em branco (ago/2026)
+
+O atalho do app na tela de início do celular tinha fundo **creme**
+(255,255,215), amostrado da própria logomarca. Entre os outros aplicativos da
+tela, esse creme lia como papel encardido em vez de escolha — e tirava
+contraste justamente do vermelho e do amarelo, que são a marca.
+
+Agora o fundo dos ícones é **branco puro** (`FUNDO_ICONE` em
+`scripts/gerar_icones.py`), a mesma decisão já tomada na tela de entrada do
+app, onde a marca ganhou uma placa branca. Vale para os quatro ícones da
+família comum: `pwa-192`, `pwa-512`, `pwa-maskable-512` e `apple-touch-icon`.
+
+O que **não** mudou, de propósito:
+
+- **O favicon** continua sendo o "P" branco-e-amarelo sobre vermelho. A 16-32px
+  reais da aba do navegador, qualquer texto vira borrão, e o fundo colorido é o
+  que ainda identifica a aba.
+- **O badge da notificação** continua silhueta branca sobre transparente — o
+  Android descarta as cores dele e usa só o formato.
+- **A cor de fundo do app** continua creme — decisão explícita do dono do
+  negócio.
+
+O **splash** (`background_color` no manifesto) virou branco a pedido dele: com o
+ícone em fundo branco, o creme punha um quadrado branco no meio de uma tela
+creme e a moldura aparecia, que é o contrário do que um splash deve fazer. O
+preço é um piscar branco→creme na entrada, curto num app já instalado.
+
+O **favicon deixou de ser o "P"** e passou a ser a logomarca inteira num círculo
+branco com anel vermelho (ago/2026, decisão do dono do negócio). A ressalva fica
+registrada: a pílula é 2,8x mais larga que alta, então num círculo de 32px ela
+ocupa ~11px de altura e as letras não se leem — o que identifica o ícone nesse
+tamanho passa a ser a mancha vermelha com miolo amarelo, não a palavra. O "P"
+era mais legível; a marca inteira é mais reconhecível para quem já conhece a
+padaria. O anel vermelho existe porque sem ele o disco branco some contra a
+barra clara do navegador. Um `favicon-180x180.png` acompanha, para aba fixada e
+atalho na área de trabalho, onde há espaço para a marca ser lida de verdade.
+
+> **O ícone já instalado não se atualiza sozinho.** Android e iOS copiam a
+> imagem no momento em que o atalho é criado; publicar a versão nova não mexe
+> no que já está na tela de início. Em cada aparelho: remover o atalho e
+> adicionar de novo pelo navegador.
+
+## A virada da meia-noite com o app aberto (ago/2026)
+
+Defeito relatado no uso: quinta-feira de manhã, e as perdas lançadas na
+quarta apareciam na aba de Perdas como **lançadas hoje**.
+
+Os dados estavam certos — cada perda foi gravada com a data correta, e o
+histórico da parte de baixo da tela mostrava tudo no dia certo. **A tela é que
+nunca soube que o dia mudou.** `dataDeHojeIso()` sempre respondeu certo; o
+problema é que ela só era chamada quando algo fazia o React renderizar de novo,
+e no PC do caixa o app fica aberto a noite inteira, parado na mesma aba.
+
+Esse tipo de defeito é especialmente ruim porque o que aparece é *plausível*:
+ninguém desconfia de um número que parece o de sempre.
+
+**A correção** é um `hoje` vivo (`src/lib/useDiaCorrente.ts`): relógio de um
+minuto, mais `visibilitychange` e `focus`. No celular o app fica suspenso a
+noite toda e o intervalo pode nem disparar — é o retorno ao primeiro plano que
+resolve, e ele acontece exatamente quando alguém vai usar. O valor só muda
+quando o dia muda, então o relógio não custa renderização nenhuma.
+
+O que passou a acompanhar a virada:
+
+| Onde | O que acontece agora |
+|---|---|
+| **Perdas** | Formulário limpo, sanfona fechada, busca vazia, pronto para o primeiro lançamento do dia. O modal de anulação também fecha — ele carregava um registro do dia que acabou |
+| **Escuta de fornadas** | Reassina na data nova. Antes ficava presa na data de ontem para sempre, e as fornadas de hoje nunca chegavam a um app que não foi fechado |
+| **Cronograma e Pedido** | A data-alvo avança para o novo dia seguinte |
+
+Os **handlers continuam chamando `dataDeHojeIso()`** na hora da ação: o que
+vale para carimbar um registro é o instante da gravação, não o que a tela
+achava.
+
+### Avançar a data sozinho é conveniente e perigoso ao mesmo tempo
+
+Às 23h59 alguém pode estar no meio da digitação, e virar a data ali apagaria o
+trabalho da tela. A regra vive em `src/lib/dataAlvoDoDia.ts`, com três guardas
+nesta ordem:
+
+1. Já está em amanhã? Não faz nada.
+2. **Tem coisa digitada e não gravada? Não mexe.** Trabalho na tela vale mais
+   que data certa — o cabeçalho mostra a data, e quem está digitando está
+   olhando para ela.
+3. A data-alvo ainda é futura? Não mexe: quem escolheu planejar a sexta na
+   quarta não quer ser jogado de volta para quinta.
+
+Sobra o caso que motivou tudo: tela parada, sem nada digitado, apontando para
+um dia que já chegou ou já passou.
+
+## A lista da filial sai no papel sozinha (ago/2026)
+
+Quando a filial envia a lista do próximo dia útil, além do push, o pedido é
+**enfileirado direto para a impressora do caixa da matriz**. Quem monta a
+produção de manhã trabalha com papel na mão; até aqui, para ter esse papel, a
+matriz precisava abrir o app, ir ao Cronograma, confirmar e só então imprimir.
+
+Quatro decisões:
+
+- **A imagem é gerada no aparelho da FILIAL**, não na matriz. A matriz pode
+  estar com o app fechado quando o pedido chega, e um papel que só sai quando
+  alguém abre a tela não é impressão automática.
+- **A fila é compartilhada e o agente imprime tudo que está pendente**, sem
+  olhar de que loja veio (`agente-impressao/agente.py`). As regras do Firestore
+  continuam exigindo que o trabalho seja carimbado com a loja de quem gravou —
+  então cada papel é rastreável até quem o mandou, sem nenhuma mudança nas
+  regras.
+- **A hora do envio sai impressa**, junto de quem montou: "Montado por: Ana ·
+  enviado 18:42". A filial pode reenviar a lista corrigida, e aí saem dois
+  papéis parecidos — sem a hora não há como saber qual dos dois vale.
+- **Só a lista diária imprime.** Reposição não: ela é decidida na tela, uma por
+  vez, e um papel por reposição gastaria bobina o dia inteiro para dizer o que
+  o push já disse.
+
+O agrupamento por setor virou `src/lib/blocosDeImpressao.ts`, compartilhado com
+o romaneio que a matriz imprime. A ordem é a de `CATEGORIAS_PRODUCAO`, e não a
+ordem em que a filial digitou: os dois papéis do mesmo dia são conferidos um
+contra o outro, e setores em ordens diferentes transformariam conferência em
+procura. Categoria fora das cinco não some — cai num bloco no fim, porque item
+que não aparece na lista é item que ninguém separa.
+
+**Falha de impressão não vira alarme falso.** O pedido já está gravado e a
+matriz já foi avisada por push; o papel é conveniência, não o canal. Se a fila
+recusar, a mensagem diz o que continua valendo em vez de sugerir que o envio
+precisa ser refeito.
+
+> **Depende do agente rodando no PC do caixa** (`agente-impressao/instalar-servico.bat`,
+> como administrador). Sem ele a fila enche e nada sai — e é a matriz, não a
+> filial, quem percebe isso.
+
+## "Hoje" e "Amanhã": as abas nomeadas pelo prazo (ago/2026)
+
+Os rótulos "Nova fornada" e "Pedido" viraram **Hoje** e **Amanhã**. O problema
+era de vocabulário, não de estética: as duas abas recebem PEDIDO, e os nomes
+antigos não diziam qual era qual — "Nova fornada" descrevia só metade do que a
+aba faz (a filial também pede por ali) e "Pedido" descrevia as duas.
+
+| Aba | Matriz | Filial |
+|---|---|---|
+| **Hoje** | Anuncia o que sai do forno; recebe, aceita ou recusa os pedidos do dia | Vê o que saiu, e pede o que está faltando no balcão agora |
+| **Amanhã** | — (a matriz monta o Cronograma) | Monta a lista do próximo dia útil, no fim do expediente |
+
+Nomeadas pelo prazo, a diferença fica óbvia sem explicação: **Hoje** é o que
+ainda dá para resolver no expediente de agora; **Amanhã** é planejamento.
+
+As **chaves internas continuam** `fornada` e `pedido`: elas aparecem nos links
+dos avisos (`/?aba=fornada`, ver `src/lib/rota.ts`), e renomeá-las quebraria o
+toque em qualquer notificação já entregue.
+
+### A filial passou a pedir qualquer item do catálogo
+
+Até agora a filial só podia pedir o que já tinha saído do forno — a lista da
+aba. Mas a loja fica sem coisa que ainda não foi assada, e para isso ela só
+tinha o pedido de amanhã, que chega tarde demais quando o produto está faltando
+no balcão AGORA.
+
+A aba **Hoje** ganhou a mesma busca que a matriz tem: digita o nome, informa a
+quantidade, envia. A matriz recebe push com **produto e quantidade** e responde
+— confirma, ou recusa com justificativa obrigatória. É o mesmo fluxo de
+reposição que já existia; o que mudou é a porta de entrada.
+
+Duas consequências que precisaram de tratamento:
+
+- **A matriz vê quando o pedido exige ASSAR.** Separar o que já está pronto é
+  uma decisão; decidir se ainda dá tempo de produzir é outra. A linha do pedido
+  agora carrega "ainda não saiu do forno hoje" quando é o caso — em âmbar, na
+  própria linha e **antes** dos botões, porque depois deles seria lida tarde
+  demais.
+- **A tela vazia deixou de ser um beco.** "Nada saiu do forno na matriz ainda
+  hoje" virava fim de linha; agora ela aponta para a busca, que é justamente o
+  que resolve o problema de quem chegou ali.
+
 ## Aviso de versão nova, com reinício (ago/2026)
 
 O app era `registerType: "autoUpdate"`: o service worker novo assumia sozinho

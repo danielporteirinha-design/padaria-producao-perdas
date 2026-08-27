@@ -18,11 +18,12 @@
  * automático: o operador revisa e ajusta antes de confirmar.
  */
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Produto } from "../types/produto";
 import type { ItemPlanoProducao, PlanoDeProducaoDiario, SessaoProducao } from "../types/producao";
 import type { RegistroPerda } from "../types/perda";
-import { dataDeHojeIso, dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
+import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
+import { proximaDataAlvo } from "../lib/dataAlvoDoDia";
 import { gerarId } from "../lib/id";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
@@ -39,6 +40,7 @@ import {
   itensParaLoja,
   type ItemConsolidado,
 } from "../lib/consolidacao";
+import { agruparPorCategoria } from "../lib/blocosDeImpressao";
 import { IconeCalendario, IconeLixeira, IconeSeta } from "./Icones";
 
 interface TelaCronogramaProps {
@@ -54,6 +56,8 @@ interface TelaCronogramaProps {
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   operador: string;
+  /** Data de hoje, viva — ver src/lib/useDiaCorrente.ts. */
+  hoje: string;
   onSalvarPlano: (plano: PlanoDeProducaoDiario) => Promise<void>;
 }
 
@@ -79,6 +83,7 @@ export function TelaCronograma({
   planos,
   perdas,
   operador,
+  hoje,
   onSalvarPlano,
 }: TelaCronogramaProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
@@ -129,7 +134,7 @@ export function TelaCronograma({
    * o plano usado aqui é o do dia corrente, independente da data que o
    * operador estiver planejando na tela.
    */
-  const hojeIso = dataDeHojeIso();
+  const hojeIso = hoje;
   const planoDeHoje = useMemo(
     () => planos.find((p) => p.data === hojeIso && p.status === "confirmado"),
     [planos, hojeIso]
@@ -253,17 +258,12 @@ export function TelaCronograma({
 
   function blocosDeSeparacao(consolidado: ItemConsolidado[], lojaId: string) {
     // Agrupado por categoria também no romaneio: quem separa anda pela
-    // padaria por setor, não por ordem alfabética de produto.
-    const itens = itensParaLoja(consolidado, lojaId);
-    const porCategoria = new Map<string, typeof itens>();
-    for (const item of itens) {
-      const categoria = produtos.find((p) => p.codigoPdv === item.codigoPdv)?.categoria ?? "OUTROS";
-      porCategoria.set(categoria, [...(porCategoria.get(categoria) ?? []), item]);
-    }
-    return [...porCategoria.entries()].map(([categoria, lista]) => ({
-      rotuloSessao: rotuloDaCategoria(categoria),
-      itens: lista,
-    }));
+    // padaria por setor, não por ordem alfabética de produto. A regra
+    // mora em src/lib/blocosDeImpressao.ts — o pedido que a filial manda
+    // direto para a impressora usa exatamente a mesma, e dois papéis do
+    // mesmo dia com os setores em ordens diferentes seriam impossíveis de
+    // conferir um contra o outro.
+    return agruparPorCategoria(itensParaLoja(consolidado, lojaId), produtos);
   }
 
   function trocarData(novaData: string) {
@@ -276,6 +276,19 @@ export function TelaCronograma({
   }
 
   const totalItens = Object.values(itensPorGrupo).reduce((soma, itens) => soma + itens.length, 0);
+
+  /**
+   * Vira a data-alvo quando o dia vira com o app aberto — mas só quando
+   * não há trabalho na tela para perder. A regra inteira, com o porquê de
+   * cada guarda, está em src/lib/dataAlvoDoDia.ts.
+   */
+  useEffect(() => {
+    const proxima = proximaDataAlvo(dataAlvo, hoje, totalItens > 0);
+    if (proxima) trocarData(proxima);
+    // `trocarData` e `totalItens` são recalculados a cada render; o que
+    // dispara isto é a virada do dia, e é só ela que precisa estar aqui.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoje]);
   const totalUnidades = Object.values(itensPorGrupo)
     .flat()
     .reduce((soma, i) => soma + i.quantidadeUnidades, 0);

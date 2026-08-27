@@ -22,6 +22,8 @@ import type { RegistroPerda } from "../types/perda";
 import { perdaEstaValida } from "../types/perda";
 import type { Produto } from "../types/produto";
 import { itensProduzidos } from "./producaoRealizada";
+import { consolidarProducao, quantidadeDaLoja } from "./consolidacao";
+import { ehPedidoDiario, type PedidoFilial } from "../types/pedido";
 import { diasEntreDatas } from "./data";
 import { LOJA_MATRIZ } from "./lojas";
 
@@ -34,12 +36,36 @@ export interface FiltroAnalise {
   categoria?: string;
 }
 
+/**
+ * Uma unidade DISPONIBILIZADA num dia — o denominador da taxa de perda.
+ *
+ * O NOME NÃO É "PRODUZIDA" DE PROPÓSITO (ago/2026)
+ * -------------------------------------------------
+ * Sem filtro de loja, é o total que saiu do forno. Com filtro, é o que
+ * chegou ÀQUELA loja: a matriz fica com o que planejou para si, e cada
+ * filial com o que pediu. São coisas diferentes, e chamar tudo de
+ * "produzido" foi o que escondeu o defeito que isto corrige.
+ *
+ * O DEFEITO: a tela deixava filtrar por filial, mas o denominador
+ * continuava sendo a produção INTEIRA da matriz — as três lojas somadas.
+ * A taxa de perda de uma filial saía dividida por um número três vezes
+ * maior que o certo, e parecia ótima. Um número errado que parece bom é
+ * o pior tipo de número num painel de decisão.
+ */
+export interface UnidadeFornecida {
+  data: string;
+  diaDaSemana: DiaDaSemana;
+  codigoPdv: number;
+  unidades: number;
+}
+
 export interface RecorteAnalise {
-  planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   produtos: Produto[];
   /** Códigos dentro do filtro de categoria — usado por todas as agregações. */
   codigosNoFiltro: Set<number>;
+  /** O denominador, já recortado por período, loja e categoria. */
+  fornecimento: UnidadeFornecida[];
 }
 
 export const ORDEM_DIAS: DiaDaSemana[] = [
@@ -73,13 +99,51 @@ export function semanaDoMes(dataIso: string): number {
   return Math.min(Math.floor((dia - 1) / 7) + 1, 5);
 }
 
+/**
+ * O que foi disponibilizado num dia, já dividido por destino.
+ *
+ * Usa a MESMA consolidação da fita de produção (ver
+ * src/lib/consolidacao.ts): o que a matriz planejou para si mais o que
+ * cada filial pediu. Sem filtro de loja devolve o total; com filtro,
+ * devolve só a parte daquela loja.
+ *
+ * Parte de `itensProduzidos`, e não do plano cru: item marcado como "não
+ * saiu" no fim do expediente não foi disponibilizado a ninguém, e contá-lo
+ * no denominador afrouxaria a taxa de perda de todo mundo.
+ */
+function fornecimentoDoDia(
+  plano: PlanoDeProducaoDiario,
+  pedidos: PedidoFilial[],
+  codigosNoFiltro: Set<number>,
+  lojaId: string | undefined
+): UnidadeFornecida[] {
+  const consolidado = consolidarProducao(
+    itensProduzidos(plano),
+    pedidos.filter((p) => p.data === plano.data),
+    LOJA_MATRIZ.id
+  );
+
+  const naoSaiu = new Set(plano.producaoRealizada?.codigosNaoProduzidos ?? []);
+
+  return consolidado
+    .filter((item) => codigosNoFiltro.has(item.codigoPdv) && !naoSaiu.has(item.codigoPdv))
+    .map((item) => ({
+      data: plano.data,
+      diaDaSemana: plano.diaDaSemana,
+      codigoPdv: item.codigoPdv,
+      unidades: lojaId ? quantidadeDaLoja(item, lojaId) : item.totalUnidades,
+    }))
+    .filter((u) => u.unidades > 0);
+}
+
 /** Aplica período, loja e categoria de uma vez só. */
 export function recortar(
   produtos: Produto[],
   planos: PlanoDeProducaoDiario[],
   perdas: RegistroPerda[],
   dataReferencia: string,
-  filtro: FiltroAnalise
+  filtro: FiltroAnalise,
+  pedidos: PedidoFilial[] = []
 ): RecorteAnalise {
   const codigosNoFiltro = new Set(
     produtos.filter((p) => !filtro.categoria || p.categoria === filtro.categoria).map((p) => p.codigoPdv)
@@ -90,13 +154,25 @@ export function recortar(
     return dias >= 0 && dias < filtro.dias;
   };
 
+  const planosNaJanela = planos.filter((p) => p.status === "confirmado" && dentroDaJanela(p.data));
+  const pedidosNaJanela = pedidos.filter(
+    (p) => p.status === "enviado" && ehPedidoDiario(p) && dentroDaJanela(p.data)
+  );
+
   return {
     produtos,
     codigosNoFiltro,
-    // Produção é sempre da matriz — não há plano de filial. Filtrar
-    // produção por loja de filial devolveria vazio, o que faria a taxa de
-    // perda perder o denominador; por isso a loja só filtra as PERDAS.
-    planos: planos.filter((p) => p.status === "confirmado" && dentroDaJanela(p.data)),
+    /**
+     * O denominador acompanha o filtro de loja (ago/2026).
+     *
+     * Antes não acompanhava: a loja filtrava só as PERDAS, e a produção
+     * continuava sendo a da padaria inteira. Filtrar por uma filial dava
+     * uma taxa de perda dividida pelo triplo do que aquela loja recebeu —
+     * e o painel existe justamente para decidir em cima desse número.
+     */
+    fornecimento: planosNaJanela.flatMap((plano) =>
+      fornecimentoDoDia(plano, pedidosNaJanela, codigosNoFiltro, filtro.lojaId)
+    ),
     perdas: perdas.filter(
       (p) =>
         perdaEstaValida(p) &&
@@ -119,12 +195,9 @@ export interface Totais {
 export function calcularTotais(recorte: RecorteAnalise): Totais {
   let produzido = 0;
   const diasComProducao = new Set<string>();
-  for (const plano of recorte.planos) {
-    for (const item of itensProduzidos(plano)) {
-      if (!recorte.codigosNoFiltro.has(item.codigoPdv)) continue;
-      produzido += item.quantidadeUnidades;
-      diasComProducao.add(plano.data);
-    }
+  for (const unidade of recorte.fornecimento) {
+    produzido += unidade.unidades;
+    diasComProducao.add(unidade.data);
   }
 
   let perdido = 0;
@@ -168,11 +241,8 @@ export function perdaPorDiaDaSemana(recorte: RecorteAnalise): BarraAnalise[] {
   const produzido = new Map<DiaDaSemana, number>();
   const perdido = new Map<DiaDaSemana, number>();
 
-  for (const plano of recorte.planos) {
-    for (const item of itensProduzidos(plano)) {
-      if (!recorte.codigosNoFiltro.has(item.codigoPdv)) continue;
-      produzido.set(plano.diaDaSemana, (produzido.get(plano.diaDaSemana) ?? 0) + item.quantidadeUnidades);
-    }
+  for (const unidade of recorte.fornecimento) {
+    produzido.set(unidade.diaDaSemana, (produzido.get(unidade.diaDaSemana) ?? 0) + unidade.unidades);
   }
   for (const perda of recorte.perdas) {
     perdido.set(perda.diaDaSemana, (perdido.get(perda.diaDaSemana) ?? 0) + perda.quantidadeUnidadesEstimada);
@@ -186,12 +256,9 @@ export function perdaPorSemanaDoMes(recorte: RecorteAnalise): BarraAnalise[] {
   const produzido = new Map<number, number>();
   const perdido = new Map<number, number>();
 
-  for (const plano of recorte.planos) {
-    const semana = semanaDoMes(plano.data);
-    for (const item of itensProduzidos(plano)) {
-      if (!recorte.codigosNoFiltro.has(item.codigoPdv)) continue;
-      produzido.set(semana, (produzido.get(semana) ?? 0) + item.quantidadeUnidades);
-    }
+  for (const unidade of recorte.fornecimento) {
+    const semana = semanaDoMes(unidade.data);
+    produzido.set(semana, (produzido.get(semana) ?? 0) + unidade.unidades);
   }
   for (const perda of recorte.perdas) {
     const semana = semanaDoMes(perda.data);
@@ -214,11 +281,8 @@ export function topProdutosPorPerda(recorte: RecorteAnalise, quantos = 8): Barra
   const produzido = new Map<number, number>();
   const perdido = new Map<number, number>();
 
-  for (const plano of recorte.planos) {
-    for (const item of itensProduzidos(plano)) {
-      if (!recorte.codigosNoFiltro.has(item.codigoPdv)) continue;
-      produzido.set(item.codigoPdv, (produzido.get(item.codigoPdv) ?? 0) + item.quantidadeUnidades);
-    }
+  for (const unidade of recorte.fornecimento) {
+    produzido.set(unidade.codigoPdv, (produzido.get(unidade.codigoPdv) ?? 0) + unidade.unidades);
   }
   for (const perda of recorte.perdas) {
     perdido.set(perda.codigoPdv, (perdido.get(perda.codigoPdv) ?? 0) + perda.quantidadeUnidadesEstimada);

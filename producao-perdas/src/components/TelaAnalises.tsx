@@ -42,7 +42,8 @@ import {
   type FiltroAnalise,
 } from "../lib/analises";
 import { CATEGORIAS_PRODUCAO } from "../lib/categorias";
-import { LOJAS } from "../lib/lojas";
+import { LOJA_MATRIZ, LOJAS, nomeDaLoja, type Loja } from "../lib/lojas";
+import type { PedidoFilial } from "../types/pedido";
 import { dataDeHojeIso, somarDias } from "../lib/data";
 import {
   buscarInsightsCatalogo,
@@ -57,6 +58,20 @@ interface TelaAnalisesProps {
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   /**
+   * Pedidos das filiais — o DENOMINADOR quando se filtra por loja.
+   *
+   * Sem eles a taxa de perda de uma filial seria dividida pela produção
+   * inteira da padaria, e sairia três vezes menor que a real (ver
+   * src/lib/analises.ts).
+   */
+  pedidos: PedidoFilial[];
+  /**
+   * Loja desta sessão. Na filial a tela é TRAVADA nela: a filial vê os
+   * próprios números, e não os das outras unidades.
+   */
+  loja: Loja;
+  ehMatriz: boolean;
+  /**
    * Busca as fornadas do período. Vem de fora porque o app inteiro só
    * carrega as fornadas de HOJE (elas acumulam rápido) — o histórico é
    * buscado sob demanda, quando alguém de fato abre esta tela.
@@ -70,13 +85,34 @@ const PERIODOS = [
   { dias: 90, rotulo: "90 dias" },
 ];
 
-export function TelaAnalises({ produtos, planos, perdas, carregarFornadas }: TelaAnalisesProps) {
-  const [filtro, setFiltro] = useState<FiltroAnalise>({ dias: 30 });
+export function TelaAnalises({
+  produtos,
+  planos,
+  perdas,
+  pedidos,
+  loja,
+  ehMatriz,
+  carregarFornadas,
+}: TelaAnalisesProps) {
+  /**
+   * A filial nasce — e permanece — filtrada nela mesma (ago/2026, pedido
+   * do dono do negócio: "filtrando por aquela unidade, ela vai ter as
+   * informações para tomadas de estratégias").
+   *
+   * Não é só esconder um seletor: as regras do Firestore deixam qualquer
+   * loja LER as perdas de todas (a matriz precisa da visão consolidada),
+   * então o que impede uma filial de ver o desperdício da vizinha é esta
+   * trava. Ela vale para os números, os gráficos e o resumo da IA de uma
+   * vez só, porque todos saem do mesmo recorte.
+   */
+  const [filtro, setFiltro] = useState<FiltroAnalise>(() =>
+    ehMatriz ? { dias: 30 } : { dias: 30, lojaId: loja.id }
+  );
   const hoje = dataDeHojeIso();
 
   const recorte = useMemo(
-    () => recortar(produtos, planos, perdas, hoje, filtro),
-    [produtos, planos, perdas, hoje, filtro]
+    () => recortar(produtos, planos, perdas, hoje, filtro, pedidos),
+    [produtos, planos, perdas, hoje, filtro, pedidos]
   );
 
   const totais = useMemo(() => calcularTotais(recorte), [recorte]);
@@ -173,10 +209,23 @@ export function TelaAnalises({ produtos, planos, perdas, carregarFornadas }: Tel
   }
 
   const semDados = totais.produzido === 0 && totais.perdido === 0;
+  /** Filial não produz: o que ela tem é o que a matriz mandou. */
+  const ehLojaQueRecebe = Boolean(filtro.lojaId) && filtro.lojaId !== LOJA_MATRIZ.id;
 
   return (
     <div className="tela">
       <h2>Análises</h2>
+      {/* Qual loja está na conta, dito por extenso. Sem isto, a mesma tela
+          com números muito diferentes ficaria sem explicação — e o
+          denominador MUDA com o filtro: sem loja é tudo que saiu do forno,
+          com loja é o que chegou àquela unidade. */}
+      <p className="subtitulo">
+        {!filtro.lojaId
+          ? "Todas as lojas — perdas sobre tudo que saiu do forno"
+          : filtro.lojaId === LOJA_MATRIZ.id
+            ? `${nomeDaLoja(filtro.lojaId)} — perdas sobre o que ficou na matriz`
+            : `${nomeDaLoja(filtro.lojaId)} — perdas sobre o que esta loja recebeu`}
+      </p>
 
       {/* Filtros numa linha só, acima de tudo — vale para os números, os
           gráficos e a IA ao mesmo tempo. */}
@@ -194,18 +243,24 @@ export function TelaAnalises({ produtos, planos, perdas, carregarFornadas }: Tel
           ))}
         </div>
         <div className="grupo-selects">
-          <select
-            value={filtro.lojaId ?? ""}
-            aria-label="Loja"
-            onChange={(e) => setFiltro((f) => ({ ...f, lojaId: e.target.value || undefined }))}
-          >
-            <option value="">Todas as lojas</option>
-            {LOJAS.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.nomeCurto}
-              </option>
-            ))}
-          </select>
+          {/* Só a matriz troca de loja. Na filial o seletor não aparece —
+              em vez de aparecer desabilitado, que só ofereceria um caminho
+              que termina em nada. Qual loja está sendo analisada fica dito
+              no subtítulo da tela. */}
+          {ehMatriz && (
+            <select
+              value={filtro.lojaId ?? ""}
+              aria-label="Loja"
+              onChange={(e) => setFiltro((f) => ({ ...f, lojaId: e.target.value || undefined }))}
+            >
+              <option value="">Todas as lojas</option>
+              {LOJAS.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.nomeCurto}
+                </option>
+              ))}
+            </select>
+          )}
           <select
             value={filtro.categoria ?? ""}
             aria-label="Categoria"
@@ -237,7 +292,11 @@ export function TelaAnalises({ produtos, planos, perdas, carregarFornadas }: Tel
             </div>
             <div className="kpi">
               <span className="valor-kpi">{formatar(totais.produzido)}</span>
-              <span className="rotulo-kpi">Produzido (un)</span>
+              {/* "Recebido" na filial, "Produzido" na matriz. Não é
+                  sinônimo: a filial não produz nada, e chamar de produção
+                  o que ela recebeu foi o que escondeu, por meses, a taxa
+                  de perda dividida pelo número errado. */}
+              <span className="rotulo-kpi">{ehLojaQueRecebe ? "Recebido (un)" : "Produzido (un)"}</span>
             </div>
             <div className="kpi">
               <span className="valor-kpi">{formatar(totais.perdido)}</span>
@@ -343,6 +402,11 @@ export function TelaAnalises({ produtos, planos, perdas, carregarFornadas }: Tel
         )}
       </section>
 
+      {/* A IA lê o catálogo INTEIRO para achar padrão (produto parado há
+          semanas, sobra alta), e isso cruza as três lojas. Na filial ela
+          fica de fora: seria a única porta da tela por onde número de
+          outra unidade entraria. */}
+      {ehMatriz && (
       <div className="cartao-insights">
         <div className="cabecalho-insights">
           <h3>✨ Insights e melhorias (IA)</h3>
@@ -379,6 +443,7 @@ export function TelaAnalises({ produtos, planos, perdas, carregarFornadas }: Tel
           </ul>
         )}
       </div>
+      )}
     </div>
   );
 }

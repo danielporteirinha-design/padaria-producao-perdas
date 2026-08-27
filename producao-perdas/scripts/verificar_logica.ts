@@ -57,6 +57,8 @@ import {
 import { somarDias } from "../src/lib/data";
 import { incluirItemProduzido, planoContemItem, planoDeHojeCom } from "../src/lib/producaoDeHoje";
 import { abaDaUrl, urlDaAba } from "../src/lib/rota";
+import { agruparPorCategoria } from "../src/lib/blocosDeImpressao";
+import { proximaDataAlvo } from "../src/lib/dataAlvoDoDia";
 import {
   codigosComFornadaNoDia,
   fornadasDoProduto,
@@ -1340,10 +1342,23 @@ const perdas: RegistroPerda[] = [
     );
   }
 
-  // --- O filtro de loja recorta as PERDAS, nunca os PLANOS ---
-  // Produção é sempre da matriz. Se o filtro de filial recortasse os planos,
-  // o denominador iria a zero e a taxa da filial apareceria como "—" para
-  // sempre — exatamente o número que o dono do negócio quer ver.
+  // --- O filtro de loja recorta OS DOIS LADOS da conta ---
+  //
+  // ESTE CASO MUDOU DE RESPOSTA em ago/2026, e vale registrar por quê.
+  //
+  // Antes ele afirmava que o filtro de filial devia preservar a produção
+  // INTEIRA da matriz como denominador: 30 un perdidas sobre as 200
+  // produzidas davam 15%. A justificativa parecia boa — recortar os planos
+  // zeraria o denominador e a taxa apareceria como "—".
+  //
+  // Só que 15% era mentira. A filial não recebeu 200 unidades: ela recebeu
+  // o que PEDIU. Dividir a perda dela pela produção das três lojas dava um
+  // número baixo e tranquilizador sobre uma loja que podia estar jogando
+  // fora metade do que recebia. O defeito ficou invisível enquanto só a
+  // matriz via a tela; liberar Análises para as filiais o tornou urgente.
+  //
+  // A resposta certa: sem pedido daquela filial no período, ela não
+  // recebeu nada, e a taxa é NULA — que é "não sei", não "0%".
   {
     const planos = [plano("p1", HOJE, "quarta", [{ codigoPdv: 112, quantidadeUnidades: 200 }])];
     const perdas = [
@@ -1357,16 +1372,24 @@ const perdas: RegistroPerda[] = [
     });
     const totais = calcularTotais(soFilial);
     afirmar(
-      totais.produzido === 200,
-      `filtro de filial preserva o denominador da matriz (obtido: ${totais.produzido})`
+      totais.produzido === 0,
+      `sem pedido no periodo, a filial nao recebeu nada (obtido: ${totais.produzido})`
     );
+    afirmar(totais.perdido === 30, "a perda da filial continua sendo contada");
     afirmar(
-      totais.perdido === 30 && totais.taxaPerda === 15,
-      `filtro de filial isola a perda da filial: 30/200 = 15% (obtido: ${totais.taxaPerda}%)`
+      totais.taxaPerda === null,
+      `sem denominador a taxa e nula, e nao um numero inventado (obtido: ${totais.taxaPerda})`
     );
+
+    // A matriz, essa sim, fica com o que planejou para si.
+    const soMatriz = calcularTotais(
+      recortar(catalogo, planos, perdas, HOJE, { dias: 30, lojaId: "MATRIZ" })
+    );
+    afirmar(soMatriz.produzido === 200 && soMatriz.taxaPerda === 5, "matriz: 10/200 = 5%");
 
     const semFiltro = calcularTotais(recortar(catalogo, planos, perdas, HOJE, { dias: 30 }));
     afirmar(semFiltro.perdido === 40, "sem filtro de loja, as perdas das três lojas somam");
+    afirmar(semFiltro.produzido === 200, "sem filtro, o denominador e tudo que saiu do forno");
   }
 
   // --- Perda sem lojaId (registro anterior às filiais) conta como matriz ---
@@ -2118,6 +2141,333 @@ const perdas: RegistroPerda[] = [
   afirmar(abaDaUrl("/?aba=inexistente") === null, "aba desconhecida e ignorada");
   afirmar(abaDaUrl("/?outra=fornada") === null, "outro parametro nao vira destino");
   afirmar(abaDaUrl("/?x=1&aba=fornada") === "fornada", "a aba e encontrada entre outros parametros");
+}
+
+// ---------------------------------------------------------------
+// Caso 26: blocos por categoria na fita impressa (ago/2026)
+//
+// Quem separa a mercadoria de manha anda pela padaria por SETOR, nao por
+// ordem alfabetica de produto. E a ordem dos setores tem que ser a MESMA
+// em todo papel do dia: o pedido que a filial manda direto para a
+// impressora e o romaneio que a matriz imprime sao conferidos um contra o
+// outro, e ordens diferentes transformariam isso em procura.
+// ---------------------------------------------------------------
+{
+  const catalogo: Produto[] = [
+    {
+      codigoPdv: 1,
+      nome: "PAO FRANCES",
+      categoria: "PÃES E ROSCAS",
+      unidadeProducao: "un",
+      statusVenda: "Ativo",
+      ativoNaProducao: true,
+      pesoMedioUnitarioGramas: 50,
+    },
+    {
+      codigoPdv: 2,
+      nome: "BOLO DE FUBA",
+      categoria: "BOLOS",
+      unidadeProducao: "un",
+      statusVenda: "Ativo",
+      ativoNaProducao: true,
+      pesoMedioUnitarioGramas: 800,
+    },
+    {
+      codigoPdv: 3,
+      nome: "BISCOITO DE QUEIJO",
+      categoria: "BISCOITOS",
+      unidadeProducao: "un",
+      statusVenda: "Ativo",
+      ativoNaProducao: true,
+      pesoMedioUnitarioGramas: 20,
+    },
+    {
+      codigoPdv: 4,
+      nome: "ROSCA DOCE",
+      categoria: "PÃES E ROSCAS",
+      unidadeProducao: "un",
+      statusVenda: "Ativo",
+      ativoNaProducao: true,
+      pesoMedioUnitarioGramas: 300,
+    },
+    {
+      codigoPdv: 5,
+      nome: "ITEM DE CATEGORIA ANTIGA",
+      categoria: "ENCOMENDAS_E_ESPECIAIS",
+      unidadeProducao: "un",
+      statusVenda: "Ativo",
+      ativoNaProducao: true,
+      pesoMedioUnitarioGramas: 100,
+    },
+  ];
+
+  // Itens fora de ordem de proposito: e o caso real, porque a filial
+  // adiciona na ordem em que lembra.
+  const blocos = agruparPorCategoria(
+    [
+      { codigoPdv: 2, quantidadeUnidades: 3 },
+      { codigoPdv: 3, quantidadeUnidades: 40 },
+      { codigoPdv: 1, quantidadeUnidades: 200 },
+      { codigoPdv: 4, quantidadeUnidades: 10 },
+    ],
+    catalogo
+  );
+
+  afirmar(blocos.length === 3, `uma sessao por categoria com item (obtido: ${blocos.length})`);
+  // A ordem e a de CATEGORIAS_PRODUCAO, nao a de chegada dos itens.
+  afirmar(
+    blocos.map((b) => b.rotuloSessao).join(" | ") === "Pães e Roscas | Biscoitos | Bolos",
+    `setores na ordem do catalogo (obtido: "${blocos.map((b) => b.rotuloSessao).join(" | ")}")`
+  );
+  afirmar(blocos[0].itens.length === 2, "os dois paes caem na mesma sessao");
+  afirmar(
+    blocos[0].itens.map((i) => i.codigoPdv).join(",") === "1,4",
+    "dentro da sessao, a ordem de chegada e preservada"
+  );
+  afirmar(blocos[0].itens[0].quantidadeUnidades === 200, "a quantidade atravessa o agrupamento");
+
+  // Categoria vazia nao vira sessao em branco no papel.
+  afirmar(
+    !blocos.some((b) => b.itens.length === 0),
+    "categoria sem item nao imprime sessao vazia"
+  );
+
+  // Categoria fora das cinco nao pode SUMIR: item que nao aparece na
+  // lista e item que ninguem separa.
+  const comAntiga = agruparPorCategoria(
+    [
+      { codigoPdv: 5, quantidadeUnidades: 2 },
+      { codigoPdv: 1, quantidadeUnidades: 50 },
+    ],
+    catalogo
+  );
+  afirmar(comAntiga.length === 2, "categoria fora das cinco continua aparecendo");
+  afirmar(
+    comAntiga[0].rotuloSessao === "Pães e Roscas",
+    "as categorias conhecidas vem primeiro"
+  );
+  afirmar(
+    comAntiga[1].itens[0].codigoPdv === 5,
+    "a categoria desconhecida vai para o fim, com o item dentro"
+  );
+
+  // Produto que saiu do catalogo tambem nao pode sumir do papel.
+  const orfao = agruparPorCategoria([{ codigoPdv: 999, quantidadeUnidades: 5 }], catalogo);
+  afirmar(orfao.length === 1, "item sem cadastro ainda gera uma sessao");
+
+  afirmar(agruparPorCategoria([], catalogo).length === 0, "pedido vazio nao gera papel");
+}
+
+// ---------------------------------------------------------------
+// Caso 27: virada de dia com o app aberto (ago/2026)
+//
+// Defeito relatado pelo dono do negocio: quinta de manha, e as perdas
+// lancadas na quarta apareciam como "lancadas hoje". Os DADOS estavam
+// certos — cada perda foi gravada com a data certa. A TELA e que nunca
+// soube que o dia mudou, porque no PC do caixa o app fica aberto a noite
+// inteira e nada o fazia renderizar de novo.
+//
+// A mesma raiz atinge Cronograma e Pedido, que abrem no dia SEGUINTE: a
+// data-alvo era escolhida uma vez, na montagem da tela, e nunca mais. Na
+// quinta de manha ela ainda apontava para a quinta, que ja tinha
+// chegado, e quem fosse montar a lista de sexta editava a de quinta.
+//
+// Avancar sozinho e conveniente e perigoso ao mesmo tempo: as 23h59
+// alguem pode estar no meio da digitacao. Dai as guardas.
+// ---------------------------------------------------------------
+{
+  const QUINTA = "2026-08-27";
+  const SEXTA = "2026-08-28";
+  const QUARTA = "2026-08-26";
+
+  // O caso que motivou tudo: tela parada apontando para um dia que ja
+  // chegou, sem nada digitado.
+  afirmar(
+    proximaDataAlvo(QUINTA, QUINTA, false) === SEXTA,
+    `data-alvo que virou hoje avanca para amanha (obtido: ${proximaDataAlvo(QUINTA, QUINTA, false)})`
+  );
+  // Fim de semana ou feriado com o app esquecido aberto: pula direto.
+  afirmar(proximaDataAlvo(QUARTA, QUINTA, false) === SEXTA, "data-alvo no passado tambem avanca");
+
+  // Ja esta certa: nao mexe (e nao dispara render a toa).
+  afirmar(proximaDataAlvo(SEXTA, QUINTA, false) === null, "data-alvo ja em amanha nao muda");
+
+  // A guarda que protege o trabalho: 23h59, alguem digitando.
+  afirmar(
+    proximaDataAlvo(QUINTA, QUINTA, true) === null,
+    "com item digitado na tela, a data NAO vira sozinha"
+  );
+
+  // Quem escolheu planejar mais adiante nao pode ser jogado de volta.
+  afirmar(
+    proximaDataAlvo("2026-09-05", QUINTA, false) === null,
+    "data futura escolhida a mao e preservada"
+  );
+
+  // Viradas de mes e de ano continuam valendo — a conta e a de somarDias.
+  afirmar(proximaDataAlvo("2026-08-31", "2026-08-31", false) === "2026-09-01", "vira o mes");
+  afirmar(proximaDataAlvo("2026-12-31", "2026-12-31", false) === "2027-01-01", "vira o ano");
+}
+
+// ---------------------------------------------------------------
+// Caso 28: taxa de perda por LOJA (ago/2026)
+//
+// Defeito que so apareceu quando a aba de Analises foi liberada para as
+// filiais: a tela deixava filtrar por loja, mas o filtro so alcancava as
+// PERDAS. O denominador continuava sendo a producao inteira da padaria —
+// as tres lojas somadas.
+//
+// Resultado: a taxa de uma filial saia dividida por um numero varias
+// vezes maior que o certo, e parecia otima. Numero errado que parece bom
+// e o pior tipo de numero num painel de decisao.
+//
+// A correcao usa a MESMA consolidacao da fita de producao: sem filtro, o
+// denominador e tudo que saiu do forno; com filtro, e o que chegou
+// aquela loja — a matriz fica com o que planejou para si, cada filial com
+// o que pediu.
+// ---------------------------------------------------------------
+{
+  const DIA = "2026-08-26"; // quarta
+  const HOJE = "2026-08-27";
+  const ARTHUR = "FILIAL_ARTHUR_BERNARDES";
+
+  const pao: Produto = {
+    codigoPdv: 1,
+    nome: "PAO FRANCES",
+    categoria: "PÃES E ROSCAS",
+    unidadeProducao: "un",
+    statusVenda: "Ativo",
+    ativoNaProducao: true,
+    pesoMedioUnitarioGramas: 50,
+  };
+
+  // A matriz planejou 100 para si; a filial pediu 50. Total produzido: 150.
+  const planoDoDia: PlanoDeProducaoDiario = {
+    id: "plano-loja",
+    data: DIA,
+    diaDaSemana: "quarta",
+    sessoes: [{ id: "s1", categoria: "PÃES E ROSCAS", itens: [{ codigoPdv: 1, quantidadeUnidades: 100 }] }],
+    status: "confirmado",
+    criadoPor: "Daniel",
+    criadoEm: `${DIA}T20:00:00.000Z`,
+    confirmadoEm: `${DIA}T20:05:00.000Z`,
+  };
+
+  const pedidoDaFilial: PedidoFilial = {
+    id: `${DIA}_${ARTHUR}`,
+    lojaId: ARTHUR,
+    data: DIA,
+    itens: [{ codigoPdv: 1, quantidadeUnidades: 50 }],
+    status: "enviado",
+    criadoPor: "Ana",
+    criadoEm: `${DIA}T18:00:00.000Z`,
+    enviadoEm: `${DIA}T18:00:00.000Z`,
+  };
+
+  const umaPerda = (id: string, lojaId: string, unidades: number): RegistroPerda => ({
+    id,
+    codigoPdv: 1,
+    planoDeProducaoId: "plano-loja",
+    data: DIA,
+    diaDaSemana: "quarta",
+    quantidadeQuilos: unidades * 0.05,
+    pesoUnitarioGramasInformado: 50,
+    quantidadeUnidadesEstimada: unidades,
+    motivo: "sobra_nao_vendida",
+    registradoPor: "teste",
+    registradoEm: `${DIA}T20:00:00Z`,
+    lojaId,
+  });
+
+  const perdasDasLojas = [umaPerda("m1", "MATRIZ", 10), umaPerda("a1", ARTHUR, 10)];
+  const catalogo = [pao];
+  const janela = { dias: 7 };
+
+  const totalGeral = calcularTotais(
+    recortar(catalogo, [planoDoDia], perdasDasLojas, HOJE, janela, [pedidoDaFilial])
+  );
+  afirmar(
+    totalGeral.produzido === 150,
+    `sem filtro, o denominador soma matriz e filiais (obtido: ${totalGeral.produzido})`
+  );
+  afirmar(totalGeral.perdido === 20, "sem filtro, todas as perdas contam");
+
+  const daMatriz = calcularTotais(
+    recortar(catalogo, [planoDoDia], perdasDasLojas, HOJE, { ...janela, lojaId: "MATRIZ" }, [
+      pedidoDaFilial,
+    ])
+  );
+  afirmar(daMatriz.produzido === 100, `matriz fica com o que planejou para si (obtido: ${daMatriz.produzido})`);
+  afirmar(daMatriz.perdido === 10, "matriz conta so as proprias perdas");
+  afirmar(daMatriz.taxaPerda === 10, `taxa da matriz = 10/100 (obtido: ${daMatriz.taxaPerda})`);
+
+  // ESTE e o caso que o defeito escondia.
+  const daFilial = calcularTotais(
+    recortar(catalogo, [planoDoDia], perdasDasLojas, HOJE, { ...janela, lojaId: ARTHUR }, [
+      pedidoDaFilial,
+    ])
+  );
+  afirmar(
+    daFilial.produzido === 50,
+    `filial fica com o que PEDIU, nao com a producao inteira (obtido: ${daFilial.produzido})`
+  );
+  afirmar(daFilial.perdido === 10, "filial conta so as proprias perdas");
+  afirmar(
+    daFilial.taxaPerda === 20,
+    `taxa da filial = 10/50 = 20%, e nao 10/150 = 6,7% (obtido: ${daFilial.taxaPerda})`
+  );
+
+  // O grafico de produtos usa o mesmo denominador — se ele nao usasse, a
+  // tela mostraria duas taxas diferentes para o mesmo produto.
+  const porProdutoFilial = topProdutosPorPerda(
+    recortar(catalogo, [planoDoDia], perdasDasLojas, HOJE, { ...janela, lojaId: ARTHUR }, [
+      pedidoDaFilial,
+    ])
+  );
+  afirmar(
+    porProdutoFilial.length === 1 && porProdutoFilial[0].produzido === 50,
+    `o grafico por produto usa o mesmo denominador (obtido: ${porProdutoFilial[0]?.produzido})`
+  );
+  afirmar(porProdutoFilial[0].valor === 20, "e a mesma taxa dos numeros-cabecalho");
+
+  // Item marcado como NAO PRODUZIDO no fim do expediente sai do
+  // denominador: ninguem recebeu o que nao saiu do forno.
+  const naoSaiu: PlanoDeProducaoDiario = {
+    ...planoDoDia,
+    producaoRealizada: {
+      confirmadoPor: "Daniel",
+      confirmadoEm: `${DIA}T21:00:00.000Z`,
+      codigosNaoProduzidos: [1],
+    },
+  };
+  const semProducao = calcularTotais(
+    recortar(catalogo, [naoSaiu], perdasDasLojas, HOJE, janela, [pedidoDaFilial])
+  );
+  afirmar(semProducao.produzido === 0, "item que nao saiu do forno some do denominador");
+  afirmar(semProducao.taxaPerda === null, "sem producao a taxa e nula, e nao zero");
+
+  // Rascunho da filial nao entra: ela ainda esta mexendo no numero.
+  const rascunho: PedidoFilial = { ...pedidoDaFilial, status: "rascunho" };
+  const comRascunho = calcularTotais(
+    recortar(catalogo, [planoDoDia], perdasDasLojas, HOJE, { ...janela, lojaId: ARTHUR }, [rascunho])
+  );
+  afirmar(comRascunho.produzido === 0, "pedido em rascunho nao vira denominador");
+
+  // Reposicao tambem nao: ela e de HOJE e ja foi entregue por fora do
+  // planejamento (ver ehPedidoDiario em src/types/pedido.ts).
+  const reposicao: PedidoFilial = { ...pedidoDaFilial, id: "rep", tipo: "reposicao" };
+  const comReposicao = calcularTotais(
+    recortar(catalogo, [planoDoDia], perdasDasLojas, HOJE, { ...janela, lojaId: ARTHUR }, [
+      reposicao,
+    ])
+  );
+  afirmar(comReposicao.produzido === 0, "reposicao nao entra no denominador do planejamento");
+
+  // Fora da janela, nada conta.
+  const forA = calcularTotais(
+    recortar(catalogo, [planoDoDia], perdasDasLojas, "2026-10-01", janela, [pedidoDaFilial])
+  );
+  afirmar(forA.produzido === 0 && forA.perdido === 0, "fora do periodo, o recorte fica vazio");
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

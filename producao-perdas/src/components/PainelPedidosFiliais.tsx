@@ -41,6 +41,17 @@ interface PainelPedidosFiliaisProps {
   reposicoesDeHoje?: PedidoFilial[];
   nomeDoProduto?: (codigoPdv: number) => string;
   /**
+   * O produto já saiu do forno hoje? (ago/2026)
+   *
+   * Desde que a filial pode pedir QUALQUER item do catálogo — e não só o
+   * que foi anunciado —, as duas coisas chegam pela mesma porta e exigem
+   * decisões diferentes: separar o que já está pronto é uma coisa,
+   * decidir se ainda dá tempo de ASSAR é outra. Sem essa marca, a matriz
+   * confirmaria um pedido de coisa que ninguém fez, e a filial ficaria
+   * esperando uma entrega que não vem.
+   */
+  saiuDoForno?: (codigoPdv: number) => boolean;
+  /**
    * Esconde os cartões de "enviou / aguardando" e deixa só as
    * reposições. Desde ago/2026 esse status vive na linha do título do
    * Cronograma — mostrá-lo aqui de novo seria dizer duas vezes a mesma
@@ -60,6 +71,7 @@ export function PainelPedidosFiliais({
   data,
   reposicoesDeHoje = [],
   nomeDoProduto,
+  saiuDoForno,
   onDecidirReposicao,
   somenteReposicoes = false,
 }: PainelPedidosFiliaisProps) {
@@ -203,6 +215,16 @@ export function PainelPedidosFiliais({
                     )
                     .join(", ")}
                 </span>
+
+                {/* Pedido de item que ainda não saiu do forno hoje: não é
+                    separar, é decidir se dá tempo de assar. A marca fica
+                    ANTES dos botões de propósito — depois deles seria
+                    lida tarde demais. */}
+                {saiuDoForno && pedido.itens.some((i) => !saiuDoForno(i.codigoPdv)) && (
+                  <span className="marca-precisa-assar">
+                    <IconeAtencao tamanho={13} /> ainda não saiu do forno hoje
+                  </span>
+                )}
 
                 {desfecho === "confirmado" && (
                   <span className="selo-reposicao confirmado">
