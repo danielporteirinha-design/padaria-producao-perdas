@@ -70,21 +70,38 @@ export function prepararSom(): void {
  *    quase dois segundos. Cada parcial mais agudo decai MAIS RÁPIDO que
  *    o grave, senão o som fica estridente do começo ao fim.
  *
- * Duas badaladas, com folga entre elas: uma só se perde no barulho do
- * balcão, três viram alarme.
  */
 export function tocarAvisoSonoro(): void {
   try {
     prepararSom();
-    if (!contexto || contexto.state !== "running") return;
+    if (!contexto) return;
 
-    const agora = contexto.currentTime;
-    for (const atraso of [0, 0.42]) {
-      badalada(contexto, agora + atraso);
+    /**
+     * ESPERAR O CONTEXTO VOLTAR, EM VEZ DE DESISTIR (ago/2026).
+     *
+     * `resume()` é assíncrono. A versão anterior chamava `prepararSom()`
+     * e, no mesmo instante, desistia se o estado ainda não fosse
+     * "running" — e um contexto suspenso ainda não é. Resultado: a
+     * primeira badalada depois de qualquer suspensão saía muda, que é
+     * justamente a que importa. No PC do balcão, com a janela horas
+     * atrás do PDV, era quase sempre a primeira.
+     */
+    if (contexto.state === "running") {
+      badaladas(contexto);
+      return;
     }
+    void contexto.resume().then(() => {
+      if (contexto && contexto.state === "running") badaladas(contexto);
+    });
   } catch (erro) {
     console.warn("Não foi possível tocar o aviso sonoro:", erro);
   }
+}
+
+/** Duas badaladas com folga: uma se perde no barulho, três viram alarme. */
+function badaladas(ctx: AudioContext): void {
+  const agora = ctx.currentTime;
+  for (const atraso of [0, 0.42]) badalada(ctx, agora + atraso);
 }
 
 /** Nota fundamental da campainha, em hertz (Ré#6 — clara sem ser aguda demais). */

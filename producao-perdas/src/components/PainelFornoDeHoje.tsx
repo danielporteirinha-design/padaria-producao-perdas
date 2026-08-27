@@ -28,7 +28,12 @@ import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import { contemBusca } from "../lib/texto";
 import { LOJA_MATRIZ } from "../lib/lojas";
-import { dispensarFornada, fornadasDispensadas, restaurarFornadas } from "../lib/fornadasDispensadas";
+import {
+  devolverFornada,
+  dispensarFornada,
+  fornadasDispensadas,
+  restaurarFornadas,
+} from "../lib/fornadasDispensadas";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
 import { IconeLixeira } from "./Icones";
@@ -136,6 +141,16 @@ export function PainelFornoDeHoje({
             setMarcando(codigoPdv);
             try {
               await onMarcarFornada(codigoPdv);
+              // Anunciar DEVOLVE o item à lista. Tirar da lista é sobre
+              // não tocar por engano, não sobre sumir com o produto: quem
+              // procurou e anunciou voltou a trabalhar com ele, e a linha
+              // reaparece com a contagem de fornadas e a hora da última —
+              // números que nunca saíram do banco.
+              setFora((atual) =>
+                atual.has(codigoPdv)
+                  ? devolverFornada(LOJA_MATRIZ.id, dataHoje, codigoPdv)
+                  : atual
+              );
             } catch {
               /* o aviso global cuida da mensagem */
             } finally {

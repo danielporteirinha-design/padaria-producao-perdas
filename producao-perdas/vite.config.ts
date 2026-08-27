@@ -122,10 +122,12 @@ export default defineConfig({
          * abertura dura menos de um segundo num app já instalado.
          */
         background_color: "#ffffff",
-        // A cor do app, não a do splash: é ela que pinta a barra do
-        // sistema enquanto o app está em uso. Ver o comentário em
-        // index.html sobre por que o vermelho da marca não ficou aqui.
-        theme_color: "#faf7f2",
+        // BRANCO também (ago/2026): junto do background_color acima, é o
+        // que a pessoa vê na abertura. Tem que casar com o index.html —
+        // valores diferentes nos dois lugares produzem uma troca de cor
+        // visível no meio do carregamento. Ver lá o registro da troca
+        // aceita: barra branca sobre app creme deixa uma emenda no topo.
+        theme_color: "#ffffff",
         icons: [
           { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
           { src: "pwa-512x512.png", sizes: "512x512", type: "image/png" },

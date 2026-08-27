@@ -200,9 +200,14 @@ export default function App() {
    * do dia sairia mudo.
    */
   useEffect(() => {
+    // Sem `once` (ago/2026): o navegador pode suspender o áudio de novo
+    // depois de horas com a janela em segundo plano — o caso do PC do
+    // balcão. `prepararSom` é barato e idempotente: criar uma vez,
+    // destravar sempre que houver oportunidade é mais seguro que
+    // destravar uma vez e torcer.
     const destravar = () => prepararSom();
-    window.addEventListener("pointerdown", destravar, { once: true });
-    window.addEventListener("keydown", destravar, { once: true });
+    window.addEventListener("pointerdown", destravar);
+    window.addEventListener("keydown", destravar);
     return () => {
       window.removeEventListener("pointerdown", destravar);
       window.removeEventListener("keydown", destravar);
@@ -478,6 +483,16 @@ export default function App() {
     }
 
     const aoReceberRecado = (evento: MessageEvent) => {
+      /**
+       * O service worker pede o som quando a janela está aberta mas sem
+       * foco — no PC do balcão ela vive atrás do PDV. Nesse estado o FCM
+       * entrega no service worker, que não tem WebAudio; quem toca é esta
+       * página, que continua carregada. Ver public/firebase-messaging-sw.js.
+       */
+      if (evento.data?.tipo === "tocar-aviso") {
+        tocarAvisoSonoro();
+        return;
+      }
       if (evento.data?.tipo !== "abrir-rota" || typeof evento.data.url !== "string") return;
       const destino = abaDaUrl(evento.data.url);
       if (destino) setAba(destino);

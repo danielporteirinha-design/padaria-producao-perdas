@@ -164,6 +164,55 @@ Sem a chave configurada, o botão continua visível mas mostra uma mensagem
 clara pedindo a configuração — nunca trava a tela nem impede montar o
 cronograma manualmente.
 
+## A campainha não tocava justamente quando precisava (ago/2026)
+
+**Defeito relatado:** no computador, o som não chegava.
+
+Duas causas somadas, e as duas só aparecem no PC do balcão — onde o app fica
+aberto o dia inteiro, atrás do PDV:
+
+**1. Janela sem foco vai para o service worker.** Nesse estado o FCM entrega o
+aviso ao service worker, e não ao `onMessage` da página. Service worker não toca
+áudio — não tem WebAudio. A notificação aparecia muda.
+
+A correção: o service worker mostra a notificação e, em seguida, **manda um
+recado para as janelas abertas** (`postMessage`). A página, mesmo sem foco, toca
+normalmente. `includeUncontrolled: true` é essencial — a janela pode não estar
+sob o controle deste service worker (ele é o do Firebase; o do PWA é outro), e
+sem isso a lista voltaria vazia.
+
+**2. O contexto de áudio suspenso engolia a primeira badalada.** `resume()` é
+assíncrono, e a versão anterior chamava `prepararSom()` e no mesmo instante
+desistia se o estado ainda não fosse "running" — que é exatamente o que um
+contexto suspenso ainda não é. A primeira badalada depois de qualquer suspensão
+saía muda, e com a janela horas em segundo plano era quase sempre a primeira.
+Agora o som espera o contexto voltar em vez de desistir dele. O destravamento
+também deixou de ser `once`: destravar sempre que houver um toque é mais seguro
+que destravar uma vez e torcer.
+
+## Anunciar devolve o item à lista (ago/2026)
+
+Tirar da lista é sobre **não tocar por engano**, não sobre sumir com o produto.
+Se a matriz procura um item que tinha tirado e anuncia de novo, a linha volta
+para a lista — com a contagem de fornadas e a hora da última, números que nunca
+saíram do banco.
+
+## O último creme da abertura (ago/2026)
+
+`background_color` já era branco; o que sobrava era o **`theme_color`**, que
+pinta a barra do sistema e, no computador, a barra de título da janela do app —
+e que participa da abertura junto do fundo do splash. Agora os dois são brancos,
+e casam entre `index.html` e o manifesto: valores diferentes nos dois lugares
+produzem uma troca de cor visível no meio do carregamento.
+
+A troca aceita, registrada de propósito: a barra fica branca e o fundo do app
+segue creme, então existe uma emenda no topo durante o uso.
+
+> **O app instalado guarda o manifesto.** Publicar não troca o splash de quem já
+> tem o atalho: o Chrome empacota manifesto e ícones na instalação e só revisa
+> isso de tempos em tempos. Para ver a mudança hoje, remova o atalho e adicione
+> de novo — o mesmo passo que os ícones já exigiam.
+
 ## Aviso e impressão corriam em fila, e um travava o outro (ago/2026)
 
 **Defeito relatado:** a filial enviou a lista do dia seguinte, a matriz não

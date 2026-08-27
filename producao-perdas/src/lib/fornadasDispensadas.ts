@@ -58,6 +58,26 @@ export function dispensarFornada(lojaId: string, data: string, codigoPdv: number
   return new Set(atual);
 }
 
+/**
+ * Devolve UM item à lista.
+ *
+ * Chamado quando alguém anuncia de novo um produto que tinha tirado da
+ * lista (ago/2026): tirar da lista é sobre não tocar por engano, não
+ * sobre esconder o produto para sempre. Se a matriz procurou o item e
+ * anunciou, ela voltou a trabalhar com ele — e a linha volta com a
+ * contagem de fornadas e a hora da última, que nunca saíram do banco.
+ */
+export function devolverFornada(lojaId: string, data: string, codigoPdv: number): Set<number> {
+  const restante = ler(lojaId, data).filter((codigo) => codigo !== codigoPdv);
+  try {
+    if (restante.length === 0) localStorage.removeItem(chave(lojaId, data));
+    else localStorage.setItem(chave(lojaId, data), JSON.stringify(restante));
+  } catch {
+    /* nada a fazer */
+  }
+  return new Set(restante);
+}
+
 /** Devolve todos os avisos dispensados hoje — o desfazer da dispensa. */
 export function restaurarFornadas(lojaId: string, data: string): Set<number> {
   try {
