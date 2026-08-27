@@ -291,7 +291,11 @@ export function TelaPerdas({
                       }
                     >
                       <span className="nome-sessao">{categoria.rotulo}</span>
-                      <span className="contagem-itens">{daCategoria.length}</span>
+                      {/* Sem contagem (ago/2026, decisão do dono do
+                          negócio). Aqui ela mostrava quantos produtos a
+                          categoria TEM no catálogo, não quantos foram
+                          perdidos — número grande, sempre igual, que não
+                          decidia nada e ainda parecia contar lançamento. */}
                       <IconeSeta className="seta-sessao" />
                     </button>
                   </div>

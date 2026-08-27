@@ -164,6 +164,55 @@ Sem a chave configurada, o botão continua visível mas mostra uma mensagem
 clara pedindo a configuração — nunca trava a tela nem impede montar o
 cronograma manualmente.
 
+## Aviso e impressão corriam em fila, e um travava o outro (ago/2026)
+
+**Defeito relatado:** a filial enviou a lista do dia seguinte, a matriz não
+recebeu a notificação **e** o papel não saiu na impressora do caixa. Os dois ao
+mesmo tempo, sem mensagem nenhuma.
+
+Os dois efeitos estavam **encadeados**: primeiro o aviso, depois o papel.
+
+```
+await avisarListaEnviada(...)   // chamada de rede, sem limite de espera
+await imprimirPedidoNoCaixa(...) // só começa quando a de cima terminar
+```
+
+Bastava a primeira demorar para a impressão atrasar junto. E se ela nunca
+respondesse — função serverless hibernada acordando, conexão que trava sem
+fechar — o papel **nunca** saía. `fetch` sem `AbortController` espera para
+sempre; quem esperava por ele nunca era liberado.
+
+Duas correções:
+
+- Os efeitos correm **em paralelo**, com `allSettled`, cada um cuidando do
+  próprio erro. Nenhum dos dois pode derrubar o outro — o pedido já está
+  gravado, e é ele que vale.
+- A chamada ao servidor de avisos ganhou **limite de 12 segundos**. Doze cobrem
+  com folga o pior início de função frio; mais que isso, o aviso já perdeu a
+  hora de qualquer forma. Estourado o prazo, a mensagem diz o que continua
+  valendo: "o que você fez já está gravado".
+
+A decisão de imprimir também mudou de lugar: mora dentro de
+`imprimirPedidoNoCaixa`, junto da impressão. Espalhada na chamada, ela
+precisaria ser repetida em todo lugar que mandasse pedido.
+
+## A lista de anúncio da matriz virou uma lista só (ago/2026)
+
+Na aba Reposição da matriz, os produtos do dia deixaram de ser agrupados por
+sessão. Ali não se planeja nada — só se anuncia o que acabou de sair —, e o
+cabeçalho de categoria empurrava a lista para baixo sem ajudar a achar. Agora é
+uma lista corrida, na ordem em que a padaria produz, e um produto que aparece em
+duas sessões aparece uma vez só.
+
+Cada item ganhou um botão para **sair da lista**. O motivo é concreto: um toque
+sem querer anuncia uma fornada que não existiu, e a filial pede em cima dela. O
+que sai é o alvo de toque; **as fornadas já marcadas continuam gravadas** e
+continuam alimentando o relatório do forno em Análises — é o mesmo mecanismo
+local da filial (`src/lib/fornadasDispensadas.ts`), por dia e por aparelho. O
+caminho de volta ("N itens fora da lista · mostrar de novo") fica fora da lista,
+porque é justamente quando alguém tira o último item que ele precisa estar
+visível.
+
 ## Busca por voz, com o Gemini afinando o resultado (ago/2026)
 
 Todos os campos de busca de produto ganharam **microfone**. Quem usa a busca

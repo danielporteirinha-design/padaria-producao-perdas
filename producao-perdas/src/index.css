@@ -978,6 +978,26 @@ button.perigo:hover { background: #822525; }
 }
 .aviso-forno-vazio svg { color: var(--cor-texto-suave); flex-shrink: 0; }
 
+/* A linha do forno e o botão de tirar da lista, lado a lado. O alvo
+   grande continua sendo o produto — tirar da lista é ação rara e fica num
+   botão pequeno, longe do centro do dedo. */
+.item-forno { display: flex; align-items: stretch; gap: 6px; }
+.item-forno .linha-forno { flex: 1; min-width: 0; }
+.tirar-da-lista {
+  flex-shrink: 0;
+  width: 40px;
+  display: grid;
+  place-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--raio);
+  color: var(--cor-texto-suave);
+  cursor: pointer;
+}
+.tirar-da-lista:hover { color: var(--cor-alerta); background: var(--cor-fundo); }
+.tirar-da-lista:focus-visible { outline: 2px solid var(--cor-acento); outline-offset: -2px; }
+
 /* "Pedir" e "excluir aviso" na mesma linha, à direita do produto. */
 .acoes-fornada { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 

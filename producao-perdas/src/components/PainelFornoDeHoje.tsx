@@ -26,10 +26,12 @@ import type { Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
-import { rotuloDaCategoria } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
+import { LOJA_MATRIZ } from "../lib/lojas";
+import { dispensarFornada, fornadasDispensadas, restaurarFornadas } from "../lib/fornadasDispensadas";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
+import { IconeLixeira } from "./Icones";
 
 /**
  * Quantos resultados a busca mostra. O catálogo tem centenas de itens; a
@@ -88,6 +90,32 @@ export function PainelFornoDeHoje({
 
   const buscando = busca.trim().length > 0;
 
+  /**
+   * Itens que a matriz tirou da lista de hoje, neste aparelho. Reaproveita
+   * o mesmo mecanismo da filial (src/lib/fornadasDispensadas.ts): local,
+   * por dia, sem tocar em nada gravado na nuvem.
+   */
+  const [fora, setFora] = useState(() => fornadasDispensadas(LOJA_MATRIZ.id, dataHoje));
+
+  /**
+   * A lista do dia achatada: os itens do cronograma na ordem em que a
+   * padaria produz, sem repetir o produto que aparece em duas sessões e
+   * sem os que foram tirados da lista.
+   */
+  const itensDoDia = useMemo(() => {
+    if (!plano) return [];
+    const vistos = new Set<number>();
+    const lista: number[] = [];
+    for (const sessao of plano.sessoes) {
+      for (const item of sessao.itens) {
+        if (vistos.has(item.codigoPdv) || fora.has(item.codigoPdv)) continue;
+        vistos.add(item.codigoPdv);
+        lista.push(item.codigoPdv);
+      }
+    }
+    return lista;
+  }, [plano, fora]);
+
   /** Nomes que a IA pode escolher ao interpretar o que foi ditado. */
   const nomesAtivos = useMemo(
     () => produtos.filter((p) => p.ativoNaProducao).map((p) => p.nome),
@@ -95,35 +123,54 @@ export function PainelFornoDeHoje({
   );
 
   /** A linha é a mesma na busca e na lista do dia — um jeito só de marcar. */
-  function linhaDoProduto(codigoPdv: number) {
+  function linhaDoProduto(codigoPdv: number, podeTirarDaLista = false) {
     const doDia = fornadasDoProduto(fornadas, dataHoje, codigoPdv);
     const saiu = doDia.length > 0;
     return (
-      <button
-        key={codigoPdv}
-        type="button"
-        className={`linha-forno ${saiu ? "saiu" : ""}`}
-        disabled={marcando === codigoPdv}
-        onClick={async () => {
-          setMarcando(codigoPdv);
-          try {
-            await onMarcarFornada(codigoPdv);
-          } catch {
-            /* o aviso global cuida da mensagem */
-          } finally {
-            setMarcando(null);
-          }
-        }}
-      >
-        <span className="nome-forno">{nomeDoProduto(codigoPdv)}</span>
-        <span className="marca-forno">
-          {marcando === codigoPdv
-            ? "..."
-            : saiu
-              ? `${doDia.length}× · ${horaDaUltimaFornada(fornadas, dataHoje, codigoPdv)}`
-              : "anunciar"}
-        </span>
-      </button>
+      <div key={codigoPdv} className="item-forno">
+        <button
+          type="button"
+          className={`linha-forno ${saiu ? "saiu" : ""}`}
+          disabled={marcando === codigoPdv}
+          onClick={async () => {
+            setMarcando(codigoPdv);
+            try {
+              await onMarcarFornada(codigoPdv);
+            } catch {
+              /* o aviso global cuida da mensagem */
+            } finally {
+              setMarcando(null);
+            }
+          }}
+        >
+          <span className="nome-forno">{nomeDoProduto(codigoPdv)}</span>
+          <span className="marca-forno">
+            {marcando === codigoPdv
+              ? "..."
+              : saiu
+                ? `${doDia.length}× · ${horaDaUltimaFornada(fornadas, dataHoje, codigoPdv)}`
+                : "anunciar"}
+          </span>
+        </button>
+
+        {/* Tirar da LISTA, não do histórico: as fornadas já marcadas
+            continuam gravadas e continuam alimentando o relatório do
+            forno em Análises. O que sai é o alvo de toque — o item que
+            já saiu tudo que tinha para sair não pode ficar no caminho do
+            dedo, porque um toque sem querer anuncia uma fornada que não
+            existiu, e a filial vai pedir em cima dela. */}
+        {podeTirarDaLista && (
+          <button
+            type="button"
+            className="tirar-da-lista"
+            aria-label={`Tirar ${nomeDoProduto(codigoPdv)} da lista de hoje`}
+            title="Tirar da lista de hoje"
+            onClick={() => setFora(dispensarFornada(LOJA_MATRIZ.id, dataHoje, codigoPdv))}
+          >
+            <IconeLixeira tamanho={16} />
+          </button>
+        )}
+      </div>
     );
   }
 
@@ -169,17 +216,40 @@ export function PainelFornoDeHoje({
               enquanto ainda dá tempo de entregar hoje.
             </p>
 
-            {plano ? (
-              plano.sessoes.map((sessao) => (
-                <div key={sessao.id} className="grupo-forno">
-                  <h4>{rotuloDaCategoria(sessao.categoria)}</h4>
-                  {sessao.itens.map((item) => linhaDoProduto(item.codigoPdv))}
-                </div>
-              ))
-            ) : (
+            {/* Lista CORRIDA, sem separar por sessão (ago/2026, decisão do
+                dono do negócio). Aqui não se planeja nada: só se anuncia o
+                que acabou de sair, e o cabeçalho de categoria só empurrava
+                a lista para baixo sem ajudar a achar. A ordem é a do
+                cronograma, que é a ordem em que a padaria produz. */}
+            {!plano ? (
               <p className="nota-rodape">
                 Nenhum cronograma confirmado para hoje. Use a busca acima para anunciar o que sair
                 do forno.
+              </p>
+            ) : itensDoDia.length === 0 ? (
+              <p className="nota-rodape">
+                Todos os itens de hoje foram tirados da lista. Use a busca acima para anunciar, ou
+                mostre a lista de novo abaixo.
+              </p>
+            ) : (
+              <div className="grupo-forno">
+                {itensDoDia.map((codigoPdv) => linhaDoProduto(codigoPdv, true))}
+              </div>
+            )}
+
+            {/* O caminho de volta. Fica fora da lista de propósito: quando
+                alguém tira o último item, é justamente aqui que ele
+                precisa estar. */}
+            {plano && fora.size > 0 && (
+              <p className="nota-rodape">
+                {fora.size} {fora.size === 1 ? "item fora da lista" : "itens fora da lista"} hoje.{" "}
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => setFora(restaurarFornadas(LOJA_MATRIZ.id, dataHoje))}
+                >
+                  mostrar de novo
+                </button>
               </p>
             )}
           </>

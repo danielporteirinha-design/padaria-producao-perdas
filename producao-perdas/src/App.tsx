@@ -736,6 +736,37 @@ export default function App() {
      * Como no aviso de fornada, falhar aqui não desfaz o pedido: ele já
      * está gravado e a matriz o vê na tela de qualquer forma.
      */
+    /**
+     * EM PARALELO, E NÃO EM FILA (ago/2026 — defeito relatado no uso).
+     *
+     * Os dois efeitos estavam encadeados: primeiro o aviso, depois o
+     * papel. Como o aviso é uma chamada de rede, bastava ela demorar para
+     * a impressão atrasar junto — e, se ela nunca respondesse (função
+     * hibernada acordando, conexão que trava sem fechar), o papel
+     * simplesmente NUNCA saía. Os dois falhavam juntos e sem mensagem
+     * nenhuma, que é exatamente o sintoma que apareceu na padaria.
+     *
+     * Agora cada um corre por conta própria e cuida do próprio erro.
+     * `allSettled` porque nenhum dos dois pode derrubar o outro: o pedido
+     * já está gravado, e é ele que vale.
+     */
+    await Promise.allSettled([avisarMatrizDoPedido(pedido), imprimirPedidoNoCaixa(pedido)]);
+  }
+
+  /**
+   * Avisa a matriz do que a filial acabou de mandar.
+   *
+   * - REPOSIÇÃO: existe porque o produto está faltando no balcão AGORA.
+   *   Um aviso que espera alguém lembrar de abrir a tela perdeu a razão
+   *   de existir.
+   * - LISTA DO DIA: é planejamento, mas a matriz monta o cronograma no
+   *   fim do expediente e, se uma filial atrasa, a produção sai sem ela e
+   *   a loja abre no dia seguinte sem mercadoria.
+   *
+   * Rascunho não avisa: a filial ainda está mexendo nele, e interromper a
+   * matriz a cada salvamento automático seria ruído puro.
+   */
+  async function avisarMatrizDoPedido(pedido: PedidoFilial) {
     try {
       if (ehReposicao(pedido)) {
         const item = pedido.itens[0];
@@ -747,21 +778,9 @@ export default function App() {
         await avisarListaEnviada(pedido.itens.length);
       }
     } catch (erro) {
+      // Falhar aqui não desfaz o pedido: ele já está gravado e a matriz o
+      // vê na tela de qualquer forma.
       console.warn("Pedido gravado, mas o aviso à matriz não saiu:", erro);
-    }
-
-    /**
-     * A lista da filial também SAI NO PAPEL, na impressora do caixa da
-     * matriz (ago/2026, pedido do dono do negócio). Quem monta a produção
-     * de manhã trabalha com papel na mão, não com o celular — e até aqui
-     * a matriz precisava abrir o app, ir ao Cronograma, confirmar e só
-     * então imprimir para ter isso.
-     *
-     * Bloco próprio, e não junto do aviso acima: se o push falhar, o
-     * papel ainda tem que sair, e vice-versa.
-     */
-    if (!ehReposicao(pedido) && pedido.status === "enviado") {
-      await imprimirPedidoNoCaixa(pedido);
     }
   }
 
@@ -779,6 +798,11 @@ export default function App() {
    * papel é rastreável até quem o mandou.
    */
   async function imprimirPedidoNoCaixa(pedido: PedidoFilial) {
+    // A decisão de imprimir mora aqui, junto da impressão: espalhada na
+    // chamada, ela precisava ser repetida em todo lugar que mandasse
+    // pedido. Reposição não imprime — é decidida na tela, uma por vez, e
+    // um papel por reposição gastaria bobina o dia inteiro.
+    if (ehReposicao(pedido) || pedido.status !== "enviado") return;
     try {
       const sessoes = agruparPorCategoria(pedido.itens, produtos);
       if (sessoes.length === 0) return;
