@@ -81,6 +81,10 @@ const CONFERENCIAS = [
   ["vite.config.ts", '"#ffffff"', "Splash branco"],
   ["scripts/gerar_icones.py", "FUNDO_ICONE", "Ícones com fundo branco"],
 
+  // --- Resposta da matriz à reposição
+  ["src/components/PainelFornadasFilial.tsx", "reposicao-confirmada", "Filial: resposta 'separado' em destaque"],
+  ["src/App.tsx", "avisarFilialDoDesfecho", "Aviso do desfecho em paralelo"],
+
   // --- Rascunho do cronograma
   ["src/lib/rascunhoCronograma.ts", "mapasIguais", "Rascunho do cronograma sobrevive à troca de aba"],
 

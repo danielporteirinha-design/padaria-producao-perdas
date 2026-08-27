@@ -262,6 +262,35 @@ caminho de volta ("N itens fora da lista · mostrar de novo") fica fora da lista
 porque é justamente quando alguém tira o último item que ele precisa estar
 visível.
 
+## O "sim" tinha menos peso que o "não" (ago/2026)
+
+Quando a matriz confirmava uma reposição, a filial via três palavras cinzas
+coladas no fim de outra frase: "já pedi 60 un · separado". Quando a matriz
+recusava, ela via um bloco destacado: "Não vem: acabou a farinha".
+
+A assimetria não era estética. **Quem pediu está sem o produto no balcão**, e
+"vem" e "não vem" mudam o que ela faz nos próximos minutos — as duas respostas
+precisam ser lidas de relance, e só uma delas era. Agora a confirmação tem bloco
+próprio, em verde: **"Separado — vem na próxima entrega."**
+
+### E o aviso podia nunca sair
+
+O mesmo defeito de sequenciamento que já tinha aparecido no envio da lista da
+filial estava aqui também. Ao confirmar, o app fazia:
+
+```
+await registrarNaProducaoDeHoje(...)  // gravação no Firestore
+await avisarDesfechoReposicao(...)    // só depois disso
+```
+
+Bastava a gravação demorar para a resposta atrasar junto — e **offline `setDoc`
+só resolve quando o servidor confirma**, então o push simplesmente não saía. A
+filial ficava esperando notícia de um pedido que a matriz já tinha confirmado,
+que é exatamente o problema que o desfecho existe para resolver.
+
+Agora os dois correm em paralelo, com `allSettled`, cada um cuidando do próprio
+erro. A decisão já está gravada, e é ela que vale.
+
 ## A montagem do cronograma não sobrevivia a trocar de aba (ago/2026)
 
 **Defeito relatado:** "apaguei a sessão Pães e Roscas, a contagem atualizou, saí

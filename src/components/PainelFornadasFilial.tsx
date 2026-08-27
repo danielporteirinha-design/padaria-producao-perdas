@@ -217,11 +217,22 @@ export function PainelFornadasFilial({
                 {" · "}
                 <span className="ja-pedido">
                   <IconeConfere tamanho={13} /> já pedi {jaPedi} un
-                  {meuPedido?.confirmado && " · separado"}
                 </span>
               </>
             )}
           </span>
+
+          {/* A RESPOSTA POSITIVA GANHOU LINHA PRÓPRIA (ago/2026).
+              Antes, "não vem" tinha um bloco destacado e o "sim" eram três
+              palavras cinzas coladas no fim de outra frase. A assimetria
+              não era só estética: quem pediu está sem o produto no balcão
+              e precisa saber, de relance, se pode parar de procurar
+              alternativa. Só o "não" respondia isso. */}
+          {meuPedido?.confirmado && (
+            <span className="reposicao-confirmada">
+              <IconeConfere tamanho={14} /> Separado — vem na próxima entrega.
+            </span>
+          )}
           {meuPedido?.cancelado && (
             <span className="reposicao-negada">Não vem: {meuPedido.cancelado}</span>
           )}

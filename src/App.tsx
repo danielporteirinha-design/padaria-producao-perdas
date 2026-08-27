@@ -995,31 +995,65 @@ export default function App() {
     setPedidos((atual) => [...atual.filter((p) => p.id !== decidido.id), decidido]);
 
     /**
-     * Reposição confirmada de item FORA do cronograma entra na produção
-     * de hoje. A matriz assou, anunciou pela busca da aba Nova Fornada e
-     * vai entregar — se o plano do dia não conhecer esse produto, uma
-     * perda lançada amanhã sobre ele apareceria como perda sem produção,
-     * e a taxa do dia ficaria sem denominador (ver
-     * src/lib/producaoDeHoje.ts).
+     * EM PARALELO, E NÃO EM FILA (ago/2026 — o mesmo defeito que já tinha
+     * aparecido no envio da lista da filial).
+     *
+     * O registro na produção do dia é uma gravação no Firestore, e o aviso
+     * é uma chamada de rede. Encadeados, bastava a gravação demorar para a
+     * resposta à filial atrasar junto — e, offline, `setDoc` só resolve
+     * quando o servidor confirma, então o push simplesmente NUNCA saía. A
+     * filial ficava esperando notícia de um pedido que a matriz já tinha
+     * confirmado.
+     *
+     * `allSettled` porque nenhum dos dois pode derrubar o outro: a decisão
+     * já está gravada, e é ela que vale.
      */
-    if (desfecho === "confirmado") {
-      try {
-        await registrarNaProducaoDeHoje(decidido);
-      } catch (erro) {
-        // O pedido já está confirmado e a filial já foi atendida; falhar
-        // aqui em vermelho faria a matriz achar que precisa confirmar de
-        // novo. O que se perde é o registro contábil do item, não a
-        // operação.
-        console.warn("Reposição confirmada, mas o item não entrou na produção de hoje:", erro);
-      }
-    }
+    await Promise.allSettled([
+      registrarReposicaoNaProducao(decidido, desfecho),
+      avisarFilialDoDesfecho(decidido, desfecho, motivo),
+    ]);
+  }
 
+  /**
+   * Reposição confirmada de item FORA do cronograma entra na produção de
+   * hoje. A matriz assou, anunciou pela busca da aba Reposição e vai
+   * entregar — se o plano do dia não conhecer esse produto, uma perda
+   * lançada amanhã sobre ele apareceria como perda sem produção, e a taxa
+   * do dia ficaria sem denominador (ver src/lib/producaoDeHoje.ts).
+   */
+  async function registrarReposicaoNaProducao(
+    pedido: PedidoFilial,
+    desfecho: "confirmado" | "cancelado"
+  ) {
+    if (desfecho !== "confirmado") return;
     try {
-      const item = decidido.itens[0];
-      if (item) {
-        const nome = produtos.find((p) => p.codigoPdv === item.codigoPdv)?.nome ?? "Produto";
-        await avisarDesfechoReposicao(decidido.lojaId, nome, item.codigoPdv, desfecho, motivo);
-      }
+      await registrarNaProducaoDeHoje(pedido);
+    } catch (erro) {
+      // O pedido já está confirmado e a filial já foi atendida; falhar
+      // aqui em vermelho faria a matriz achar que precisa confirmar de
+      // novo. O que se perde é o registro contábil do item, não a
+      // operação.
+      console.warn("Reposição confirmada, mas o item não entrou na produção de hoje:", erro);
+    }
+  }
+
+  /**
+   * A resposta que a filial estava esperando.
+   *
+   * Vale para os DOIS desfechos, e é o que fecha o ciclo: um pedido
+   * urgente sem resposta é pior que nenhum pedido, porque a loja para de
+   * procurar alternativa enquanto espera algo que talvez nunca chegue.
+   */
+  async function avisarFilialDoDesfecho(
+    pedido: PedidoFilial,
+    desfecho: "confirmado" | "cancelado",
+    motivo?: string
+  ) {
+    try {
+      const item = pedido.itens[0];
+      if (!item) return;
+      const nome = produtos.find((p) => p.codigoPdv === item.codigoPdv)?.nome ?? "Produto";
+      await avisarDesfechoReposicao(pedido.lojaId, nome, item.codigoPdv, desfecho, motivo);
     } catch (erro) {
       console.warn("Decisão gravada, mas o aviso à filial não saiu:", erro);
     }

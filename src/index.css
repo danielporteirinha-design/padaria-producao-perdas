@@ -1351,6 +1351,24 @@ button.perigo:hover { background: #822525; }
 
 /* Visto da filial: a recusa não pode ficar discreta — é ela que muda o
    que a loja faz nos próximos minutos. */
+/* A resposta POSITIVA, com o mesmo peso da negativa (ago/2026).
+   Quem pediu está sem o produto no balcão: "vem" e "não vem" mudam o que
+   ela faz nos próximos minutos, e as duas precisam ser lidas de relance.
+   Antes só o "não vem" tinha bloco próprio. */
+.reposicao-confirmada {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: var(--raio);
+  background: var(--cor-sucesso-fundo);
+  color: var(--cor-sucesso);
+  font-size: 13px;
+  font-weight: 600;
+}
+.reposicao-confirmada svg { flex-shrink: 0; }
+
 .reposicao-negada {
   display: block;
   margin-top: 4px;
