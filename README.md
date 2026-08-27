@@ -262,6 +262,45 @@ caminho de volta ("N itens fora da lista · mostrar de novo") fica fora da lista
 porque é justamente quando alguém tira o último item que ele precisa estar
 visível.
 
+## `npm run conferir` — a resposta para "apliquei e nada mudou" (ago/2026)
+
+O projeto é atualizado aplicando um pacote por cima da pasta. Quando um arquivo
+não chega ao lugar certo — pacote extraído numa subpasta, arquivo não
+sobrescrito — o app **continua compilando e rodando**: só que rodando a versão
+antiga. Nada na tela avisa, e a conclusão natural é "o recurso não foi feito".
+
+Isso aconteceu de verdade, mais de uma vez, e custou dias de conversa. O script
+troca "acho que não veio" por uma resposta.
+
+Cada recurso entregue deixa uma **marca** no código — um trecho que só existe se
+aquele arquivo estiver na versão certa. O script procura a marca e devolve OK,
+FALTANDO ou DESATUALIZADO, um por linha. Ele também detecta a pasta aninhada, que
+é a causa mais comum, e imprime o comando que a desfaz.
+
+Não substitui os testes: `npm run verificar` diz se a **lógica** está certa; este
+diz se os **arquivos** certos estão no disco. São perguntas diferentes, e só a
+segunda explica "apliquei o pacote e nada mudou".
+
+## Sugestão por IA para as filiais (ago/2026)
+
+A filial ganhou o mesmo "✨ Sugerir quantidades com IA" que a matriz tem no
+Cronograma — mas com **outro histórico por trás**, e isso é a parte que importa.
+
+A filial não produz: ela pede. A pergunta é a mesma da matriz com dois números
+trocados — no lugar de "quanto produzi", entra "quanto **pedi**"; no lugar da
+perda da padaria inteira, entra a perda **desta loja**
+(`montarHistoricoDaFilial`).
+
+Usar o histórico da matriz aqui seria pior que não sugerir nada: a produção total
+inclui o que foi para as outras lojas, e a sugestão sairia várias vezes maior que
+este balcão vende. Pedido inflado vira perda no dia seguinte — o número que o app
+existe para derrubar.
+
+Só pedido diário e enviado entra na conta: rascunho a filial ainda estava
+mexendo, e reposição é entrega extra de um dia atípico, que puxaria a média para
+cima sem representar rotina. E, como na matriz, a IA só preenche o que está
+**vazio** — número já digitado é decisão tomada.
+
 ## Tirar da vitrine: a exclusão da matriz precisava chegar às filiais (ago/2026)
 
 **Defeito de desenho relatado no uso:** a matriz excluía o item anunciado e a
@@ -293,10 +332,11 @@ valioso que ela produziu.
 encerramento é apagado junto com a marcação nova. Sem isso ela anunciaria no
 vazio: a fornada sairia e ninguém do outro lado veria.
 
-O desfazer também mudou de forma: em vez de uma contagem com "mostrar tudo", os
-itens fora da vitrine aparecem **nomeados um a um**, cada um com "devolver à
-lista". É o que a operação pede — acabou o pão francês e voltou o bolo, não
-"voltou tudo".
+O desfazer é uma linha só, igual à da filial (decisão do dono do negócio): "N
+itens escondidos hoje — as filiais não veem · mostrar de novo". A primeira versão
+listava os itens nomeados, com um "devolver" cada; ocupava a tela com o que NÃO
+está em jogo, e quem abre esta aba veio anunciar, não administrar o que já tirou.
+Devolver tudo de uma vez é o caso comum — acabou o dia, começa outro.
 
 Verificado com as duas telas na mesma página e um estado compartilhado entre
 elas: 3 itens dos dois lados, a matriz tira um, os dois lados vão a 2, o nome

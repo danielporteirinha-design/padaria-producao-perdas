@@ -695,15 +695,28 @@ export default function App() {
     setAnunciosEncerrados((atual) => [...atual.filter((a) => a.id !== anuncio.id), anuncio]);
   }
 
-  async function handleReabrirAnuncio(codigoPdv: number) {
-    const hoje = dataDeHojeIso();
+  /** Devolve UM produto à vitrine — usado quando ele é anunciado de novo. */
+  async function reabrirUmAnuncio(codigoPdv: number, hoje: string) {
     const id = idDoEncerramento(hoje, codigoPdv);
-    const nome = produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? "Produto";
-    await comRetorno(
-      () => repositorio!.reabrirAnuncio(id),
-      `${nome} voltou para a lista.`
-    );
+    await repositorio!.reabrirAnuncio(id);
     setAnunciosEncerrados((atual) => atual.filter((a) => a.id !== id));
+  }
+
+  /**
+   * Devolve TODOS à vitrine — o "mostrar de novo" da tela.
+   *
+   * De uma vez, e não item por item (ago/2026, decisão do dono do
+   * negócio): o caso comum é o dia acabar e outro começar, não escolher
+   * qual dos escondidos volta.
+   */
+  async function handleReabrirTudo() {
+    const hoje = dataDeHojeIso();
+    const doDia = anunciosEncerrados.filter((a) => a.data === hoje);
+    if (doDia.length === 0) return;
+    await comRetorno(async () => {
+      for (const anuncio of doDia) await repositorio!.reabrirAnuncio(anuncio.id);
+    }, "Itens de volta na lista — as filiais voltam a ver.");
+    setAnunciosEncerrados((atual) => atual.filter((a) => a.data !== hoje));
   }
 
   /**
@@ -746,9 +759,7 @@ export default function App() {
      */
     if (codigosEncerrados(anunciosEncerrados, hoje).has(codigoPdv)) {
       try {
-        const id = idDoEncerramento(hoje, codigoPdv);
-        await repositorio!.reabrirAnuncio(id);
-        setAnunciosEncerrados((atual) => atual.filter((a) => a.id !== id));
+        await reabrirUmAnuncio(codigoPdv, hoje);
       } catch (erro) {
         console.warn("Fornada marcada, mas o anúncio não reabriu:", erro);
       }
@@ -1285,7 +1296,7 @@ export default function App() {
                 dataHoje={diaCorrente}
                 encerrados={codigosEncerrados(anunciosEncerrados, diaCorrente)}
                 onEncerrarAnuncio={handleEncerrarAnuncio}
-                onReabrirAnuncio={handleReabrirAnuncio}
+                onReabrirTudo={handleReabrirTudo}
                 onMarcarFornada={handleMarcarFornada}
               />
             </>
@@ -1306,6 +1317,7 @@ export default function App() {
             loja={loja}
             produtos={produtos}
             pedidos={pedidos}
+            perdas={perdas}
             operador={operador}
             hoje={diaCorrente}
             onSalvarPedido={handleSalvarPedido}

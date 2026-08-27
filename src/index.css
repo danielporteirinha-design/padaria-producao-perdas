@@ -1003,26 +1003,6 @@ button.perigo:hover { background: #822525; }
 .tirar-da-lista:hover { color: var(--cor-alerta); background: var(--cor-fundo); }
 .tirar-da-lista:focus-visible { outline: 2px solid var(--cor-acento); outline-offset: -2px; }
 
-/* O que a matriz tirou da vitrine, nomeado um a um — e não uma contagem
-   com "mostrar tudo". Devolver item por item é o que a operação pede:
-   acabou o pão francês e voltou o bolo, não "voltou tudo". */
-.fora-da-vitrine {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--cor-borda);
-}
-.fora-da-vitrine .nota-rodape { margin: 0 0 6px; }
-.linha-encerrada {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 0;
-  font-size: 14px;
-  color: var(--cor-texto-suave);
-}
-.linha-encerrada span { overflow-wrap: anywhere; }
-.linha-encerrada .link { flex-shrink: 0; }
 
 /* "Pedir" e "excluir aviso" na mesma linha, à direita do produto. */
 .acoes-fornada { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }

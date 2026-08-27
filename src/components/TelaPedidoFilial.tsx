@@ -23,6 +23,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { ItemPlanoProducao } from "../types/producao";
 import type { PedidoFilial } from "../types/pedido";
+import type { RegistroPerda } from "../types/perda";
 import { ehPedidoDiario, idDoPedido } from "../types/pedido";
 import { AtivarAvisos } from "./AtivarAvisos";
 import type { Loja } from "../lib/lojas";
@@ -30,12 +31,23 @@ import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 import { proximaDataAlvo } from "../lib/dataAlvoDoDia";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
+import {
+  buscarSugestaoProducao,
+  ErroSugestaoProducao,
+  montarHistoricoDaFilial,
+} from "../lib/sugestaoProducao";
 import { IconeCalendario, IconeConfere, IconeLixeira, IconeSeta } from "./Icones";
 
 interface TelaPedidoFilialProps {
   loja: Loja;
   produtos: Produto[];
   pedidos: PedidoFilial[];
+  /**
+   * Perdas — o outro lado da conta na sugestão por IA. Pedir mais do que
+   * se vende vira perda no dia seguinte, e é justamente esse par
+   * (pedido × perda) que a IA lê para sugerir.
+   */
+  perdas: RegistroPerda[];
   operador: string;
   /** Data de hoje, viva — ver src/lib/useDiaCorrente.ts. */
   hoje: string;
@@ -47,6 +59,7 @@ export function TelaPedidoFilial({
   loja,
   produtos,
   pedidos,
+  perdas,
   operador,
   hoje,
   onSalvarPedido,
@@ -58,6 +71,8 @@ export function TelaPedidoFilial({
   const [valorEditando, setValorEditando] = useState("");
   const [sessaoAConfirmarLimpeza, setSessaoAConfirmarLimpeza] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [statusSugestao, setStatusSugestao] = useState<Record<string, "" | "carregando" | "erro">>({});
+  const [mensagemSugestao, setMensagemSugestao] = useState<Record<string, string>>({});
 
   const pedidoExistente = useMemo(
     // Só o pedido DIÁRIO: a reposição é outra lista, com outra urgência,
@@ -137,6 +152,56 @@ export function TelaPedidoFilial({
     setItens((atual) => atual.filter((i) => !codigos.has(i.codigoPdv)));
     setSessaoAConfirmarLimpeza(null);
     setExpandido((a) => ({ ...a, [chave]: false }));
+  }
+
+  /**
+   * Sugestão de quantidades pela IA, para a filial (ago/2026).
+   *
+   * Lê o histórico DESTA loja — o que ela pediu e o que ela perdeu —, e
+   * não a produção da matriz: a produção total inclui o que foi para as
+   * outras lojas, e a sugestão sairia várias vezes maior que este balcão
+   * vende. Ver montarHistoricoDaFilial em src/lib/sugestaoProducao.ts.
+   *
+   * Só preenche o que está VAZIO. Número que a pessoa já digitou é
+   * decisão tomada, e sobrescrever seria a IA discordando de quem está no
+   * balcão sem nem avisar.
+   */
+  async function gerarSugestaoIA(chave: string) {
+    setStatusSugestao((a) => ({ ...a, [chave]: "carregando" }));
+    setMensagemSugestao((a) => ({ ...a, [chave]: "" }));
+    try {
+      const historico = montarHistoricoDaFilial(chave, loja.id, produtos, pedidos, perdas);
+      const sugestoes = await buscarSugestaoProducao(diaDaSemana, chave, historico);
+
+      setItens((atual) => {
+        const jaTem = new Set(atual.map((i) => i.codigoPdv));
+        const novos = sugestoes
+          .filter((s) => !jaTem.has(s.codigoPdv) && s.quantidadeSugerida > 0)
+          .map((s) => ({
+            codigoPdv: s.codigoPdv,
+            quantidadeUnidades: Math.round(s.quantidadeSugerida * 100) / 100,
+          }));
+        return [...atual, ...novos];
+      });
+      setExpandido((a) => ({ ...a, [chave]: true }));
+      setStatusSugestao((a) => ({ ...a, [chave]: "" }));
+      setMensagemSugestao((a) => ({
+        ...a,
+        [chave]:
+          sugestoes.length > 0
+            ? `${sugestoes.length} sugestão(ões) da IA adicionada(s) — revise antes de enviar.`
+            : "Ainda não há histórico de pedidos suficiente nesta categoria para sugerir.",
+      }));
+    } catch (erro) {
+      setStatusSugestao((a) => ({ ...a, [chave]: "erro" }));
+      setMensagemSugestao((a) => ({
+        ...a,
+        [chave]:
+          erro instanceof ErroSugestaoProducao
+            ? erro.message
+            : "Não foi possível gerar a sugestão agora.",
+      }));
+    }
   }
 
   async function enviar() {
@@ -250,6 +315,30 @@ export function TelaPedidoFilial({
 
             {aberto && (
               <div className="corpo-sessao">
+                {/* A mesma ferramenta que a matriz tem no Cronograma, com o
+                    histórico DESTA loja por trás. */}
+                <div className="linha-sugestao-ia">
+                  <button
+                    type="button"
+                    className="secundario"
+                    disabled={statusSugestao[categoria.chave] === "carregando"}
+                    onClick={() => gerarSugestaoIA(categoria.chave)}
+                  >
+                    {statusSugestao[categoria.chave] === "carregando"
+                      ? "Gerando sugestão..."
+                      : "✨ Sugerir quantidades com IA"}
+                  </button>
+                </div>
+                {mensagemSugestao[categoria.chave] && (
+                  <p
+                    className={
+                      statusSugestao[categoria.chave] === "erro" ? "erro-conversao" : "nota-rodape"
+                    }
+                  >
+                    {mensagemSugestao[categoria.chave]}
+                  </p>
+                )}
+
                 {lista.length === 0 && (
                   <p className="nota-rodape">Nenhum produto ativo nesta categoria ainda.</p>
                 )}

@@ -58,7 +58,8 @@ interface PainelFornoDeHojeProps {
    */
   encerrados: Set<number>;
   onEncerrarAnuncio: (codigoPdv: number) => Promise<void>;
-  onReabrirAnuncio: (codigoPdv: number) => Promise<void>;
+  /** Devolve TODOS à vitrine de uma vez — o "mostrar de novo". */
+  onReabrirTudo: () => Promise<void>;
   onMarcarFornada: (codigoPdv: number) => Promise<void>;
 }
 
@@ -69,7 +70,7 @@ export function PainelFornoDeHoje({
   dataHoje,
   encerrados,
   onEncerrarAnuncio,
-  onReabrirAnuncio,
+  onReabrirTudo,
   onMarcarFornada,
 }: PainelFornoDeHojeProps) {
   const [marcando, setMarcando] = useState<number | null>(null);
@@ -100,20 +101,6 @@ export function PainelFornoDeHoje({
   }, [produtos, busca]);
 
   const buscando = busca.trim().length > 0;
-
-  /**
-   * O que está fora da vitrine, nomeado um a um.
-   *
-   * Antes era só uma contagem com "mostrar de novo", que devolvia tudo de
-   * uma vez. Devolver item por item é o que a operação pede: acabou o pão
-   * francês e voltou o bolo, não "voltou tudo".
-   */
-  const itensEncerrados = useMemo(
-    () => [...encerrados].sort((a, b) => nomeDoProduto(a).localeCompare(nomeDoProduto(b), "pt-BR")),
-    // nomeDoProduto depende de `produtos`, que é o que muda de verdade.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [encerrados, produtos]
-  );
 
   /**
    * A lista do dia achatada: os itens do cronograma na ordem em que a
@@ -263,24 +250,20 @@ export function PainelFornoDeHoje({
             {/* O caminho de volta. Fica fora da lista de propósito: quando
                 alguém tira o último item, é justamente aqui que ele
                 precisa estar. */}
-            {itensEncerrados.length > 0 && (
-              <div className="fora-da-vitrine">
-                <p className="nota-rodape">
-                  Fora da lista hoje — as filiais não veem estes:
-                </p>
-                {itensEncerrados.map((codigoPdv) => (
-                  <div key={codigoPdv} className="linha-encerrada">
-                    <span>{nomeDoProduto(codigoPdv)}</span>
-                    <button
-                      type="button"
-                      className="link"
-                      onClick={() => void onReabrirAnuncio(codigoPdv)}
-                    >
-                      devolver à lista
-                    </button>
-                  </div>
-                ))}
-              </div>
+            {/* Uma linha só, como na tela da filial (ago/2026, decisão do
+                dono do negócio). A lista nomeada, com um "devolver" por
+                item, ocupava a tela com o que NÃO está em jogo — e a
+                pessoa que abre esta aba veio anunciar, não administrar o
+                que já tirou. Devolver tudo de uma vez é o caso comum:
+                acabou o dia, começa outro. */}
+            {encerrados.size > 0 && (
+              <p className="nota-rodape">
+                {encerrados.size} {encerrados.size === 1 ? "item escondido" : "itens escondidos"}{" "}
+                hoje — as filiais não veem.{" "}
+                <button type="button" className="link" onClick={() => void onReabrirTudo()}>
+                  mostrar de novo
+                </button>
+              </p>
             )}
           </>
         )}
