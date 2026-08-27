@@ -47,6 +47,7 @@ import {
 } from "../src/types/pedido";
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "../src/lib/fornadasVistas";
 import { comoLiberarNotificacao, plataformaAtual } from "../src/lib/plataforma";
+import { contemBusca, paraBusca } from "../src/lib/texto";
 import {
   codigosComFornadaNoDia,
   fornadasDoProduto,
@@ -1789,6 +1790,36 @@ const perdas: RegistroPerda[] = [
     resumoDaImpressao([{ id: "a", status: "pendente" }], 1).pronto === false,
     "trabalho pendente mantém o desfecho em aberto"
   );
+}
+
+// ---------------------------------------------------------------
+// Caso 22: busca sem acento (ago/2026)
+//
+// Defeito real: a busca de produtos exigia acento. "pao" nao achava
+// "PAO FRANCES" e a tela respondia "nenhum produto encontrado" para um
+// produto que estava la'. Ninguem digita acento procurando as pressas —
+// no teclado do celular o "a" com til exige segurar a tecla e escolher
+// numa listinha, com a mao ocupada.
+// ---------------------------------------------------------------
+{
+  afirmar(paraBusca("Pão Francês") === "PAO FRANCES", "acento e caixa somem na normalizacao");
+  afirmar(paraBusca("  bolo  ") === "BOLO", "espaco das pontas sai");
+
+  // O caso que originou tudo.
+  afirmar(contemBusca("PÃO FRANCÊS", "pao"), '"pao" encontra "PÃO FRANCÊS"');
+  afirmar(contemBusca("BOLO DE FUBÁ", "fuba"), '"fuba" encontra "BOLO DE FUBÁ"');
+
+  // E o contrário também: quem digita com acento continua achando.
+  afirmar(contemBusca("PAO FRANCES", "pão"), '"pão" encontra um cadastro sem acento');
+  afirmar(contemBusca("PÃO FRANCÊS", "pão"), 'digitar com acento continua funcionando');
+
+  // Outros acentos do português, sem tabela de substituição para manter.
+  afirmar(contemBusca("AÇÚCAR MASCAVO", "acucar"), "cedilha e til de u: açúcar/acucar");
+  afirmar(contemBusca("PÃO DE QUEIJO CONGELADO", "QUEIJO"), "busca no meio do nome");
+
+  // Não pode virar um filtro que aceita qualquer coisa.
+  afirmar(!contemBusca("PÃO FRANCÊS", "bolo"), "termo que nao existe continua sem resultado");
+  afirmar(contemBusca("PÃO FRANCÊS", ""), "termo vazio nao exclui nada");
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

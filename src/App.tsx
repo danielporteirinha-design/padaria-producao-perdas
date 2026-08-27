@@ -32,6 +32,7 @@ import { ouvirAvisosEmPrimeiroPlano } from "./lib/notificacoes";
 import { AtivarAvisos } from "./components/AtivarAvisos";
 import { PainelFornoDeHoje } from "./components/PainelFornoDeHoje";
 import { PainelFornadasFilial } from "./components/PainelFornadasFilial";
+import { PainelPedidosFiliais } from "./components/PainelPedidosFiliais";
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "./lib/fornadasVistas";
 
 type Aba = "cronograma" | "fornada" | "cadastro" | "perdas" | "analises" | "pedido";
@@ -156,6 +157,20 @@ export default function App() {
   // o app não perguntava nada e os lançamentos da filial saíam assinados
   // por quem usou o celular antes (defeito relatado em produção).
   const [operador, setOperador] = useState("");
+  /**
+   * Último nome usado nesta loja, neste aparelho.
+   *
+   * Fica separado de `operador` de propósito (ago/2026): antes o nome
+   * salvo entrava sozinho e o app abria direto na tela de trabalho.
+   * Agora ele é apenas uma SUGESTÃO — o app sempre abre na tela de
+   * entrada, e quem chega confirma quem é com um toque.
+   *
+   * Parece um passo a mais, mas evita o erro que ninguém percebe: numa
+   * padaria o mesmo celular passa de mão em mão, e o lançamento de perda
+   * do turno da tarde acabava assinado com o nome de quem trabalhou de
+   * manhã. O registro de quem lançou é o que dá sentido ao histórico.
+   */
+  const [nomeSugerido, setNomeSugerido] = useState("");
   const [aba, setAba] = useState<Aba>("cronograma");
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [planos, setPlanos] = useState<PlanoDeProducaoDiario[]>([]);
@@ -231,9 +246,11 @@ export default function App() {
   useEffect(() => {
     if (!loja) {
       setOperador("");
+      setNomeSugerido("");
       return;
     }
-    setOperador(localStorage.getItem(chaveOperador(loja.id)) ?? "");
+    setOperador("");
+    setNomeSugerido(localStorage.getItem(chaveOperador(loja.id)) ?? "");
   }, [loja]);
 
   useEffect(() => {
@@ -369,6 +386,10 @@ export default function App() {
 
   function handleDefinirOperador(nome: string) {
     setOperador(nome);
+    // Nome vazio é o "trocar" do cabeçalho: além de sair, apaga a
+    // sugestão — senão a tela de entrada ofereceria de volta exatamente
+    // o nome que a pessoa acabou de recusar.
+    setNomeSugerido(nome);
     if (loja) localStorage.setItem(chaveOperador(loja.id), nome);
   }
 
@@ -754,7 +775,13 @@ export default function App() {
   }
 
   if (!operador) {
-    return <TelaIdentificacao onConfirmar={handleDefinirOperador} nomeDaLoja={loja.nome} />;
+    return (
+      <TelaIdentificacao
+        onConfirmar={handleDefinirOperador}
+        nomeDaLoja={loja.nome}
+        nomeSugerido={nomeSugerido}
+      />
+    );
   }
 
   const abasVisiveis = ABAS_POR_PAPEL[loja.papel];
@@ -837,7 +864,6 @@ export default function App() {
             onConfirmarProducao={handleConfirmarProducao}
             onImprimirNoCaixa={handleImprimirNoCaixa}
             fornadas={fornadas}
-            onDecidirReposicao={loja.papel === "matriz" ? handleDecidirReposicao : undefined}
             planos={planos}
             perdas={perdas}
             operador={operador}
@@ -849,7 +875,23 @@ export default function App() {
             mesmo assunto, cada uma no papel de quem está olhando. */}
         {abaAtual === "fornada" &&
           (loja.papel === "matriz" ? (
-            planoDeHojeParaFornada ? (
+            <>
+              {/* Reposição é pedido de HOJE, feito enquanto o forno
+                  trabalha — mora junto do resto do expediente, e não no
+                  Cronograma, que é sobre amanhã. */}
+              <PainelPedidosFiliais
+                pedidos={pedidos}
+                data={dataDeHojeIso()}
+                somenteReposicoes
+                reposicoesDeHoje={pedidos.filter(
+                  (p) => p.data === dataDeHojeIso() && p.tipo === "reposicao"
+                )}
+                onDecidirReposicao={handleDecidirReposicao}
+                nomeDoProduto={(codigo) =>
+                  produtos.find((p) => p.codigoPdv === codigo)?.nome ?? `#${codigo}`
+                }
+              />
+              {planoDeHojeParaFornada ? (
               <PainelFornoDeHoje
                 plano={planoDeHojeParaFornada}
                 produtos={produtos}
@@ -857,11 +899,12 @@ export default function App() {
                 dataHoje={dataDeHojeIso()}
                 onMarcarFornada={handleMarcarFornada}
               />
-            ) : (
-              <p className="callout-inline">
-                Nenhum cronograma confirmado para hoje — sem lista, não há fornada a marcar.
-              </p>
-            )
+              ) : (
+                <p className="callout-inline">
+                  Nenhum cronograma confirmado para hoje — sem lista, não há fornada a marcar.
+                </p>
+              )}
+            </>
           ) : (
             <PainelFornadasFilial
               loja={loja}
@@ -917,31 +960,82 @@ export default function App() {
   );
 }
 
+/**
+ * Tela de entrada — sempre a primeira, mesmo com a loja já autenticada.
+ *
+ * Dois caminhos, e o de um toque é o normal:
+ *
+ *   - Já trabalhou neste aparelho -> "Continuar como Daniel", um toque
+ *   - Primeira vez, ou trocou de pessoa -> digita o nome
+ *
+ * O nome não é senha: é a assinatura de quem lançou cada registro. Por
+ * isso confirmar é rápido, e por isso trocar tem que ser fácil — numa
+ * padaria o mesmo celular passa de mão em mão entre turnos.
+ */
 function TelaIdentificacao({
   onConfirmar,
   nomeDaLoja,
+  nomeSugerido,
 }: {
   onConfirmar: (nome: string) => void;
   nomeDaLoja: string;
+  nomeSugerido: string;
 }) {
   const [nome, setNome] = useState("");
+  const [digitando, setDigitando] = useState(!nomeSugerido);
+
   return (
     <div className="tela-identificacao">
-      <h1>Padaria Pão de Mel</h1>
+      <img
+        className="marca-login"
+        src="/logo-pao-de-mel.png"
+        alt="Padaria Pão de Mel"
+        width="320"
+        height="115"
+      />
       <p className="subtitulo">{nomeDaLoja}</p>
-      <p>Quem está lançando os dados hoje?</p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (nome.trim()) onConfirmar(nome.trim());
-        }}
-      >
-        <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome" autoFocus />
-        <button type="submit" className="primario">Entrar</button>
-      </form>
+
+      {!digitando ? (
+        <>
+          <p className="pergunta-entrada">Continuar como</p>
+          {/* O nome É o botão, e é o maior alvo da tela: é o que a pessoa
+              vai tocar todo dia, muitas vezes, com a mão ocupada. */}
+          <button type="button" className="botao-continuar" onClick={() => onConfirmar(nomeSugerido)}>
+            {nomeSugerido}
+          </button>
+          <button type="button" className="link" onClick={() => setDigitando(true)}>
+            é outra pessoa
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="pergunta-entrada">Quem está lançando os dados hoje?</p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (nome.trim()) onConfirmar(nome.trim());
+            }}
+          >
+            <input
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Seu nome"
+              autoFocus
+            />
+            <button type="submit" className="primario" disabled={nome.trim() === ""}>
+              Entrar
+            </button>
+          </form>
+          {nomeSugerido && (
+            <button type="button" className="link" onClick={() => setDigitando(false)}>
+              voltar
+            </button>
+          )}
+        </>
+      )}
+
       <p className="nota-rodape">
-        Identificação simples para rastrear quem lançou cada registro — não é um login com senha.
-        Ver "Decisões pendentes" no documento de arquitetura para o plano de autenticação real.
+        O nome fica junto de cada lançamento, para saber quem registrou o quê.
       </p>
     </div>
   );

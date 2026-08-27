@@ -14,6 +14,7 @@ import type { NovoProdutoInput, Produto, UnidadeProducao } from "../types/produt
 import { ConfirmarComSenha } from "./ConfirmarComSenha";
 import { IconeLixeira } from "./Icones";
 import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
+import { contemBusca } from "../lib/texto";
 
 interface TelaCadastroProdutosProps {
   produtos: Produto[];
@@ -149,10 +150,10 @@ export function TelaCadastroProdutos({
   }
 
   const produtosFiltrados = useMemo(() => {
-    const termo = busca.trim().toUpperCase();
+    const termo = busca.trim();
     if (!termo) return produtos;
     return produtos.filter(
-      (p) => p.nome.toUpperCase().includes(termo) || p.categoria.toUpperCase().includes(termo)
+      (p) => contemBusca(p.nome, termo) || contemBusca(p.categoria, termo)
     );
   }, [produtos, busca]);
 

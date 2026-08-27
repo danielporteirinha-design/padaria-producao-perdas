@@ -26,7 +26,13 @@ import type { ItemPlanoProducao } from "../types/producao";
 const LARGURA_PX = 576;
 const MARGEM = 24;
 const ALTURA_LINHA = 56;
-const ALTURA_CABECALHO_BLOCO = 210;
+/**
+ * 174 e nao 210: saiu a linha "PADARIA PAO DE MEL" do topo de cada bloco
+ * (ago/2026). Só funcionario da padaria usa este app e este papel nunca
+ * sai da cozinha — a marca ali gastava 36px de bobina, em toda sessao de
+ * todo dia, para informar a padaria o nome dela mesma.
+ */
+const ALTURA_CABECALHO_BLOCO = 174;
 /**
  * Rodapé de CADA sessão. Tem duas alturas porque a assinatura ("Montado
  * por: fulano") entra dentro de cada bloco, não só no fim da fita
@@ -36,7 +42,7 @@ const ALTURA_CABECALHO_BLOCO = 210;
  * vez, no fim, então só o último pedaço cortado ficava assinado.
  */
 const ALTURA_RODAPE_BLOCO = 30;
-const ALTURA_RODAPE_BLOCO_ASSINADO = 56;
+const ALTURA_RODAPE_BLOCO_ASSINADO = 64;
 export const ALTURA_FAIXA_CORTE = 90;
 /** Faixa preta com o nome do destino, entre os pedidos de duas lojas. */
 export const ALTURA_MARCADOR_DESTINO = 120;
@@ -191,20 +197,31 @@ function desenharCanvasParaGrupo(
     if (bloco.inicioDeDestino) {
       y = desenharMarcadorDeDestino(ctx, y, bloco.inicioDeDestino);
     }
-    y = desenharBloco(ctx, y, bloco.rotuloSessao, bloco.linhas, titulo, dataFormatada, montadoPor);
+    y = desenharBloco(
+      ctx,
+      y,
+      bloco.rotuloSessao,
+      bloco.linhas,
+      titulo,
+      dataFormatada,
+      montadoPor,
+      !bloco.inicioDeDestino
+    );
     if (indice < grupo.length - 1) {
       y = desenharFaixaDeCorte(ctx, y);
     }
   });
 
   ctx.textAlign = "center";
-  ctx.font = "13px system-ui, -apple-system, sans-serif";
-  ctx.fillStyle = "#555555";
+  ctx.font = "17px system-ui, -apple-system, sans-serif";
+  ctx.fillStyle = "#000000";
   const totalItens = grupo.reduce((s, b) => s + b.linhas.length, 0);
+  // Sem "app Produção & Perdas": o papel fica na cozinha da própria
+  // padaria, e quem o lê já sabe de onde ele veio.
   const rotuloContagem =
     totalImagens > 1
-      ? `${grupo.length} sessão(ões) · ${totalItens} itens · imagem ${numeroImagem}/${totalImagens} · app Produção & Perdas`
-      : `${grupo.length} sessão(ões) · ${totalItens} itens · app Produção & Perdas`;
+      ? `${grupo.length} sessão(ões) · ${totalItens} itens · imagem ${numeroImagem}/${totalImagens}`
+      : `${grupo.length} sessão(ões) · ${totalItens} itens`;
   ctx.fillText(rotuloContagem, LARGURA_PX / 2, y + 10);
   // A assinatura NÃO se repete aqui: ela já sai no rodapé de cada sessão
   // (ver desenharBloco). Repetir no fim só assinaria de novo o último
@@ -253,27 +270,43 @@ function desenharBloco(
   linhas: LinhaItem[],
   titulo: string,
   dataFormatada: string,
-  montadoPor: string | undefined
+  montadoPor: string | undefined,
+  /**
+   * UMA faixa preta por pedaço de papel, nunca duas.
+   *
+   * Na fita de separação o nome da loja já sai numa faixa preta logo
+   * acima; repetir o mesmo peso na data punha duas barras pretas a menos
+   * de 120px uma da outra. Duas coisas gritando ao mesmo tempo é o mesmo
+   * que nenhuma gritar — e gasta o dobro de tinta térmica na bobina.
+   *
+   * Quem manda é a identidade daquele papel: na fita de separação é a
+   * LOJA de destino; na lista de produção é a DATA.
+   */
+  dataEmDestaque = true
 ): number {
   let y = yInicial + MARGEM;
 
   ctx.fillStyle = "#000000";
   ctx.textAlign = "center";
-  ctx.font = "bold 26px system-ui, -apple-system, sans-serif";
-  ctx.fillText("PADARIA PÃO DE MEL", LARGURA_PX / 2, y);
-  y += 36;
-
-  ctx.font = "20px system-ui, -apple-system, sans-serif";
+  ctx.font = "bold 22px system-ui, -apple-system, sans-serif";
   ctx.fillText(titulo, LARGURA_PX / 2, y);
-  y += 32;
+  y += 34;
 
-  // Data em destaque — caixa preta, texto branco, bem grande.
   const alturaCaixaData = 50;
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(MARGEM, y, LARGURA_PX - MARGEM * 2, alturaCaixaData);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 24px system-ui, -apple-system, sans-serif";
-  ctx.fillText(dataFormatada, LARGURA_PX / 2, y + 13);
+  if (dataEmDestaque) {
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(MARGEM, y, LARGURA_PX - MARGEM * 2, alturaCaixaData);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 24px system-ui, -apple-system, sans-serif";
+    ctx.fillText(dataFormatada, LARGURA_PX / 2, y + 13);
+  } else {
+    // Sem faixa: negrito e uma régua embaixo dão hierarquia suficiente
+    // quando a loja de destino já levou o destaque forte.
+    ctx.fillStyle = "#000000";
+    ctx.font = "bold 24px system-ui, -apple-system, sans-serif";
+    ctx.fillText(dataFormatada, LARGURA_PX / 2, y + 13);
+    linhaHorizontal(ctx, y + 46, "#000000", 2);
+  }
   y += alturaCaixaData + 18;
 
   ctx.fillStyle = "#000000";
@@ -298,13 +331,24 @@ function desenharBloco(
     ctx.textAlign = "right";
     ctx.fillText(`${formatarUnidades(linha.unidades)} un`, LARGURA_PX - MARGEM, y);
     y += ALTURA_LINHA - 16;
-    linhaHorizontal(ctx, y, "#cccccc", 1);
+    // Preto: um #ccc de 1px some por completo no corte de limiar da
+    // termica, e a lista sai sem separacao nenhuma entre os itens.
+    linhaHorizontal(ctx, y, "#000000", 1);
     y += 16;
   }
 
+  /**
+   * PRETO PURO E FONTE MAIOR — nao e' preferencia estetica.
+   *
+   * A termica imprime 1 BIT: cada ponto sai preto ou nao sai. Um cinza
+   * #555 vira um chuvisco de pontos soltos depois do corte de limiar, e
+   * a 14px isso destroi a palavra — foi por isso que "Montado por" saiu
+   * ilegivel no papel (ago/2026). Na tela o cinza parecia discreto; no
+   * papel ele nao existe.
+   */
   ctx.textAlign = "center";
-  ctx.font = "14px system-ui, -apple-system, sans-serif";
-  ctx.fillStyle = "#555555";
+  ctx.font = "18px system-ui, -apple-system, sans-serif";
+  ctx.fillStyle = "#000000";
   ctx.fillText(`${linhas.length} ${linhas.length === 1 ? "item" : "itens"} nesta sessão`, LARGURA_PX / 2, y + 6);
 
   // Assinatura por sessão: este pedaço vai ser cortado e fixado sozinho no
@@ -312,9 +356,9 @@ function desenharBloco(
   // A altura somada aqui TEM que bater com ALTURA_RODAPE_BLOCO_ASSINADO
   // usada em computarBlocos() — senão a divisão em imagens erra.
   if (montadoPor) {
-    ctx.font = "15px system-ui, -apple-system, sans-serif";
-    ctx.fillStyle = "#333333";
-    ctx.fillText(`Montado por: ${montadoPor}`, LARGURA_PX / 2, y + 26);
+    ctx.font = "bold 20px system-ui, -apple-system, sans-serif";
+    ctx.fillStyle = "#000000";
+    ctx.fillText(`Montado por: ${montadoPor}`, LARGURA_PX / 2, y + 30);
     y += ALTURA_RODAPE_BLOCO_ASSINADO;
   } else {
     y += ALTURA_RODAPE_BLOCO;
@@ -369,7 +413,7 @@ function desenharFaixaDeCorte(ctx: CanvasRenderingContext2D, yInicial: number): 
   const yLinha = yInicial + ALTURA_FAIXA_CORTE / 2;
 
   ctx.save();
-  ctx.strokeStyle = "#999999";
+  ctx.strokeStyle = "#000000";
   ctx.lineWidth = 2;
   ctx.setLineDash([10, 8]);
   ctx.beginPath();
@@ -389,8 +433,8 @@ function desenharFaixaDeCorte(ctx: CanvasRenderingContext2D, yInicial: number): 
   ctx.fillStyle = "#000000";
   ctx.fillText("✂", LARGURA_PX / 2, yLinha + 1);
 
-  ctx.font = "12px system-ui, -apple-system, sans-serif";
-  ctx.fillStyle = "#777777";
+  ctx.font = "16px system-ui, -apple-system, sans-serif";
+  ctx.fillStyle = "#000000";
   ctx.fillText("corte aqui", LARGURA_PX / 2, yLinha + 26);
 
   ctx.textBaseline = "top";

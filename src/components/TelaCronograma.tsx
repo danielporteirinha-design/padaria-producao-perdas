@@ -28,13 +28,17 @@ import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProducao } from "../lib/sugestaoProducao";
 import { ExportarFita } from "./ExportarFita";
-import { PainelPedidosFiliais } from "./PainelPedidosFiliais";
 import { ConfirmarProducao } from "./ConfirmarProducao";
 import { ehPedidoDiario, type PedidoFilial } from "../types/pedido";
 import type { FornadaPronta } from "../types/fornada";
 import { codigosComFornadaNoDia } from "../types/fornada";
 import { FILIAIS, LOJA_MATRIZ, nomeDaLoja } from "../lib/lojas";
-import { consolidarProducao, itensParaLoja, type ItemConsolidado } from "../lib/consolidacao";
+import {
+  consolidarProducao,
+  itensParaLoja,
+  quantidadeDaLoja,
+  type ItemConsolidado,
+} from "../lib/consolidacao";
 import { IconeCalendario, IconeLixeira, IconeSeta } from "./Icones";
 
 interface TelaCronogramaProps {
@@ -50,12 +54,6 @@ interface TelaCronogramaProps {
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   operador: string;
-  /** Só a matriz recebe — é ela que responde à reposição. */
-  onDecidirReposicao?: (
-    pedido: PedidoFilial,
-    desfecho: "confirmado" | "cancelado",
-    motivo?: string
-  ) => Promise<void>;
   onSalvarPlano: (plano: PlanoDeProducaoDiario) => Promise<void>;
 }
 
@@ -81,7 +79,6 @@ export function TelaCronograma({
   planos,
   perdas,
   operador,
-  onDecidirReposicao,
   onSalvarPlano,
 }: TelaCronogramaProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
@@ -93,6 +90,7 @@ export function TelaCronograma({
    * Quem vai montar toca uma vez e entra.
    */
   const [planejamentoAberto, setPlanejamentoAberto] = useState(false);
+  const [consolidadoAberto, setConsolidadoAberto] = useState(false);
 
   const planoExistente = useMemo(() => planos.find((p) => p.data === dataAlvo), [planos, dataAlvo]);
 
@@ -494,6 +492,47 @@ export function TelaCronograma({
   // ------------------------------------------------------------------
 
   /**
+   * O que vai ser produzido, aberto por destino.
+   *
+   * Junta o que a MATRIZ esta montando agora (rascunho na tela) com os
+   * pedidos que as filiais ja enviaram para a mesma data. E a conta que o
+   * padeiro executa e que a separacao da manha confere - ate hoje ela so
+   * existia depois de "Ir para o Resumo", e conferir exigia sair do meio
+   * da montagem.
+   */
+  const consolidadoDaData = useMemo(
+    () =>
+      consolidarProducao(
+        GRUPOS.flatMap((chave) => itensPorGrupo[chave] ?? []),
+        pedidosDoDia,
+        LOJA_MATRIZ.id
+      ),
+    [itensPorGrupo, pedidosDoDia]
+  );
+
+  /** O consolidado quebrado por sessao, que e como a producao acontece. */
+  const consolidadoPorSessao = useMemo(
+    () =>
+      GRUPOS.map((chave) => ({
+        chave,
+        rotulo: rotuloDaCategoria(chave),
+        itens: consolidadoDaData.filter(
+          (item) => produtos.find((p) => p.codigoPdv === item.codigoPdv)?.categoria === chave
+        ),
+      })).filter((sessao) => sessao.itens.length > 0),
+    [consolidadoDaData, produtos]
+  );
+
+  /** Lojas que viram coluna: so as que tem alguma quantidade. */
+  const colunasDeLoja = useMemo(
+    () =>
+      [LOJA_MATRIZ, ...FILIAIS].filter((l) =>
+        consolidadoDaData.some((item) => quantidadeDaLoja(item, l.id) > 0)
+      ),
+    [consolidadoDaData]
+  );
+
+  /**
    * Estado do plano em três palavras, para caber na linha do título.
    * "confirmado" é o único que encerra o assunto; os outros dois dizem
    * que ainda falta alguém fazer alguma coisa, e por isso ficam em âmbar.
@@ -568,18 +607,81 @@ export function TelaCronograma({
         />
       )}
 
-      {/* As reposições NÃO entram no balão: elas não são "estado do
-          planejamento de amanhã", são pedido urgente de hoje esperando
-          resposta. Esconder isso atrás de um toque atrasaria justamente
-          o que não pode esperar. */}
-      <PainelPedidosFiliais
-        pedidos={pedidos}
-        data={dataAlvo}
-        somenteReposicoes
-        reposicoesDeHoje={pedidos.filter((p) => p.data === hojeIso && p.tipo === "reposicao")}
-        onDecidirReposicao={onDecidirReposicao}
-        nomeDoProduto={nomeDoProduto}
-      />
+      {/* As reposições saíram desta tela (ago/2026): elas são de HOJE e
+          moram na aba "Nova fornada", junto do resto do que acontece
+          durante o expediente. O Cronograma é sobre AMANHÃ. */}
+
+      {/*
+        QUANTO VAI PARA CADA UM — antes só existia depois de "Ir para o
+        Resumo". Conferir se o pedido da filial já entrou na conta obrigava
+        a sair do meio da montagem e voltar, e quem monta confere isso
+        várias vezes enquanto digita.
+
+        Sanfona fechada: é consulta, não etapa. O cabeçalho já diz o total
+        do dia, que na maioria das vezes é a única coisa que se queria
+        saber.
+      */}
+      {consolidadoPorSessao.length > 0 && (
+        <div className={`bloco-consolidado ${consolidadoAberto ? "aberto" : ""}`}>
+          <button
+            type="button"
+            className="cabecalho-consolidado"
+            aria-expanded={consolidadoAberto}
+            onClick={() => setConsolidadoAberto((v) => !v)}
+          >
+            <span className="titulo-consolidado">Quanto vai para cada loja</span>
+            <span className="total-consolidado">
+              {arred(consolidadoDaData.reduce((soma, i) => soma + i.totalUnidades, 0))} un
+            </span>
+            <IconeSeta className="seta-sessao" />
+          </button>
+
+          {consolidadoAberto && (
+            <div className="corpo-consolidado">
+              {/*
+                UMA LINHA POR PRODUTO, e não uma coluna por loja.
+
+                A tabela larga foi testada em 390px e reprovada: com três
+                lojas, a coluna TOTAL — o número que o padeiro executa —
+                saía fora da tela e só aparecia rolando de lado. Esconder
+                o total num quadro que existe para mostrar o total é o
+                oposto do objetivo.
+
+                Aqui o total fica à direita, no tamanho do dado, e a
+                repartição vem embaixo em uma linha só. Nada rola.
+              */}
+              {consolidadoPorSessao.map((sessao) => (
+                <div key={sessao.chave} className="sessao-consolidada">
+                  <h4>{sessao.rotulo}</h4>
+                  {sessao.itens.map((item) => (
+                    <div key={item.codigoPdv} className="linha-consolidada">
+                      <div className="topo-consolidado">
+                        <span className="nome-consolidado">{nomeDoProduto(item.codigoPdv)}</span>
+                        <span className="qtd-consolidada">{arred(item.totalUnidades)} un</span>
+                      </div>
+                      <span className="reparticao-consolidada">
+                        {colunasDeLoja
+                          .map((l) => ({ l, quanto: quantidadeDaLoja(item, l.id) }))
+                          .filter(({ quanto }) => quanto > 0)
+                          .map(({ l, quanto }) => `${l.nomeCurto.split(" ")[0]} ${arred(quanto)}`)
+                          .join("  ·  ")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+
+              {filiaisQueEnviaram.length < FILIAIS.length && (
+                <p className="nota-rodape">
+                  Só entram filiais que já enviaram o pedido do dia — {FILIAIS.length -
+                    filiaisQueEnviaram.length}{" "}
+                  ainda não enviou.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {!planejamentoAberto ? null : (
       <>

@@ -232,6 +232,58 @@ Escuta por id, e não consulta na coleção: cada documento carrega a imagem
 inteira em base64, e puxar os trabalhos de outras impressões custaria
 megabytes numa conexão de padaria.
 
+## A fita é papel de cozinha, não peça de marca (ago/2026)
+
+Quatro correções depois de ver a bobina impressa de verdade.
+
+### Cinza não existe na térmica
+
+A térmica imprime **1 bit**: cada ponto sai preto ou não sai. O `#555555`
+de "2 itens nesta sessão" e o `#333333` de "Montado por: fulano" viravam
+um chuvisco de pontos soltos depois do corte de limiar — e a 14–15px isso
+destruía a palavra. Na tela o cinza parecia discreto; no papel ele não
+existia.
+
+Tudo passou a preto puro, e as fontes pequenas cresceram:
+
+| Elemento | Antes | Agora |
+|---|---|---|
+| "Montado por: fulano" | 15px `#333` | **20px negrito** preto |
+| "N itens nesta sessão" | 14px `#555` | 18px preto |
+| "corte aqui" | 12px `#777` | 16px preto |
+| Régua entre itens | 1px `#ccc` | 1px preto |
+| Linha de corte | 2px `#999` | 2px preto |
+
+A régua `#ccc` sumia por completo no limiar: a lista saía sem separação
+nenhuma entre os itens.
+
+Conferido rodando a fita real no navegador e simulando a conversão de
+1 bit com limiar em 128 — o resultado em preto e branco ficou idêntico ao
+original em cinza, que é o sinal de que nada mais se perde na impressão.
+
+### Sem "PADARIA PÃO DE MEL" no topo
+
+Só funcionário usa este app e esse papel nunca sai da cozinha. A linha
+gastava 36px de bobina em toda sessão de todo dia para informar à padaria
+o nome dela mesma. O rodapé também perdeu o "app Produção & Perdas" pela
+mesma razão.
+
+### Uma faixa preta por pedaço de papel
+
+Na fita de separação o nome da loja já sai em faixa preta; repetir o mesmo
+peso na data punha duas barras a menos de 120px uma da outra. Duas coisas
+gritando ao mesmo tempo é o mesmo que nenhuma gritar — e gasta o dobro de
+tinta térmica.
+
+Manda a identidade daquele papel: na separação é a **loja**; na lista de
+produção é a **data**. Quem não leva a faixa fica em negrito com uma
+régua embaixo.
+
+### Logomarca discreta no app
+
+180px em vez de 320. A marca cumprimenta e sai do caminho — quem abre o
+app trabalha nele dezenas de vezes por dia e já sabe de quem é.
+
 ## Fita de impressão (divisão automática) — set/2026
 
 Erro relatado: "não foi possível gerar a imagem para impressão", sem
@@ -604,6 +656,37 @@ Detalhe de implementação que não deve ser "simplificado" depois: o
 promessa, e não ao retorno de `comRetorno`. É isso que permite o limite
 de espera existir sem perder o item recém-criado — offline, ele entra na
 lista quando a conexão voltar.
+
+### O app sempre abre na tela de entrada (ago/2026)
+
+Antes, o nome salvo no aparelho entrava sozinho e o app abria direto na
+tela de trabalho. Agora ele é apenas uma **sugestão**: a tela de entrada
+aparece sempre, com o nome como botão.
+
+```
+        [logomarca]
+          Matriz
+
+       Continuar como
+    ┌────────────────────┐
+    │      Daniel        │
+    └────────────────────┘
+       é outra pessoa
+```
+
+Um toque para quem é o mesmo de ontem; um link para quem não é.
+
+Parece um passo a mais, e é — mas evita o erro que ninguém percebe: numa
+padaria o mesmo celular passa de mão em mão entre turnos, e o lançamento
+de perda da tarde acabava assinado com o nome de quem trabalhou de manhã.
+O registro de quem lançou é o que dá sentido ao histórico; assinatura
+errada é pior que assinatura nenhuma.
+
+O nome É o botão, e é o maior alvo da tela: é o que a pessoa vai tocar
+todo dia, muitas vezes, com a mão ocupada.
+
+"Trocar" no cabeçalho também apaga a sugestão — senão a tela de entrada
+ofereceria de volta exatamente o nome que a pessoa acabou de recusar.
 
 ### Nome do operador é por loja
 
@@ -1083,6 +1166,42 @@ A sanfona nasce fechada. Na maior parte do dia quem abre a aba só quer
 saber se a produção de amanhã já está montada — e essa resposta agora
 está no próprio balão. Quem vai montar toca uma vez e entra.
 
+### Cada assunto na sua aba (ago/2026)
+
+| Onde | O que mora ali |
+|---|---|
+| **Nova fornada** | Marcar fornada · **reposições das filiais** · pedir reposição (filial) |
+| **Cronograma** | Planejar amanhã · confirmar o que saiu hoje · quanto vai para cada loja |
+
+As reposições saíram do Cronograma. Elas são de HOJE, feitas enquanto o
+forno trabalha; o Cronograma é sobre AMANHÃ. Misturar as duas escalas de
+tempo na mesma tela foi o que gerou o ruído que a matriz reclamou.
+
+### "Quanto vai para cada loja" no Cronograma
+
+A conta que o padeiro executa — o que a matriz está montando agora somado
+aos pedidos que as filiais já enviaram — só existia depois de "Ir para o
+Resumo". Conferir se o pedido da filial entrou obrigava a sair do meio da
+montagem e voltar, e quem monta confere isso várias vezes enquanto digita.
+
+Agora é uma sanfona fechada no topo, com o total do dia no cabeçalho:
+
+```
+Quanto vai para cada loja              649 un   ⌄
+
+  PÃES E ROSCAS
+  PÃO FRANCÊS                          510 un
+  Matriz 300 · Arthur 120 · Benjamin 90
+```
+
+**Uma linha por produto, e não uma coluna por loja.** A tabela larga foi
+construída primeiro e reprovada no teste em 390px: com três lojas, a
+coluna TOTAL saía fora da tela e só aparecia rolando de lado. Esconder o
+total num quadro que existe para mostrar o total é o oposto do objetivo.
+
+Loja com zero não aparece na repartição — o quadro é sobre para onde a
+mercadoria vai, e listar quem não recebe nada é ruído.
+
 ### Reposições agrupadas por filial (ago/2026)
 
 Continuam fora do balão, mas deixaram de ser uma lista corrida. Cada
@@ -1214,6 +1333,58 @@ quem está sem o item no balcão precisa decidir o que fazer AGORA, e é o
 motivo que muda a decisão — esperar a próxima fornada é uma coisa, acabou
 a matéria-prima é outra.
 
+## Perdas do dia: duas leituras (ago/2026)
+
+O histórico logo abaixo do lançamento ganhou um alternador:
+
+| Modo | Responde |
+|---|---|
+| **Por lançamento** (padrão) | O que foi lançado, na ordem em que aconteceu — é onde se anula um erro de digitação |
+| **Mais perdidos** | Somado por produto, do maior para o menor |
+
+O segundo existe porque quinze lançamentos de 2 kg do mesmo pão somam
+mais que um lançamento único de 8 kg, e na lista cronológica isso fica
+invisível. A pergunta do fim do expediente — *o que está saindo caro
+hoje* — não tinha resposta na tela.
+
+**Lançamento anulado fica de fora da soma.** Um registro anulado não é
+perda, é erro de digitação corrigido: somá-lo poria no topo da lista
+exatamente o número que a matriz acabou de invalidar. Nos testes, um
+lançamento anulado de 900 un é ignorado, e o topo fica com o produto de
+62 un espalhado em quatro lançamentos.
+
+A contagem de lançamentos aparece embaixo do nome, na mesma célula, e não
+numa quarta coluna: com ela a tabela passava de 390px e obrigava a rolar
+de lado para ver o peso. E é ela que explica o total.
+
+### Um defeito que apareceu no caminho
+
+`.tabela-scroll .tabela-simples { min-width: 420px }` era global. A tabela
+de 3 colunas cabia em 350px e mesmo assim rolava de lado — rolagem que
+não resolve nada é só um jeito de esconder coluna. Criada a exceção
+`.tabela-compacta` para tabelas de poucas colunas.
+
+E o subtítulo da tela mostrava a data crua (`2026-08-27`) em vez de
+`27/08/2026`; passou a usar o mesmo formatador do resto do app.
+
+## Busca sem acento (ago/2026)
+
+A busca de produtos existia nas telas de Perdas e de Catálogo, mas exigia
+acento: **"pao" não achava "PÃO FRANCÊS"** e "fuba" não achava "BOLO DE
+FUBÁ". A tela respondia "nenhum produto encontrado" para um produto que
+estava lá — e o operador conclui, com razão, que o recurso não funciona.
+
+Ninguém digita acento procurando às pressas. No teclado do celular o "ã"
+exige segurar a tecla e escolher numa listinha, com a mão ocupada, no meio
+do expediente. Exigir isso na busca é o mesmo que não ter busca.
+
+`src/lib/texto.ts` normaliza os dois lados com `normalize("NFD")` — separa
+a letra do acento e descarta o acento. Sem tabela de substituição para
+manter: vale para ç, ü, â e o que mais aparecer.
+
+Vale nos dois sentidos: quem digita **com** acento também encontra
+cadastro escrito **sem**.
+
 ## Painel de análises (ago/2026)
 
 A pergunta que o painel existe para responder: **existe padrão de perda por
@@ -1324,6 +1495,7 @@ producao-perdas/
       categorias.ts                 # As 5 categorias fixas de produção + "Encomendas e Especiais" + validade sugerida por categoria
       conversao.ts                   # Deriva unidades perdidas a partir do peso pesado na balança
       numeros.ts                      # Sanitização de entrada numérica (textbox à prova de erro)
+      texto.ts                         # Busca sem acento — "pao" acha "PÃO FRANCÊS"
       metricas.ts                      # Taxa de perda, volume por dia, picos de perda (tudo em unidades)
       data.ts                           # Datas: hoje, amanhã, dia da semana, formatação BR, diferença em dias
       janelaValidade.ts                  # Quais fornadas confirmadas ainda estão dentro do prazo de validade do produto

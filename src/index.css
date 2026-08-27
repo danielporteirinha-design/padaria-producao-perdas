@@ -273,6 +273,10 @@ button.link {
 /* Qualquer tabela larga rola dentro do próprio container — nunca a página inteira. */
 .tabela-scroll { overflow-x: auto; border-radius: var(--raio); }
 .tabela-scroll .tabela-simples { min-width: 420px; }
+/* Exceção para tabelas de poucas colunas: o min-width global de 420px
+   fazia a de 3 colunas rolar de lado sem precisar — ela cabe em 350.
+   Rolagem que não resolve nada é só um jeito de esconder coluna. */
+.tabela-scroll .tabela-simples.tabela-compacta { min-width: 0; }
 
 /* A data é o dado mais importante desta tela — o operador monta o
    cronograma de UM dia específico e confundir o dia estraga a produção
@@ -1253,14 +1257,16 @@ button.perigo:hover { background: #822525; }
 }
 .bloco-pedido.enviado .estado-pedido { color: var(--cor-sucesso); }
 
-/* Logomarca na tela de entrada. Largura limitada para não virar um
-   banner no desktop — a marca cumprimenta, não ocupa a tela. */
+/* Logomarca nas telas de abertura.
+   180px, e não 320: a marca cumprimenta e sai do caminho. Quem abre o
+   app trabalha nele dezenas de vezes por dia e já sabe de quem é — o
+   espaço pertence ao que a pessoa veio fazer, não ao logotipo. */
 .marca-login {
   display: block;
   width: 100%;
-  max-width: 320px;
+  max-width: 180px;
   height: auto;
-  margin: 0 auto 4px;
+  margin: 0 auto 10px;
 }
 
 /* ---------------------------------------------------------------
@@ -1381,3 +1387,150 @@ button.perigo:hover { background: #822525; }
   margin-bottom: 0;
   border-top: 1px solid var(--cor-borda);
 }
+
+/* ---------------------------------------------------------------
+   Tela de entrada (ago/2026)
+   O app sempre abre aqui, mesmo com a loja já autenticada. O nome não é
+   senha — é a assinatura de quem lançou cada registro, e numa padaria o
+   mesmo celular passa de mão em mão entre turnos.
+   --------------------------------------------------------------- */
+.pergunta-entrada { margin: 4px 0 12px; color: var(--cor-texto-suave); }
+
+/* O nome É o botão, e é o maior alvo da tela: é o que a pessoa vai tocar
+   todo dia, muitas vezes, com a mão ocupada. */
+.botao-continuar {
+  width: 100%;
+  max-width: 320px;
+  padding: 18px 20px;
+  margin-bottom: 10px;
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+  border: none;
+  border-radius: var(--raio);
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  /* Nome longo não pode empurrar a largura nem virar reticências no meio
+     de um botão que é, ele mesmo, a identidade da pessoa. */
+  overflow-wrap: anywhere;
+}
+.botao-continuar:hover { background: #91541f; }
+
+/* ---------------------------------------------------------------
+   Quanto vai para cada loja (TelaCronograma.tsx, ago/2026)
+   Antes só existia depois de "Ir para o Resumo": conferir se o pedido da
+   filial entrou na conta obrigava a sair do meio da montagem e voltar.
+   --------------------------------------------------------------- */
+.bloco-consolidado {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  margin-bottom: 16px;
+}
+.cabecalho-consolidado {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--cor-texto);
+  text-align: left;
+  font-family: inherit;
+}
+.titulo-consolidado { flex: 1; font-size: 15px; font-weight: 700; }
+/* O total no cabeçalho é a resposta que a maioria das aberturas queria:
+   com ele à vista, na maior parte das vezes nem precisa abrir. */
+.total-consolidado {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cor-acento);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.bloco-consolidado .seta-sessao { flex-shrink: 0; transition: transform 0.2s ease; }
+.bloco-consolidado.aberto .seta-sessao { transform: rotate(180deg); }
+
+.corpo-consolidado { padding: 0 14px 14px; }
+.sessao-consolidada h4 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cor-texto-suave);
+}
+/* Uma linha por produto: total à direita, repartição embaixo. A tabela
+   com uma coluna por loja foi reprovada em 390px — a coluna TOTAL, que é
+   o número que o padeiro executa, saía fora da tela. */
+.linha-consolidada { padding: 9px 0; border-top: 1px solid var(--cor-borda); }
+.sessao-consolidada .linha-consolidada:first-of-type { border-top: none; }
+.topo-consolidado {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.nome-consolidado { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.qtd-consolidada {
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* Loja com zero simplesmente não aparece: o quadro é sobre para onde a
+   mercadoria VAI, e listar quem não recebe nada é ruído. */
+.reparticao-consolidada {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--cor-texto-suave);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------
+   Histórico de perdas: duas leituras da mesma informação (ago/2026)
+   "Por lançamento" para anular um erro; "Mais perdidos" para ver o que
+   está saindo caro hoje. Quinze lançamentos de 2 kg do mesmo pão somam
+   mais que um de 8 kg, e na lista cronológica isso fica invisível.
+   --------------------------------------------------------------- */
+.cabecalho-historico {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 24px 0 10px;
+}
+.cabecalho-historico h3 { margin: 0; }
+
+.grupo-ordem { display: flex; gap: 6px; }
+.grupo-ordem button {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  background: var(--cor-superficie);
+  color: var(--cor-texto-suave);
+  border: 1px solid var(--cor-borda);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.grupo-ordem button.ativa {
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+  border-color: var(--cor-acento);
+}
+.coluna-numero { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Contagem de lançamentos embaixo do nome, dentro da mesma célula. */
+.nota-linha {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--cor-texto-suave);
+}
+/* Nome de produto pode quebrar: é a coluna elástica da tabela, e travá-la
+   numa linha só espremia as colunas de número. */
+.tabela-simples td:first-child { overflow-wrap: anywhere; }

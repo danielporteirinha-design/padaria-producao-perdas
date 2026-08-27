@@ -19,11 +19,13 @@ import type { RegistroPerda } from "../types/perda";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import { TelaRegistroPerda } from "./TelaRegistroPerda";
 import { calcularCandidatosPerda, type ProdutoComOrigens } from "../lib/janelaValidade";
+import { perdaEstaValida } from "../types/perda";
 import { CATEGORIAS_PRODUCAO } from "../lib/categorias";
+import { contemBusca } from "../lib/texto";
 import { IconeSeta } from "./Icones";
 import { LOJA_MATRIZ, nomeDaLoja, type Loja } from "../lib/lojas";
 import { IconeLixeira } from "./Icones";
-import { dataDeHojeIso, diaDaSemanaDeData, rotuloDoDia } from "../lib/data";
+import { dataDeHojeIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 
 interface TelaPerdasProps {
   produtos: Produto[];
@@ -72,6 +74,15 @@ function BotaoProdutoPerda({
   );
 }
 
+/**
+ * Número no formato brasileiro, com vírgula decimal. "3.1 kg" no meio de
+ * uma tela em português é ruído de idioma — e num app de balanço de peso
+ * a leitura precisa ser automática.
+ */
+function formatarNumero(valor: number): string {
+  return valor.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+}
+
 export function TelaPerdas({
   produtos,
   planos,
@@ -83,6 +94,19 @@ export function TelaPerdas({
   onRegistrarPerda,
 }: TelaPerdasProps) {
   const [buscaProduto, setBuscaProduto] = useState("");
+  /**
+   * Como o histórico do dia é lido: por LANÇAMENTO ou por PRODUTO.
+   *
+   * Começa por lançamento porque é a ordem em que as coisas aconteceram,
+   * e é onde se anula um erro de digitação — a razão nº 1 de alguém
+   * olhar essa tabela no mesmo dia.
+   *
+   * "Mais perdidos" responde outra pergunta, que aparece no fim do
+   * expediente: o que está saindo caro hoje. Quinze lançamentos de 2 kg
+   * do mesmo pão somam mais que um lançamento único de 8 kg, e na lista
+   * cronológica isso fica invisível.
+   */
+  const [ordemHistorico, setOrdemHistorico] = useState<"lancamento" | "produto">("lancamento");
   const [categoriasAbertas, setCategoriasAbertas] = useState<Record<string, boolean>>({});
   const [perdaAAnular, setPerdaAAnular] = useState<RegistroPerda | null>(null);
   const [motivoAnulacao, setMotivoAnulacao] = useState("");
@@ -136,18 +160,41 @@ export function TelaPerdas({
     [perdas, hoje, ehMatriz, loja.id]
   );
 
+  /**
+   * Perdas do dia somadas por produto, da maior para a menor.
+   *
+   * Só lançamentos VÁLIDOS: um registro anulado não é perda, é erro de
+   * digitação corrigido. Somá-lo aqui poria no topo da lista exatamente
+   * o número que a matriz acabou de invalidar.
+   */
+  const totaisPorProduto = useMemo(() => {
+    const soma = new Map<number, { unidades: number; quilos: number; lancamentos: number }>();
+    for (const perda of perdasDeHoje) {
+      if (!perdaEstaValida(perda)) continue;
+      const atual = soma.get(perda.codigoPdv) ?? { unidades: 0, quilos: 0, lancamentos: 0 };
+      soma.set(perda.codigoPdv, {
+        unidades: atual.unidades + perda.quantidadeUnidadesEstimada,
+        quilos: atual.quilos + perda.quantidadeQuilos,
+        lancamentos: atual.lancamentos + 1,
+      });
+    }
+    return [...soma.entries()]
+      .map(([codigoPdv, valores]) => ({ codigoPdv, ...valores }))
+      .sort((a, b) => b.unidades - a.unidades);
+  }, [perdasDeHoje]);
+
   const candidatoSelecionado = candidatos.find((c) => c.produto.codigoPdv === codigoSelecionado);
 
   const resultadosDaBusca = useMemo(() => {
-    const termo = buscaProduto.trim().toUpperCase();
+    const termo = buscaProduto.trim();
     if (!termo) return [];
-    return candidatos.filter((c) => c.produto.nome.toUpperCase().includes(termo)).slice(0, 40);
+    return candidatos.filter((c) => contemBusca(c.produto.nome, termo)).slice(0, 40);
   }, [candidatos, buscaProduto]);
 
   return (
     <div className="tela">
       <h2>Registro de Perdas</h2>
-      <p className="subtitulo">{rotuloDoDia(diaDaSemana)}, {hoje}</p>
+      <p className="subtitulo">{rotuloDoDia(diaDaSemana)}, {formatarDataBr(hoje)}</p>
 
 
 
@@ -236,7 +283,74 @@ export function TelaPerdas({
         </div>
       )}
 
-      <h3>{ehMatriz ? "Perdas lançadas hoje — todas as lojas" : "Perdas lançadas hoje"}</h3>
+      <div className="cabecalho-historico">
+        <h3>{ehMatriz ? "Perdas lançadas hoje — todas as lojas" : "Perdas lançadas hoje"}</h3>
+        {/* Duas leituras da MESMA informação, não dois relatórios. Por
+            isso alterna aqui em cima, e não vira outra tela. */}
+        <div className="grupo-ordem">
+          <button
+            type="button"
+            className={ordemHistorico === "lancamento" ? "ativa" : ""}
+            onClick={() => setOrdemHistorico("lancamento")}
+          >
+            Por lançamento
+          </button>
+          <button
+            type="button"
+            className={ordemHistorico === "produto" ? "ativa" : ""}
+            onClick={() => setOrdemHistorico("produto")}
+          >
+            Mais perdidos
+          </button>
+        </div>
+      </div>
+
+      {ordemHistorico === "produto" ? (
+        <div className="tabela-scroll">
+          <table className="tabela-simples tabela-compacta">
+            <thead>
+              <tr>
+                <th>Produto</th>
+                {/* "Un" e "Peso": cabeçalho por extenso reservava mais
+                    largura que os próprios números e empurrava a tabela
+                    para fora dos 390px do celular. */}
+                <th>Un</th>
+                <th>Peso</th>
+              </tr>
+            </thead>
+            <tbody>
+              {totaisPorProduto.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="vazio">
+                    Nenhuma perda válida registrada hoje.
+                  </td>
+                </tr>
+              )}
+              {totaisPorProduto.map((linha) => (
+                <tr key={linha.codigoPdv}>
+                  <td>
+                    {produtos.find((pr) => pr.codigoPdv === linha.codigoPdv)?.nome ?? linha.codigoPdv}
+                    {/* A contagem de lançamentos entra AQUI, e não numa
+                        quarta coluna: com ela a tabela passava de 390px e
+                        obrigava a rolar de lado para ver o peso. E é ela
+                        que explica o total — quatro lançamentos de 2 kg
+                        somam mais que um de 5. */}
+                    {linha.lancamentos > 1 && (
+                      <span className="nota-linha">{linha.lancamentos} lançamentos</span>
+                    )}
+                  </td>
+                  <td className="coluna-numero">{formatarNumero(linha.unidades)}</td>
+                  <td className="coluna-numero">{formatarNumero(linha.quilos)} kg</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="nota-rodape">
+            Somado por produto, do que mais saiu para o que menos saiu. Lançamentos anulados ficam
+            de fora. Para anular um erro, volte em <strong>Por lançamento</strong>.
+          </p>
+        </div>
+      ) : (
       <div className="tabela-scroll">
         <table className="tabela-simples">
           <thead>
@@ -289,6 +403,7 @@ export function TelaPerdas({
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Anular NÃO apaga o registro: marca. Ver o comentário em
           RegistroPerda.cancelada sobre por que o histórico é preservado. */}
