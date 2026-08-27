@@ -164,6 +164,85 @@ Sem a chave configurada, o botão continua visível mas mostra uma mensagem
 clara pedindo a configuração — nunca trava a tela nem impede montar o
 cronograma manualmente.
 
+## Nova Fornada: anunciar, e não só marcar (ago/2026)
+
+A aba deixou de ser "marcar o progresso da lista" e passou a ser o que o dono
+do negócio descreveu: **avisar as filiais do que acabou de sair e recolher o
+pedido de quem se interessar**. Quatro mudanças sustentam isso.
+
+**1. A contagem "X de Y itens já saíram hoje" saiu.** Ela falava de progresso
+da lista numa aba que não é sobre a lista. O progresso do dia se lê no card de
+Confirmação, no Cronograma, que é onde ele decide alguma coisa.
+
+**2. Busca no catálogo INTEIRO.** A matriz assa coisa que não estava
+programada — e sem um caminho para anunciar esse item, as filiais só
+descobriam no dia seguinte, quando não adianta mais. Agora digita o nome,
+toca em "anunciar", e as três lojas ficam sabendo na hora. Só produtos ativos
+na produção: anunciar item pausado no cadastro abriria pedido de reposição de
+coisa que a padaria decidiu não fazer.
+
+Consequência: o painel deixou de exigir cronograma confirmado. Um dia sem
+lista montada (feriado, movimento imprevisto) não pode impedir a matriz de
+avisar o que saiu do forno.
+
+**3. O aviso leva ao lugar certo.** O corpo do push passou a dizer que o item
+**está disponível para pedidos**, não só que saiu — "saiu do forno" sozinho
+não convida a filial a fazer nada. E tocar no aviso agora abre a aba **Nova
+Fornada**, não a última aba usada: o servidor manda o destino em `data.url`, o
+service worker repassa, e `src/lib/rota.ts` traduz em aba. Com o app aberto a
+troca vem por `postMessage`, que preserva a tela — recarregar jogaria fora o
+pedido que a filial estava digitando.
+
+**4. Reposição confirmada entra na produção de hoje.** Quando a matriz
+confirma um pedido de item que **não estava no cronograma**, o item passa a
+contar como produzido hoje (`src/lib/producaoDeHoje.ts`). Sem isso ele sumia
+da contabilidade: foi produzido e entregue, mas o plano do dia não o conhecia
+— e o plano do dia é o **denominador da taxa de perda**. Uma perda lançada
+amanhã sobre esse item apareceria como perda sem produção, número que não
+fecha e que ninguém consegue explicar depois.
+
+Duas regras fixas nesse ponto: item que **já está** na lista não entra de novo
+e a quantidade planejada fica intacta (somar as duas inflaria a produção do
+dia com mercadoria que não existiu); e o plano não é reescrito em mais nada —
+status, autoria e o registro de `producaoRealizada` continuam como estavam.
+Item novo, não citado em `codigosNaoProduzidos`, conta como produzido, que é
+exatamente o que aconteceu. Em dia sem cronograma montado, o plano de hoje
+nasce aqui, já confirmado: o produto saiu do forno e foi pedido — não é
+intenção, é fato.
+
+O cancelamento com justificativa obrigatória já existia e continua: o campo de
+motivo só aparece depois de escolher "não vai", e o botão fica travado
+enquanto o texto estiver vazio. A filial vê o motivo na própria linha do
+produto.
+
+### Defeito corrigido: "permissão concedida" ≠ "aparelho registrado"
+
+O app tratava as duas coisas como a mesma, e não são. O documento em
+`dispositivos` — que é o que diz **para onde** o push vai — só nascia quando
+alguém tocava em **Ativar**. Só que o cartão de ativação some da tela assim
+que a permissão do navegador está concedida. Num aparelho que já tinha
+permissão de antes, o cartão nunca aparecia, nenhum token era gravado, e o
+aviso não tinha destino — em silêncio absoluto, que é o pior jeito de falhar.
+
+Pior na troca de conta: um celular registrado uma vez como filial continuava
+com `lojaId` de filial. Ele recebia os avisos de fornada e **nunca** os de
+reposição, mesmo logado como matriz.
+
+Agora o app registra o aparelho **sozinho, em silêncio**, sempre que a
+permissão já estiver concedida — na abertura e a cada troca de loja ou
+operador (`registrarAparelhoSePermitido`, em `src/lib/notificacoes.ts`). Com a
+permissão concedida, `getToken` não abre prompt nenhum; sem permissão nem
+chega a tentar, e quem pede permissão continua sendo o toque no cartão.
+Regravar também **corrige o `lojaId`**, que é o que faz um aparelho que já foi
+filial passar a contar como matriz.
+
+O botão **"testar aviso"** passou a existir nos dois sentidos
+(`TesteDeAvisos.tsx`), inclusive na tela vazia da filial — o dia em que
+alguém desconfia do push é justamente o dia em que a tela está vazia, e sem o
+teste "não chegou nada" e "não saiu nada" ficam indistinguíveis. Ele separa as
+três causas, que exigem correções diferentes: aparelho não registrado, FCM
+recusou (com o motivo traduzido), ou entregou e o aparelho não mostrou.
+
 ## Cronograma: cinco cards do mesmo tamanho (ago/2026)
 
 A aba deixou de ser uma pilha de blocos de formatos diferentes. São cinco

@@ -21,18 +21,30 @@
  * quanto ela quer, ela informa no pedido de reposição.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import { rotuloDaCategoria } from "../lib/categorias";
-import { ErroAviso, explicarFalhaDeEnvio, testarAvisos } from "../lib/avisarFiliais";
-import { IconeChama } from "./Icones";
+import { contemBusca } from "../lib/texto";
+import { TesteDeAvisos } from "./TesteDeAvisos";
+
+/**
+ * Quantos resultados a busca mostra. O catálogo tem centenas de itens; a
+ * lista inteira rolando embaixo do campo não ajuda ninguém a achar
+ * nada — quem não achou em 12 linhas digita mais uma letra.
+ */
+const MAXIMO_RESULTADOS = 12;
 
 interface PainelFornoDeHojeProps {
-  /** Plano confirmado de HOJE. Sem ele não há o que marcar. */
-  plano: PlanoDeProducaoDiario;
+  /**
+   * Plano confirmado de HOJE, quando existe. Opcional desde ago/2026: a
+   * busca anuncia qualquer produto do catálogo, e um dia sem cronograma
+   * montado (feriado, movimento imprevisto) não pode impedir a matriz de
+   * avisar as filiais do que acabou de sair.
+   */
+  plano?: PlanoDeProducaoDiario;
   produtos: Produto[];
   fornadas: FornadaPronta[];
   dataHoje: string;
@@ -47,110 +59,129 @@ export function PainelFornoDeHoje({
   onMarcarFornada,
 }: PainelFornoDeHojeProps) {
   const [marcando, setMarcando] = useState<number | null>(null);
-  const [testando, setTestando] = useState(false);
-  const [resultadoTeste, setResultadoTeste] = useState("");
-
-  /**
-   * Conferir o push sem marcar fornada. A alternativa era marcar uma
-   * fornada de mentira só para ver se o celular da filial toca — e isso
-   * entra no histórico do dia, sujando justamente o número que o app
-   * existe para medir. Aqui o teste não grava nada.
-   */
-  async function conferirAvisos() {
-    setTestando(true);
-    setResultadoTeste("");
-    try {
-      const r = await testarAvisos();
-      if (r.enviados > 0) {
-        setResultadoTeste(
-          `Enviado para ${r.enviados} aparelho${r.enviados > 1 ? "s" : ""} de filial. Se não apareceu na tela de lá, o bloqueio é nas notificações do próprio celular.`
-        );
-      } else if (!r.registrados) {
-        setResultadoTeste(
-          'Nenhum aparelho de filial está registrado. Em cada filial: abrir o app e tocar em "Ativar" no cartão de avisos.'
-        );
-      } else {
-        const causa = (r.motivos ?? []).map(explicarFalhaDeEnvio).join("; ");
-        setResultadoTeste(
-          `${r.registrados} aparelho(s) registrado(s), nenhum recebeu${causa ? ` — ${causa}` : "."}`
-        );
-      }
-    } catch (erro) {
-      setResultadoTeste(
-        erro instanceof ErroAviso ? erro.message : "Não foi possível falar com o servidor de avisos."
-      );
-    } finally {
-      setTestando(false);
-    }
-  }
+  const [busca, setBusca] = useState("");
 
   const nomeDoProduto = (codigo: number) =>
     produtos.find((p) => p.codigoPdv === codigo)?.nome ?? `#${codigo}`;
 
-  const totalMarcado = new Set(
-    fornadas.filter((f) => f.data === dataHoje).map((f) => f.codigoPdv)
-  ).size;
-  const totalItens = plano.sessoes.flatMap((s) => s.itens).length;
+  /**
+   * Resultado da busca no catálogo INTEIRO — não só na lista do dia.
+   *
+   * É a razão de a busca existir (pedido do dono do negócio, ago/2026): a
+   * matriz assa coisa que não estava programada, e sem um caminho para
+   * anunciar esse item as filiais só descobrem no dia seguinte, quando
+   * não adianta mais. Aqui ela digita o nome, toca, e as três lojas
+   * ficam sabendo na hora.
+   *
+   * Só produtos ATIVOS na produção: anunciar item pausado no cadastro
+   * abriria pedido de reposição de coisa que a padaria decidiu não fazer.
+   */
+  const resultados = useMemo(() => {
+    const termo = busca.trim();
+    if (termo.length === 0) return [];
+    return produtos
+      .filter((p) => p.ativoNaProducao && contemBusca(p.nome, termo))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+      .slice(0, MAXIMO_RESULTADOS);
+  }, [produtos, busca]);
+
+  const buscando = busca.trim().length > 0;
+
+  /** A linha é a mesma na busca e na lista do dia — um jeito só de marcar. */
+  function linhaDoProduto(codigoPdv: number) {
+    const doDia = fornadasDoProduto(fornadas, dataHoje, codigoPdv);
+    const saiu = doDia.length > 0;
+    return (
+      <button
+        key={codigoPdv}
+        type="button"
+        className={`linha-forno ${saiu ? "saiu" : ""}`}
+        disabled={marcando === codigoPdv}
+        onClick={async () => {
+          setMarcando(codigoPdv);
+          try {
+            await onMarcarFornada(codigoPdv);
+          } catch {
+            /* o aviso global cuida da mensagem */
+          } finally {
+            setMarcando(null);
+          }
+        }}
+      >
+        <span className="nome-forno">{nomeDoProduto(codigoPdv)}</span>
+        <span className="marca-forno">
+          {marcando === codigoPdv
+            ? "..."
+            : saiu
+              ? `${doDia.length}× · ${horaDaUltimaFornada(fornadas, dataHoje, codigoPdv)}`
+              : "anunciar"}
+        </span>
+      </button>
+    );
+  }
 
   return (
     <div className="painel-forno">
-      {/* A aba já diz o assunto. O que sobra de útil aqui é o progresso
-          do dia — quanto da lista já saiu do forno. */}
       <div className="corpo-forno">
-        <p className="progresso-forno">
-          <IconeChama tamanho={16} />
-          {totalMarcado} de {totalItens} itens já saíram hoje
-        </p>
-          <p className="nota-rodape">
-            Toque no item quando a fornada sair. As filiais veem na hora e podem pedir reposição
-            enquanto ainda dá tempo de entregar hoje.
-          </p>
-
-          {plano.sessoes.map((sessao) => (
-            <div key={sessao.id} className="grupo-forno">
-              <h4>{rotuloDaCategoria(sessao.categoria)}</h4>
-              {sessao.itens.map((item) => {
-                const doDia = fornadasDoProduto(fornadas, dataHoje, item.codigoPdv);
-                const saiu = doDia.length > 0;
-                return (
-                  <button
-                    key={item.codigoPdv}
-                    type="button"
-                    className={`linha-forno ${saiu ? "saiu" : ""}`}
-                    disabled={marcando === item.codigoPdv}
-                    onClick={async () => {
-                      setMarcando(item.codigoPdv);
-                      try {
-                        await onMarcarFornada(item.codigoPdv);
-                      } catch {
-                        /* o aviso global cuida da mensagem */
-                      } finally {
-                        setMarcando(null);
-                      }
-                    }}
-                  >
-                    <span className="nome-forno">{nomeDoProduto(item.codigoPdv)}</span>
-                    <span className="marca-forno">
-                      {marcando === item.codigoPdv
-                        ? "..."
-                        : saiu
-                          ? `${doDia.length}× · ${horaDaUltimaFornada(fornadas, dataHoje, item.codigoPdv)}`
-                          : "marcar"}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-
-          {/* Diagnóstico, não operação: fica no rodapé, discreto, e só
-              aparece o resultado quando alguém pergunta. */}
-          <div className="rodape-forno">
-            <button type="button" className="link" disabled={testando} onClick={conferirAvisos}>
-              {testando ? "testando..." : "testar aviso nas filiais"}
+        {/* A contagem "X de Y itens já saíram hoje" saiu daqui (ago/2026):
+            esta aba não é sobre progresso da lista — é sobre anunciar o
+            que acabou de sair. O progresso do dia se lê no card de
+            confirmação, no Cronograma, que é onde ele decide alguma
+            coisa. */}
+        <div className="busca-forno">
+          <input
+            type="search"
+            inputMode="search"
+            placeholder="Buscar produto para anunciar..."
+            aria-label="Buscar produto no catálogo para anunciar a fornada"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+          {buscando && (
+            <button type="button" className="link" onClick={() => setBusca("")}>
+              limpar
             </button>
-            {resultadoTeste && <p className="nota-rodape">{resultadoTeste}</p>}
-          </div>
+          )}
+        </div>
+
+        {buscando ? (
+          <>
+            <p className="nota-rodape">
+              Busca no catálogo inteiro — o produto não precisa estar na lista de hoje. Toque para
+              anunciar às filiais.
+            </p>
+            {resultados.length === 0 ? (
+              <p className="nota-rodape">Nenhum produto ativo com esse nome.</p>
+            ) : (
+              <div className="grupo-forno">{resultados.map((p) => linhaDoProduto(p.codigoPdv))}</div>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="nota-rodape">
+              Toque no item quando a fornada sair. As filiais veem na hora e podem pedir reposição
+              enquanto ainda dá tempo de entregar hoje.
+            </p>
+
+            {plano ? (
+              plano.sessoes.map((sessao) => (
+                <div key={sessao.id} className="grupo-forno">
+                  <h4>{rotuloDaCategoria(sessao.categoria)}</h4>
+                  {sessao.itens.map((item) => linhaDoProduto(item.codigoPdv))}
+                </div>
+              ))
+            ) : (
+              <p className="nota-rodape">
+                Nenhum cronograma confirmado para hoje. Use a busca acima para anunciar o que sair
+                do forno.
+              </p>
+            )}
+          </>
+        )}
+
+        {/* Diagnóstico, não operação: fica no rodapé, discreto, e só
+            aparece o resultado quando alguém pergunta. */}
+        <TesteDeAvisos destino="filiais" />
       </div>
     </div>
   );

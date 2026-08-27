@@ -830,16 +830,20 @@ button.perigo:hover { background: #822525; }
 .corpo-fornadas { padding: 14px; }
 .painel-fornadas h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; }
 .painel-fornadas h3 svg { color: var(--cor-acento); }
-.painel-fornadas.vazio {
+/* Painel vazio (ago/2026): deixou de ser uma caixa própria e passou a ser
+   uma LINHA dentro do painel normal. O motivo é o botão de teste de
+   aviso, que precisa existir também aqui — o dia em que a filial
+   desconfia do push é justamente o dia em que a tela está vazia, e sem o
+   teste "não chegou nada" e "não saiu nada" ficam indistinguíveis. */
+.aviso-forno-vazio {
   display: flex;
   align-items: center;
-  padding: 14px;
   gap: 10px;
+  margin: 0;
   color: var(--cor-texto-suave);
   font-size: 14px;
-  border-left-color: var(--cor-borda);
 }
-.painel-fornadas.vazio svg { color: var(--cor-texto-suave); flex-shrink: 0; }
+.aviso-forno-vazio svg { color: var(--cor-texto-suave); flex-shrink: 0; }
 
 .linha-fornada {
   display: flex;
@@ -1230,18 +1234,19 @@ button.perigo:hover { background: #822525; }
   .selo-aba { animation: none; }
 }
 
-/* Cabeçalho dos painéis quando já não são sanfona: a aba é a divisão,
-   e um botão de abrir/fechar aqui dentro seria uma segunda porta para o
-   mesmo cômodo. */
-.progresso-forno {
+/* Busca do painel do forno (ago/2026).
+   Substituiu a contagem "X de Y itens já saíram hoje", que falava de
+   progresso da lista numa aba que existe para ANUNCIAR. O campo busca o
+   catálogo inteiro: o item que a matriz assou fora do programado precisa
+   de um caminho para chegar às filiais no mesmo dia. */
+.busca-forno {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin: 0 0 10px;
-  font-size: 13px;
-  color: var(--cor-texto-suave);
+  gap: 8px;
+  margin-bottom: 10px;
 }
-.progresso-forno svg { color: var(--cor-acento); flex-shrink: 0; }
+.busca-forno input { flex: 1; min-width: 0; margin: 0; }
+.busca-forno .link { flex-shrink: 0; }
 
 /* ---------------------------------------------------------------
    Cabeçalho do pedido da filial: data e estado numa coisa só

@@ -55,6 +55,8 @@ import {
   totaisDeFornadas,
 } from "../src/lib/analises";
 import { somarDias } from "../src/lib/data";
+import { incluirItemProduzido, planoContemItem, planoDeHojeCom } from "../src/lib/producaoDeHoje";
+import { abaDaUrl, urlDaAba } from "../src/lib/rota";
 import {
   codigosComFornadaNoDia,
   fornadasDoProduto,
@@ -1967,6 +1969,155 @@ const perdas: RegistroPerda[] = [
   // tela nem aparecer como "undefined".
   const orfa = produtosPorNumeroDeFornadas([marcar(HOJE, 99, 5)], catalogo);
   afirmar(orfa[0].rotulo === "#99", `produto fora do catalogo aparece pelo codigo (obtido: "${orfa[0].rotulo}")`);
+}
+
+// ---------------------------------------------------------------
+// Caso 24: reposicao confirmada entra na producao de hoje (ago/2026)
+//
+// Pedido do dono do negocio: quando a matriz confirma uma reposicao de
+// um item que NAO estava no cronograma, esse item passa a contar como
+// produzido hoje. Sem isso ele some da contabilidade — foi produzido e
+// entregue, mas o plano do dia nao o conhece, e o plano do dia e o
+// DENOMINADOR da taxa de perda. Uma perda lancada amanha sobre ele
+// apareceria como perda sem producao.
+//
+// O que precisa ficar travado:
+//   1. item que JA esta na lista nao entra de novo, e a quantidade
+//      planejada fica intacta — somar as duas inflaria a producao do dia
+//      com mercadoria que nao existiu;
+//   2. o resto do plano nao e reescrito: status, autoria e o registro de
+//      producaoRealizada continuam como estavam;
+//   3. item novo nao citado em codigosNaoProduzidos conta como
+//      produzido, que e exatamente o que aconteceu.
+// ---------------------------------------------------------------
+{
+  let contador = 0;
+  const novoId = () => `id-${++contador}`;
+
+  const planoBase: PlanoDeProducaoDiario = {
+    id: "plano-hoje",
+    data: "2026-08-25",
+    diaDaSemana: "terca",
+    sessoes: [
+      { id: "s1", categoria: "PÃES E ROSCAS", itens: [{ codigoPdv: 1, quantidadeUnidades: 400 }] },
+    ],
+    status: "confirmado",
+    criadoPor: "Daniel",
+    criadoEm: "2026-08-24T20:00:00.000Z",
+    confirmadoEm: "2026-08-24T20:05:00.000Z",
+    producaoRealizada: {
+      confirmadoPor: "Daniel",
+      confirmadoEm: "2026-08-25T19:00:00.000Z",
+      codigosNaoProduzidos: [],
+    },
+  };
+
+  afirmar(planoContemItem(planoBase, 1), "o plano reconhece um item que ele tem");
+  afirmar(!planoContemItem(planoBase, 99), "o plano nao inventa item que nao tem");
+
+  // Item ja na lista: nada acontece. E a regra que impede a producao do
+  // dia inflar a cada reposicao atendida com o que ja saiu do forno.
+  afirmar(
+    incluirItemProduzido(planoBase, { codigoPdv: 1, quantidadeUnidades: 30 }, "PÃES E ROSCAS", novoId) === null,
+    "item ja planejado nao entra de novo"
+  );
+
+  // Item novo, categoria que ja tem sessao: entra na sessao existente.
+  const comItemNovo = incluirItemProduzido(
+    planoBase,
+    { codigoPdv: 2, quantidadeUnidades: 12 },
+    "PÃES E ROSCAS",
+    novoId
+  );
+  afirmar(comItemNovo !== null, "item fora da lista entra na producao de hoje");
+  afirmar(comItemNovo!.sessoes.length === 1, "categoria com sessao existente nao cria sessao nova");
+  afirmar(comItemNovo!.sessoes[0].itens.length === 2, "a sessao passa a ter os dois itens");
+  afirmar(
+    comItemNovo!.sessoes[0].itens[0].quantidadeUnidades === 400,
+    "a quantidade ja planejada fica intacta"
+  );
+  afirmar(comItemNovo!.sessoes[0].id === "s1", "a sessao existente mantem o proprio id");
+
+  // O plano nao e reescrito em mais nada.
+  afirmar(comItemNovo!.id === planoBase.id, "o plano continua sendo o mesmo documento");
+  afirmar(comItemNovo!.status === "confirmado", "o status nao muda");
+  afirmar(comItemNovo!.criadoPor === "Daniel", "a autoria nao muda");
+  afirmar(
+    comItemNovo!.producaoRealizada?.confirmadoEm === "2026-08-25T19:00:00.000Z",
+    "o registro de producao realizada fica intacto"
+  );
+  // A consequencia que interessa: item novo nao citado em
+  // codigosNaoProduzidos conta como produzido.
+  afirmar(
+    !comItemNovo!.producaoRealizada!.codigosNaoProduzidos.includes(2),
+    "item recem-incluido conta como produzido"
+  );
+  afirmar(planoBase.sessoes[0].itens.length === 1, "o plano original nao e mutado");
+
+  // Categoria sem sessao ainda: cria a sessao.
+  const outraCategoria = incluirItemProduzido(
+    planoBase,
+    { codigoPdv: 3, quantidadeUnidades: 5 },
+    "BOLOS",
+    novoId
+  );
+  afirmar(outraCategoria!.sessoes.length === 2, "categoria nova ganha sessao propria");
+  afirmar(
+    outraCategoria!.sessoes[1].categoria === "BOLOS" && outraCategoria!.sessoes[1].itens[0].codigoPdv === 3,
+    "a sessao nova nasce com o item dentro"
+  );
+
+  // Quantidade invalida nao entra: um pedido zerado nao e producao.
+  afirmar(
+    incluirItemProduzido(planoBase, { codigoPdv: 4, quantidadeUnidades: 0 }, "BOLOS", novoId) === null,
+    "quantidade zero nao entra na producao"
+  );
+
+  // Dia sem cronograma montado: o plano nasce aqui, ja confirmado.
+  const doZero = planoDeHojeCom(
+    "2026-08-25",
+    "terca",
+    { codigoPdv: 7, quantidadeUnidades: 20 },
+    "BISCOITOS",
+    "Daniel",
+    "2026-08-25T14:00:00.000Z",
+    novoId
+  );
+  afirmar(doZero.status === "confirmado", "plano criado pela reposicao nasce confirmado");
+  afirmar(
+    doZero.sessoes.length === 1 && doZero.sessoes[0].itens[0].codigoPdv === 7,
+    "plano criado pela reposicao carrega o item pedido"
+  );
+  afirmar(doZero.id !== doZero.sessoes[0].id, "plano e sessao recebem ids distintos");
+  afirmar(producaoFoiConfirmada(doZero) === false, "plano novo ainda nao teve conferencia de fim de dia");
+  afirmar(itensPlanejados(doZero).length === 1, "o item novo aparece como planejado do dia");
+}
+
+// ---------------------------------------------------------------
+// Caso 25: aba de destino do aviso (ago/2026)
+//
+// Tocar no push abria o app na ultima aba usada. A filial recebia "PAO
+// FRANCES — disponivel para pedidos", tocava, e caia no Cronograma: o
+// aviso avisava e nao levava a lugar nenhum.
+// ---------------------------------------------------------------
+{
+  afirmar(abaDaUrl("/?aba=fornada") === "fornada", "a rota do aviso leva a aba Nova Fornada");
+  afirmar(abaDaUrl("?aba=perdas") === "perdas", "funciona com a query solta, como vem de location.search");
+  afirmar(
+    abaDaUrl("https://padaria.vercel.app/?aba=pedido") === "pedido",
+    "funciona com URL absoluta, como o service worker manda"
+  );
+  afirmar(abaDaUrl(urlDaAba("fornada")) === "fornada", "o que o servidor monta e o que o app le");
+
+  // Sem destino reconhecivel o app fica onde estava: um aviso antigo na
+  // bandeja, ou uma URL adulterada, nao pode levar a um estado que o app
+  // nao sabe renderizar.
+  afirmar(abaDaUrl("/") === null, "sem query nao ha destino");
+  afirmar(abaDaUrl("") === null, "string vazia nao quebra");
+  afirmar(abaDaUrl("/?aba=") === null, "aba vazia nao vira destino");
+  afirmar(abaDaUrl("/?aba=inexistente") === null, "aba desconhecida e ignorada");
+  afirmar(abaDaUrl("/?outra=fornada") === null, "outro parametro nao vira destino");
+  afirmar(abaDaUrl("/?x=1&aba=fornada") === "fornada", "a aba e encontrada entre outros parametros");
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

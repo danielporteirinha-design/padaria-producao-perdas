@@ -11,6 +11,8 @@ import { ImportarDadosLocais } from "./components/ImportarDadosLocais";
 import { AvisoGlobal, type Aviso } from "./components/AvisoGlobal";
 import { ehFalhaTemporariaDeRede, mensagemDeFalhaAoSalvar } from "./lib/errosFirestore";
 import { dataDeHojeIso, diaDaSemanaDeData } from "./lib/data";
+import { incluirItemProduzido, planoDeHojeCom } from "./lib/producaoDeHoje";
+import { gerarId } from "./lib/id";
 import { TelaCronograma } from "./components/TelaCronograma";
 import { TelaCadastroProdutos } from "./components/TelaCadastroProdutos";
 import { TelaPerdas } from "./components/TelaPerdas";
@@ -28,12 +30,13 @@ import {
   ErroAviso,
   explicarFalhaDeEnvio,
 } from "./lib/avisarFiliais";
-import { ouvirAvisosEmPrimeiroPlano } from "./lib/notificacoes";
+import { ouvirAvisosEmPrimeiroPlano, registrarAparelhoSePermitido } from "./lib/notificacoes";
 import { AtivarAvisos } from "./components/AtivarAvisos";
 import { PainelFornoDeHoje } from "./components/PainelFornoDeHoje";
 import { PainelFornadasFilial } from "./components/PainelFornadasFilial";
 import { PainelPedidosFiliais } from "./components/PainelPedidosFiliais";
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "./lib/fornadasVistas";
+import { abaDaUrl } from "./lib/rota";
 
 type Aba = "cronograma" | "fornada" | "cadastro" | "perdas" | "analises" | "pedido";
 
@@ -140,6 +143,7 @@ export default function App() {
       setAviso({ tipo: "sucesso", texto: `${titulo} — ${corpo}` })
     );
   }, [loja]);
+
 
   useEffect(() => {
     // onAuthStateChanged dispara também na abertura do app, restaurando a
@@ -361,6 +365,59 @@ export default function App() {
    * Fica aqui no App, e não dentro do painel, porque quem mostra o número
    * agora é a ABA — o painel pode nem estar montado quando a fornada sai.
    */
+  /**
+   * REGISTRO SILENCIOSO DO APARELHO (ago/2026)
+   *
+   * O app tratava "permissão do navegador concedida" como "aparelho
+   * registrado". São coisas diferentes: o documento em `dispositivos` —
+   * que é o que diz PARA ONDE o push vai — só nascia no toque do botão
+   * "Ativar", e esse botão some assim que a permissão está concedida.
+   * Num aparelho que já tinha permissão de antes, o cartão nunca
+   * aparecia, nenhum token era gravado e o aviso não tinha destino, em
+   * silêncio absoluto.
+   *
+   * E na troca de conta era pior: o celular registrado uma vez como
+   * filial continuava com `lojaId` de filial, recebia os avisos de
+   * fornada e nunca os de reposição, mesmo logado como matriz.
+   *
+   * Roda a cada troca de loja/operador. Com a permissão já concedida não
+   * abre prompt nenhum; sem permissão nem chega a tentar — quem pede
+   * permissão continua sendo o toque no cartão de avisos.
+   */
+  useEffect(() => {
+    if (!loja || !operador) return;
+    void registrarAparelhoSePermitido(loja.id, operador);
+  }, [loja, operador]);
+
+  /**
+   * ABRIR NA ABA QUE O AVISO PEDIU (ago/2026)
+   *
+   * Duas entradas, porque são duas situações diferentes:
+   *
+   * - App FECHADO: o service worker abre a janela já com `?aba=...`, lido
+   *   aqui na montagem. A URL é limpa em seguida com `replaceState` para
+   *   não reabrir a mesma aba no próximo recarregamento — nem virar um
+   *   link que alguém salva por engano.
+   * - App ABERTO: o service worker manda um recado. Trocar a aba por
+   *   mensagem preserva a tela; recarregar jogaria fora o pedido que a
+   *   filial estava digitando.
+   */
+  useEffect(() => {
+    const inicial = abaDaUrl(window.location.search);
+    if (inicial) {
+      setAba(inicial);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+
+    const aoReceberRecado = (evento: MessageEvent) => {
+      if (evento.data?.tipo !== "abrir-rota" || typeof evento.data.url !== "string") return;
+      const destino = abaDaUrl(evento.data.url);
+      if (destino) setAba(destino);
+    };
+    navigator.serviceWorker?.addEventListener("message", aoReceberRecado);
+    return () => navigator.serviceWorker?.removeEventListener("message", aoReceberRecado);
+  }, []);
+
   const [fornadasNovas, setFornadasNovas] = useState(0);
   useEffect(() => {
     if (!loja) return;
@@ -626,6 +683,36 @@ export default function App() {
    * o desfecho na tela de qualquer forma, porque os pedidos agora chegam
    * em tempo real.
    */
+  /**
+   * Garante que cada item de uma reposição confirmada esteja na produção
+   * de HOJE. Não mexe em quantidade já planejada: item que a matriz já
+   * tinha na lista foi atendido com o que já saiu do forno, e somar as
+   * duas coisas inflaria a produção do dia com mercadoria que não
+   * existiu.
+   */
+  async function registrarNaProducaoDeHoje(pedido: PedidoFilial) {
+    const hoje = dataDeHojeIso();
+    const agora = new Date().toISOString();
+    let plano = planos.find((p) => p.data === hoje && p.status === "confirmado");
+
+    for (const item of pedido.itens) {
+      const categoria = produtos.find((p) => p.codigoPdv === item.codigoPdv)?.categoria;
+      if (!categoria) continue;
+
+      // Sem cronograma montado hoje (feriado, movimento imprevisto) o
+      // plano nasce aqui, já confirmado: o produto saiu do forno e foi
+      // pedido — não é intenção, é fato.
+      const atualizado = plano
+        ? incluirItemProduzido(plano, item, categoria, gerarId)
+        : planoDeHojeCom(hoje, diaDaSemanaDeData(hoje), item, categoria, operador, agora, gerarId);
+
+      if (!atualizado) continue;
+      await repositorio!.salvarPlano(atualizado);
+      plano = atualizado;
+      setPlanos((atual) => [...atual.filter((p) => p.id !== atualizado.id), atualizado]);
+    }
+  }
+
   async function handleDecidirReposicao(
     pedido: PedidoFilial,
     desfecho: "confirmado" | "cancelado",
@@ -637,6 +724,26 @@ export default function App() {
       desfecho === "confirmado" ? "Reposição confirmada." : "Reposição cancelada."
     );
     setPedidos((atual) => [...atual.filter((p) => p.id !== decidido.id), decidido]);
+
+    /**
+     * Reposição confirmada de item FORA do cronograma entra na produção
+     * de hoje. A matriz assou, anunciou pela busca da aba Nova Fornada e
+     * vai entregar — se o plano do dia não conhecer esse produto, uma
+     * perda lançada amanhã sobre ele apareceria como perda sem produção,
+     * e a taxa do dia ficaria sem denominador (ver
+     * src/lib/producaoDeHoje.ts).
+     */
+    if (desfecho === "confirmado") {
+      try {
+        await registrarNaProducaoDeHoje(decidido);
+      } catch (erro) {
+        // O pedido já está confirmado e a filial já foi atendida; falhar
+        // aqui em vermelho faria a matriz achar que precisa confirmar de
+        // novo. O que se perde é o registro contábil do item, não a
+        // operação.
+        console.warn("Reposição confirmada, mas o item não entrou na produção de hoje:", erro);
+      }
+    }
 
     try {
       const item = decidido.itens[0];
@@ -905,7 +1012,10 @@ export default function App() {
                   produtos.find((p) => p.codigoPdv === codigo)?.nome ?? `#${codigo}`
                 }
               />
-              {planoDeHojeParaFornada ? (
+              {/* Sem o `if` de antes (ago/2026): a busca do painel anuncia
+                  qualquer produto do catálogo, então um dia sem cronograma
+                  montado deixou de ser motivo para esconder a tela. O
+                  próprio painel explica o que fazer quando não há lista. */}
               <PainelFornoDeHoje
                 plano={planoDeHojeParaFornada}
                 produtos={produtos}
@@ -913,11 +1023,6 @@ export default function App() {
                 dataHoje={dataDeHojeIso()}
                 onMarcarFornada={handleMarcarFornada}
               />
-              ) : (
-                <p className="callout-inline">
-                  Nenhum cronograma confirmado para hoje — sem lista, não há fornada a marcar.
-                </p>
-              )}
             </>
           ) : (
             <PainelFornadasFilial

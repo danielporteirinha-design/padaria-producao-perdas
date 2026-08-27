@@ -57,19 +57,38 @@ messaging.onBackgroundMessage((payload) => {
      * nenhum. Declarar false tira essa dúvida da investigação.
      */
     silent: false,
-    data: { url: "/" },
+    /**
+     * O destino DENTRO do app vem do servidor (api/notificar-fornada.ts).
+     * Antes o toque abria o app na última aba usada, e quem recebia "PÃO
+     * FRANCÊS disponível" caía no Cronograma sem entender o que fazer.
+     */
+    data: { url: dados.url || "/" },
   });
 });
 
-// Tocar no aviso abre o app já aberto, em vez de uma aba nova.
+/**
+ * Tocar no aviso abre o app já aberto, na aba certa.
+ *
+ * Duas rotas, porque as duas situações são diferentes:
+ *
+ * - App ABERTO: focar a janela e mandar um recado (`postMessage`). Trocar
+ *   a aba por mensagem preserva o estado da tela — recarregar a página
+ *   jogaria fora o pedido que a filial estava digitando.
+ * - App FECHADO: abrir a janela já com a rota, que o app lê na
+ *   inicialização (ver o efeito de rota em src/App.tsx).
+ */
 self.addEventListener("notificationclick", (evento) => {
   evento.notification.close();
+  const destino = (evento.notification.data && evento.notification.data.url) || "/";
   evento.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((janelas) => {
       for (const janela of janelas) {
-        if ("focus" in janela) return janela.focus();
+        if ("focus" in janela) {
+          janela.postMessage({ tipo: "abrir-rota", url: destino });
+          return janela.focus();
+        }
       }
-      return clients.openWindow("/");
+      return clients.openWindow(destino);
     })
   );
 });

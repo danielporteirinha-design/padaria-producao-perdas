@@ -27,6 +27,7 @@ import type { Loja } from "../lib/lojas";
 import { dataDeHojeIso } from "../lib/data";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { IconeChama, IconeConfere } from "./Icones";
+import { TesteDeAvisos } from "./TesteDeAvisos";
 
 interface PainelFornadasFilialProps {
   loja: Loja;
@@ -120,9 +121,18 @@ export function PainelFornadasFilial({
 
   if (prontosHoje.length === 0) {
     return (
-      <div className="painel-fornadas vazio">
-        <IconeChama tamanho={20} />
-        <span>Nada saiu do forno na matriz ainda hoje.</span>
+      <div className="painel-fornadas">
+        <div className="corpo-fornadas">
+          <p className="aviso-forno-vazio">
+            <IconeChama tamanho={20} />
+            <span>Nada saiu do forno na matriz ainda hoje.</span>
+          </p>
+          {/* O teste fica aqui também, e não só na lista cheia: o dia em
+              que a filial desconfia do push é justamente o dia em que a
+              tela está vazia — e sem ele "não chegou nada" e "não saiu
+              nada" ficam indistinguíveis. */}
+          <TesteDeAvisos destino="matriz" />
+        </div>
       </div>
     );
   }
@@ -220,6 +230,13 @@ export function PainelFornadasFilial({
           </div>
         );
       })}
+
+      {/* Diagnóstico da direção filial -> matriz: dispara um aviso de
+          teste sem criar pedido nenhum. Existe porque "a matriz não
+          recebeu meu pedido" tem três causas diferentes — aparelho não
+          registrado, FCM recusou, ou chegou e o celular não tocou — e as
+          três se parecem com "não chegou nada". */}
+      <TesteDeAvisos destino="matriz" />
       </div>
     </div>
   );

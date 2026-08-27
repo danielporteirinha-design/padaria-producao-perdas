@@ -88,15 +88,75 @@ export async function ativarAvisos(lojaId: string, operador: string): Promise<vo
     throw new ErroNotificacao("Não foi possível registrar este aparelho para receber avisos.");
   }
 
-  // O id do documento é o próprio token: reativar no mesmo aparelho
-  // atualiza o registro em vez de criar um duplicado, e o envio nunca
-  // manda o mesmo aviso duas vezes para o mesmo celular.
+  await gravarAparelho(token, lojaId, operador);
+}
+
+/**
+ * Grava o aparelho para a loja informada.
+ *
+ * O id do documento é o próprio token: reativar no mesmo aparelho
+ * atualiza o registro em vez de criar um duplicado, e o envio nunca manda
+ * o mesmo aviso duas vezes para o mesmo celular. Regravar também CORRIGE
+ * o `lojaId` — é o que faz um aparelho que já foi filial passar a contar
+ * como matriz quando alguém troca de conta nele.
+ */
+async function gravarAparelho(token: string, lojaId: string, operador: string): Promise<void> {
   await setDoc(doc(db, "dispositivos", token), {
     token,
     lojaId,
     registradoPor: operador,
     atualizadoEm: new Date().toISOString(),
   });
+}
+
+export type ResultadoRegistroSilencioso =
+  | "registrado"
+  | "sem-permissao"
+  | "nao-suportado"
+  | "falhou";
+
+/**
+ * Registra este aparelho SEM pedir nada ao usuário, quando a permissão já
+ * está concedida.
+ *
+ * DEFEITO QUE ISTO CORRIGE (ago/2026)
+ * ------------------------------------
+ * O app tratava "permissão do navegador concedida" como "aparelho
+ * registrado", e são coisas diferentes. O documento em `dispositivos` —
+ * que é o que diz PARA ONDE o push vai — só nascia quando alguém tocava
+ * em "Ativar". Só que o cartão de ativação some assim que a permissão
+ * está concedida. Resultado, no aparelho que já tinha permissão de antes:
+ * o cartão nunca aparecia, nenhum token era gravado, e o aviso não tinha
+ * destino — em silêncio absoluto, que é o pior jeito de falhar.
+ *
+ * Pior ainda na troca de conta: um celular registrado uma vez como filial
+ * continuava com `lojaId` de filial. Ele recebia os avisos de fornada e
+ * NUNCA os de reposição, mesmo logado como matriz.
+ *
+ * Chamar isto na abertura é seguro: com a permissão já concedida,
+ * `getToken` não abre prompt nenhum. Sem permissão, ele nem é chamado —
+ * quem pede permissão continua sendo o toque no botão.
+ */
+export async function registrarAparelhoSePermitido(
+  lojaId: string,
+  operador: string
+): Promise<ResultadoRegistroSilencioso> {
+  if ((await estadoDosAvisos()) !== "ligado") {
+    // `Notification` como identificador solto lança ReferenceError onde a
+    // API não existe — nem o encadeamento opcional salva disso.
+    const permitido =
+      typeof Notification !== "undefined" && Notification.permission === "granted";
+    return permitido ? "nao-suportado" : "sem-permissao";
+  }
+  try {
+    const token = await getToken(getMessaging(app), { vapidKey: CHAVE_VAPID });
+    if (!token) return "falhou";
+    await gravarAparelho(token, lojaId, operador);
+    return "registrado";
+  } catch (erro) {
+    console.warn("Não foi possível registrar este aparelho para avisos:", erro);
+    return "falhou";
+  }
 }
 
 /**

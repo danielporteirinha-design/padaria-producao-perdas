@@ -279,11 +279,16 @@ export default async function handler(req: any, res: any) {
       corpo = "Teste de aviso. Se você está vendo isto, as notificações estão funcionando.";
       etiqueta = "teste-aviso";
     } else if (ehDaMatriz) {
+      // O corpo diz que ESTÁ DISPONÍVEL PARA PEDIDO, e não só que saiu
+      // (ago/2026). A diferença não é de redação: o aviso agora também
+      // anuncia item fora do cronograma, e "saiu do forno" sozinho não
+      // convida a filial a fazer nada. Ela precisa saber que dá para
+      // pedir, e que é agora.
       titulo = nomeProduto!;
       corpo =
         vezesHoje && vezesHoje > 1
-          ? `${vezesHoje}ª fornada de hoje. Está sem no balcão? Peça reposição.`
-          : "Acabou de sair do forno. Está sem no balcão? Peça reposição.";
+          ? `${vezesHoje}ª fornada de hoje — disponível para pedidos. Toque para pedir.`
+          : "Acabou de sair do forno e está disponível para pedidos. Toque para pedir.";
       etiqueta = `fornada-${codigoPdv}`;
     } else {
       // O nome da loja vai no TÍTULO: é a primeira coisa que a matriz
@@ -306,7 +311,16 @@ export default async function handler(req: any, res: any) {
      */
     const resultado = await modulos.messaging.getMessaging(app).sendEachForMulticast({
       tokens,
-      data: { titulo, corpo, tag: etiqueta },
+      /**
+       * `url` leva ao destino DENTRO do app (ago/2026). Tocar no aviso
+       * abria o app na última aba usada, e quem recebeu "PÃO FRANCÊS
+       * disponível" caía no Cronograma sem entender o que fazer. O
+       * service worker lê este campo e manda o app abrir a aba certa —
+       * ver public/firebase-messaging-sw.js e o efeito de rota em
+       * src/App.tsx. É um caminho relativo de propósito: `fcmOptions.link`
+       * exigiria URL absoluta e não é usado aqui (ver abaixo).
+       */
+      data: { titulo, corpo, tag: etiqueta, url: "/?aba=fornada" },
       /**
        * Sem `fcmOptions.link` de propósito. O FCM exige que esse campo,
        * quando presente, seja uma URL HTTPS COMPLETA — um caminho relativo
