@@ -8,11 +8,19 @@
  *
  * Duas decisões importantes aqui, ambas sobre NÃO servir versão velha:
  *
- * 1. registerType "autoUpdate": a cada `git push` o Vercel publica uma
- *    versão nova. Com autoUpdate o service worker baixa a nova versão em
- *    segundo plano e assume no próximo carregamento, sem o operador
- *    precisar limpar cache. Sem isso, um app instalado pode ficar preso
- *    numa versão antiga indefinidamente — o erro clássico de PWA.
+ * 1. registerType "prompt" (ago/2026, revisado de "autoUpdate"): a cada
+ *    `git push` o Vercel publica uma versão nova. Com autoUpdate o
+ *    service worker assumia SOZINHO no próximo carregamento — sem cache
+ *    velho, mas também sem ninguém saber que a versão mudou. Na prática
+ *    isso produziu duas conversas repetidas: "a correção já entrou aqui?"
+ *    e, pior, telas que mudavam de comportamento no meio do expediente
+ *    sem explicação.
+ *
+ *    Com "prompt" o service worker novo BAIXA e ESPERA. O app avisa na
+ *    tela que há versão nova e o operador toca em "Atualizar agora", que
+ *    ativa o service worker e recarrega — ver src/lib/atualizacao.ts e
+ *    src/components/AvisoDeAtualizacao.tsx. Continua não existindo o
+ *    risco de ficar preso numa versão antiga: o aviso não some sozinho.
  *
  * 2. As rotas /api/* ficam FORA do cache do service worker. Elas chamam
  *    o Gemini (sugestão e insights) e não podem ser respondidas por uma
@@ -86,7 +94,11 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
+      // O registro é feito à mão em src/main.tsx, pelo módulo virtual —
+      // é o que dá acesso ao callback de "há versão nova esperando".
+      // Deixar a injeção automática ligada registraria duas vezes.
+      injectRegister: null,
       includeAssets: ["favicon-32x32.png", "apple-touch-icon.png"],
       manifest: {
         name: "Produção e Perdas — Padaria Pão de Mel",

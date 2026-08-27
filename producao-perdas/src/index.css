@@ -647,6 +647,66 @@ button.perigo:hover { background: #822525; }
 }
 
 /* ---------------------------------------------------------------
+   Faixa de versão nova (AvisoDeAtualizacao.tsx, ago/2026)
+
+   No TOPO, ao contrário do aviso de operação: aquele responde ao que a
+   pessoa acabou de fazer e mora perto do polegar; este é um anúncio
+   sobre o APP. No mesmo canto as duas se atropelariam, e a que sumiria
+   por baixo seria justamente a confirmação da ação em curso.
+
+   Não some sozinha: é o que garante que ninguém passe o expediente numa
+   versão antiga achando que está na nova.
+   --------------------------------------------------------------- */
+.faixa-atualizacao {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 70;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 14px;
+  background: #2f6b41;
+  color: #ffffff;
+  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.25);
+  /* Respeita a barra de status do celular quando o app está instalado —
+     sem isto, a faixa nasce por baixo do relógio e da bateria. */
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+}
+.faixa-atualizacao > svg { flex-shrink: 0; }
+/* Abaixo de ~55% da largura o botão desce para uma linha própria em vez
+   de espremer o texto em quatro linhas de duas palavras. */
+.texto-atualizacao {
+  flex: 1 1 auto;
+  min-width: 55%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 14px;
+  line-height: 1.3;
+}
+.texto-atualizacao span { opacity: 0.9; }
+/* Linha própria e largura cheia, sempre. Tentar encaixá-lo ao lado do
+   texto cabe em 414px e não cabe em 360, e um botão que muda de lugar
+   conforme o aparelho é justamente o que faz alguém não achar. Aqui ele
+   é a coisa mais óbvia da tela, que é o ponto: a pessoa precisa
+   reiniciar.
+
+   A cor também não é a do app: o `primario` é da cor do acento, que
+   sobre o verde da faixa some. */
+.faixa-atualizacao .primario {
+  flex: 0 0 100%;
+  background: #ffffff;
+  color: #22502f;
+  border-color: #ffffff;
+  padding: 10px 14px;
+  font-size: 15px;
+}
+.faixa-atualizacao .primario:disabled { opacity: 0.7; }
+
+/* ---------------------------------------------------------------
    Caixa de confirmação sobreposta (senha para excluir produto, anulação
    de perda). Sobreposição em vez de expandir a tela: são ações
    irreversíveis, e tirar o resto da interface do caminho força o

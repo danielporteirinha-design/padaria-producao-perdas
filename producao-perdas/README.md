@@ -164,6 +164,45 @@ Sem a chave configurada, o botão continua visível mas mostra uma mensagem
 clara pedindo a configuração — nunca trava a tela nem impede montar o
 cronograma manualmente.
 
+## Aviso de versão nova, com reinício (ago/2026)
+
+O app era `registerType: "autoUpdate"`: o service worker novo assumia sozinho
+no carregamento seguinte. Nunca ficava versão velha presa — mas também ninguém
+sabia que a versão tinha mudado, e isso produziu duas conversas repetidas na
+padaria: *"a correção já entrou aqui?"* e, pior, telas que mudavam de
+comportamento no meio do expediente sem explicação.
+
+Agora o service worker novo **baixa e espera**. Uma faixa verde aparece no topo
+— "Nova versão disponível · Reinicie para aplicar" — com um botão de largura
+cheia, **Atualizar agora**, que ativa a versão nova e recarrega.
+
+Quatro decisões:
+
+- **O botão reinicia de verdade.** Num PWA instalado, "reiniciar o aplicativo"
+  não é fechar a janela: o service worker antigo continua no controle até
+  **todas** as abas fecharem, e no PC do caixa isso não acontece. O botão chama
+  `updateSW(true)`, que manda `SKIP_WAITING` e recarrega. O operador não
+  precisa saber de nada disso.
+- **A faixa não some sozinha.** Diferente do aviso de sucesso, ela fica até
+  alguém tocar. É o que garante que ninguém passe o expediente numa versão
+  antiga achando que está na nova.
+- **Fica no topo, e o aviso de operação continua embaixo.** Um é anúncio sobre
+  o APP; o outro responde ao que a pessoa acabou de fazer. No mesmo canto se
+  atropelariam, e a que sumiria por baixo seria a confirmação da ação em curso.
+- **Verificação de hora em hora** (`registro.update()`). O navegador só procura
+  service worker novo quando a página carrega, e no PC do caixa o app fica
+  aberto o dia inteiro — sem isso, uma correção publicada às 8h só apareceria
+  no dia seguinte.
+
+O componente vive **fora do `App`** (`src/main.tsx`) para valer também na tela
+de login e na de carregamento: é justamente na abertura do dia que o app
+encontra a atualização da noite, e depender de alguém já estar logado atrasaria
+o aviso.
+
+> **Na virada:** a versão publicada hoje ainda é `autoUpdate`, então a troca
+> para esta acontece automaticamente uma última vez. Da **próxima** publicação
+> em diante é a faixa que aparece.
+
 ## Ajustes de uso real (ago/2026)
 
 Correções vindas do uso, não de especificação:
