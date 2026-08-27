@@ -10,12 +10,21 @@
  * todos, quatro cópias virariam quatro comportamentos ligeiramente
  * diferentes na primeira correção. Aqui é um só.
  *
- * O MICROFONE SÓ APARECE ONDE FUNCIONA
- * -------------------------------------
- * Navegador sem reconhecimento de voz não ganha o botão — oferecer e
- * falhar é pior que não oferecer. Onde existe, o fluxo é: toca, fala, o
+ * O MICROFONE APARECE SEMPRE — E EXPLICA QUANDO NÃO DÁ
+ * -----------------------------------------------------
+ * A primeira versão escondia o botão em navegador sem reconhecimento de
+ * voz, com o argumento de que oferecer e falhar é pior que não oferecer.
+ * O uso real mostrou o custo disso (ago/2026): quem não via o microfone
+ * não tinha como saber se o recurso não existia, se não tinha sido
+ * publicado ainda, ou se o navegador dele é que não servia. Botão ausente
+ * é indistinguível de recurso ausente, e a pessoa reporta como defeito
+ * uma coisa que está funcionando na máquina do lado.
+ *
+ * Agora ele aparece sempre. Onde a voz existe, o fluxo é: toca, fala, o
  * navegador transcreve, o Gemini casa a transcrição com um nome real do
- * catálogo (ver api/interpretar-busca.ts) e o termo entra no campo.
+ * catálogo (ver api/interpretar-busca.ts) e o termo entra no campo. Onde
+ * não existe, um toque responde em uma frase o que fazer — que é o que
+ * um botão desabilitado nunca diz.
  *
  * A IA É OPCIONAL EM TODAS AS ETAPAS. Sem chave, com erro ou com resposta
  * inesperada, o campo recebe a transcrição crua — e como `contemBusca`
@@ -74,6 +83,20 @@ export function CampoDeBusca({
 
   const temVoz = vozDisponivel();
 
+  /**
+   * A frase para quem tocou num navegador que não reconhece voz.
+   *
+   * Nomeia os navegadores em vez de dizer "não suportado": o Firefox no
+   * computador é o caso mais comum, e quem está com ele na tela não tem
+   * como adivinhar que o Chrome resolve.
+   */
+  function explicarFaltaDeVoz() {
+    setErro(
+      "Este navegador não reconhece voz. No computador funciona no Chrome ou no Edge; " +
+        "no celular, no Chrome (Android) ou no Safari (iPhone). Digitar o nome continua funcionando."
+    );
+  }
+
   async function ditar() {
     if (ouvindo || pensando) {
       cancelar.current?.();
@@ -122,18 +145,16 @@ export function CampoDeBusca({
           value={valor}
           onChange={(e) => onMudar(e.target.value)}
         />
-        {temVoz && (
-          <button
-            type="button"
-            className={`botao-microfone ${ouvindo ? "ouvindo" : ""}`}
-            aria-label={ouvindo ? "Parar de ouvir" : "Buscar falando o nome do produto"}
-            title={ouvindo ? "Ouvindo... toque para parar" : "Falar o nome do produto"}
-            disabled={pensando}
-            onClick={ditar}
-          >
-            <IconeMicrofone tamanho={20} />
-          </button>
-        )}
+        <button
+          type="button"
+          className={`botao-microfone ${ouvindo ? "ouvindo" : ""} ${temVoz ? "" : "indisponivel"}`}
+          aria-label={ouvindo ? "Parar de ouvir" : "Buscar falando o nome do produto"}
+          title={ouvindo ? "Ouvindo... toque para parar" : "Falar o nome do produto"}
+          disabled={pensando}
+          onClick={temVoz ? ditar : explicarFaltaDeVoz}
+        >
+          <IconeMicrofone tamanho={20} />
+        </button>
         {children}
       </div>
       {(ouvindo || pensando) && (

@@ -262,6 +262,25 @@ caminho de volta ("N itens fora da lista · mostrar de novo") fica fora da lista
 porque é justamente quando alguém tira o último item que ele precisa estar
 visível.
 
+## Botão ausente é indistinguível de recurso ausente (ago/2026)
+
+O microfone só era desenhado em navegador com reconhecimento de voz — a regra
+parecia certa: oferecer e falhar é pior que não oferecer.
+
+O uso real mostrou o custo. Quem não via o microfone não tinha como saber se o
+recurso não existia, se ainda não tinha sido publicado, ou se o navegador dele é
+que não servia. A ausência do botão foi reportada como defeito duas vezes,
+enquanto o recurso funcionava na máquina do lado.
+
+Agora ele **aparece sempre**. Onde a voz existe, funciona. Onde não existe, um
+toque responde em uma frase — e nomeia os navegadores, em vez de dizer "não
+suportado": o Firefox no computador é o caso mais comum, e quem está com ele na
+tela não tem como adivinhar que o Chrome resolve.
+
+A lição que fica registrada: quando um recurso é invisível na ausência, ele
+perde a única forma que o usuário tem de distinguir "não existe" de "não
+funciona aqui" — e essa distinção é dele, não nossa.
+
 ## Busca por voz, com o Gemini afinando o resultado (ago/2026)
 
 Todos os campos de busca de produto ganharam **microfone**. Quem usa a busca

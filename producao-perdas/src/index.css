@@ -207,6 +207,11 @@ button.link {
   cursor: pointer;
 }
 .botao-microfone:disabled { opacity: 0.55; cursor: default; }
+/* Navegador sem reconhecimento de voz: o botão continua VISÍVEL, apagado.
+   Escondê-lo tornava "recurso não existe" indistinguível de "seu
+   navegador não serve" — e a pessoa reportava como defeito uma coisa que
+   funcionava na máquina do lado. Um toque aqui explica em uma frase. */
+.botao-microfone.indisponivel { color: var(--cor-texto-suave); opacity: 0.65; }
 
 /* Ouvindo: o botão inverte e pulsa. Sem sinal visível, ninguém sabe se
    pode falar — e falar antes da hora perde a primeira palavra. */
