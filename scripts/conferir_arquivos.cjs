@@ -88,6 +88,14 @@ const CONFERENCIAS = [
   ["src/components/PainelFornadasFilial.tsx", "reposicao-confirmada", "Filial: resposta 'separado' em destaque"],
   ["src/App.tsx", "avisarFilialDoDesfecho", "Aviso do desfecho em paralelo"],
 
+  // --- Cronograma: cada loja lança no card dela; título abre a data
+  ["src/components/TelaCronograma.tsx", "porFilial", "Cronograma: matriz lança no card dela"],
+  ["src/components/TelaCronograma.tsx", "sessoesGerais", "Programação geral: todas as lojas reunidas"],
+  ["src/index.css", "escolha-de-data", "Título do dia abre a troca de data"],
+
+  // --- Reposição: lista do mais recente para o mais antigo
+  ["src/lib/ordemDaReposicao.ts", "ordenarPorAnuncioRecente", "Reposição: anúncios mais recentes no topo"],
+
   // --- Rascunho do cronograma
   ["src/lib/rascunhoCronograma.ts", "mapasIguais", "Rascunho do cronograma sobrevive à troca de aba"],
 

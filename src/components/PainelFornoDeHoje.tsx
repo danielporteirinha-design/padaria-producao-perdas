@@ -26,6 +26,7 @@ import type { Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
+import { ordenarPorAnuncioRecente } from "../lib/ordemDaReposicao";
 import { contemBusca } from "../lib/texto";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
@@ -103,9 +104,12 @@ export function PainelFornoDeHoje({
   const buscando = busca.trim().length > 0;
 
   /**
-   * A lista do dia achatada: os itens do cronograma na ordem em que a
-   * padaria produz, sem repetir o produto que aparece em duas sessões e
-   * sem os que foram tirados da lista.
+   * A lista do dia achatada, do anúncio mais recente para o mais antigo.
+   *
+   * Sem repetir o produto que aparece em duas sessões e sem os que foram
+   * tirados da lista. A ordem do cronograma (a ordem em que a padaria
+   * produz) sobrevive só entre os itens que ainda não saíram, no fim da
+   * lista — o porquê está em src/lib/ordemDaReposicao.ts.
    */
   const itensDoDia = useMemo(() => {
     if (!plano) return [];
@@ -118,8 +122,8 @@ export function PainelFornoDeHoje({
         lista.push(item.codigoPdv);
       }
     }
-    return lista;
-  }, [plano, encerrados]);
+    return ordenarPorAnuncioRecente(lista, fornadas, dataHoje);
+  }, [plano, encerrados, fornadas, dataHoje]);
 
   /** Nomes que a IA pode escolher ao interpretar o que foi ditado. */
   const nomesAtivos = useMemo(

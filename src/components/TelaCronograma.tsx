@@ -1,13 +1,28 @@
 /**
  * src/components/TelaCronograma.tsx
  * ---------------------------------------------------------------
- * Fluxo: as 5 categorias fixas de produção, exibidas
- * recolhidas (acordeão) -> tocar num produto abre uma textbox de
- * quantidade (sempre em UNIDADES, protegida contra erro de digitação) ->
- * Confirmar adiciona à lista -> Resumo (conferência final) -> Confirmar
- * produção salva o plano -> Exportar/Imprimir (uma única fita com todas
- * as sessões, separadas por linha de corte, pronta para WhatsApp/impressora
- * térmica).
+ * A TELA É UMA PILHA DE CARDS, UM ASSUNTO CADA (ago/2026)
+ * --------------------------------------------------------
+ *   1. Programação geral — só leitura: todos os itens de todas as lojas
+ *      reunidos, com a quantidade TOTAL de cada um. É a conta que o
+ *      padeiro executa.
+ *   2. Confirmar o que foi produzido — a outra metade do ciclo: o que
+ *      realmente saiu do forno HOJE.
+ *   3. Matriz — onde a matriz LANÇA o cronograma dela (a sanfona das 5
+ *      categorias). Cada loja lança no card dela: a filial enviando a
+ *      lista do próprio aparelho, a matriz aqui.
+ *   4-5. Uma filial por card — o que sai da matriz para aquele destino.
+ *
+ * Antes a matriz lançava dentro da "Programação geral", o que misturava
+ * duas perguntas diferentes: o que UMA loja quer e o que a padaria
+ * inteira vai produzir.
+ *
+ * Fluxo do lançamento (card 3): as 5 categorias fixas exibidas recolhidas
+ * (acordeão) -> tocar num produto abre uma textbox de quantidade (sempre
+ * em UNIDADES, protegida contra erro de digitação) -> Confirmar adiciona
+ * à lista -> Resumo (conferência final) -> Confirmar produção salva o
+ * plano -> Exportar/Imprimir (uma única fita com todas as sessões,
+ * separadas por linha de corte, pronta para WhatsApp/impressora térmica).
  *
  * Sempre monta a produção do DIA SEGUINTE (decisão operacional: o
  * cronograma é fechado no fim do expediente do dia anterior).
@@ -235,29 +250,47 @@ export function TelaCronograma({
   );
 
   /**
-   * O que vai para CADA loja, quebrado por sessão.
+   * TODOS OS ITENS DE TODAS AS LOJAS, REUNIDOS (ago/2026, pedido do dono
+   * do negócio).
    *
-   * Uma loja é um card; dentro dele, as sessões; dentro da sessão, os
-   * itens com a quantidade daquela loja. É a mesma forma do trabalho
-   * real: quem separa de manhã separa uma loja de cada vez, sessão por
-   * sessão — e a tabela de colunas obrigava a matriz a fazer essa leitura
-   * de cabeça, cruzando linha e coluna.
+   * É o que a "Programação geral" passou a ser: a lista do dia inteira,
+   * cada item com a quantidade TOTAL — o que a matriz lançou mais o que
+   * as filiais pediram. É a conta que o padeiro executa, e agora ela se
+   * lê sem abrir três cards e somar de cabeça.
+   *
+   * A divisão por destino não sumiu: continua logo abaixo, um card por
+   * loja, que é a forma de quem separa de manhã.
    */
-  const porLoja = useMemo(
+  const sessoesGerais = useMemo(
     () =>
-      [LOJA_MATRIZ, ...FILIAIS].map((loja) => {
-        const itens = itensParaLoja(consolidadoDaData, loja.id);
-        const sessoes = GRUPOS.map((chave) => ({
-          chave,
-          rotulo: rotuloDaCategoria(chave),
-          itens: itens.filter(
-            (i) => produtos.find((p) => p.codigoPdv === i.codigoPdv)?.categoria === chave
-          ),
-        })).filter((sessao) => sessao.itens.length > 0);
+      agruparEmSessoes(
+        consolidadoDaData.map((item) => ({
+          codigoPdv: item.codigoPdv,
+          quantidadeUnidades: item.totalUnidades,
+        })),
+        produtos
+      ),
+    [consolidadoDaData, produtos]
+  );
 
+  const variedadesGerais = consolidadoDaData.length;
+  const totalUnidadesGerais = consolidadoDaData.reduce((soma, i) => soma + i.totalUnidades, 0);
+
+  /**
+   * O que vai para cada FILIAL, quebrado por sessão.
+   *
+   * A matriz saiu deste mapa (ago/2026): o card dela deixou de espelhar o
+   * que ela guarda e passou a ser o lugar onde ela LANÇA o próprio
+   * cronograma — ver o card da matriz mais abaixo. O que ela guarda
+   * continua legível na Programação geral, junto do resto.
+   */
+  const porFilial = useMemo(
+    () =>
+      FILIAIS.map((loja) => {
+        const itens = itensParaLoja(consolidadoDaData, loja.id);
         return {
           loja,
-          sessoes,
+          sessoes: agruparEmSessoes(itens, produtos),
           total: itens.reduce((soma, i) => soma + i.quantidadeUnidades, 0),
           variedades: itens.length,
         };
@@ -624,6 +657,26 @@ export function TelaCronograma({
     planoExistente?.status === "confirmado" &&
     !mapasIguais(itensPorGrupo, mapaDoPlano(planoExistente));
 
+  /**
+   * O estado do cronograma da data, escrito uma vez só.
+   *
+   * A Programação geral e o card da matriz falam do MESMO plano — um pelo
+   * total, outro pela montagem. Duas cópias desta escada de condições
+   * acabariam divergindo na primeira correção, e os dois cards mostrariam
+   * estados diferentes do mesmo dia.
+   *
+   * `quantos` é o que aquele card tem para mostrar: a geral conta as
+   * variedades somadas (a filial pode ter enviado lista antes de a matriz
+   * lançar qualquer coisa), a matriz conta o que ela montou.
+   */
+  function situacaoDoCronograma(quantos: number): SituacaoDoCard {
+    if (temAlteracoesNaoConfirmadas) return { texto: "alterações não confirmadas", tom: "pendente" };
+    if (planoExistente?.status === "confirmado") return { texto: "cronograma confirmado", tom: "ok" };
+    return quantos > 0
+      ? { texto: "montando", tom: "pendente" }
+      : { texto: "sem itens ainda", tom: "pendente" };
+  }
+
   const itensDoPlanoDeHoje = planoDeHoje ? itensPlanejados(planoDeHoje).length : 0;
   const hojeJaConfirmado = planoDeHoje ? producaoFoiConfirmada(planoDeHoje) : false;
   /**
@@ -645,69 +698,75 @@ export function TelaCronograma({
   return (
     <div className="tela">
       {/*
-        A DATA É O TÍTULO DA PÁGINA, NÃO UM CARD
+        A DATA É O TÍTULO DA PÁGINA, E O TÍTULO É O BOTÃO
         ---------------------------------------------------------------
         Os cinco cards abaixo falam todos do mesmo dia — repetir a data
         dentro de cada um seria ruído. Ela fica aqui em cima, uma vez, e
-        deixou de ser botão: a porta da montagem passou a ser o card da
-        Programação geral, que é onde a montagem de fato mora.
+        é por ela que se troca o dia programado.
       */}
       <div className="destaque-data titulo-do-dia">
-        <div className="linha-titulo-do-dia">
-          {/* Ícone e data num invólucro só: quando o botão desce para a
+        {/* O ALVO É A PRÓPRIA DATA (ago/2026, pedido do dono do negócio).
+            Havia um botão "outra data" ao lado do título: dois alvos, um
+            assunto só, e o rótulo alternando entre "outra data" e
+            "amanhã" — texto que precisava ser LIDO para se entender, e
+            que dizia "amanhã" quando a data na tela já era outra.
+
+            Tocar no dia para trocar o dia dispensa a leitura. A seta é
+            o que avisa que ali abre alguma coisa. */}
+        <button
+          type="button"
+          className={`linha-titulo-do-dia ${mostrarSeletorData ? "aberta" : ""}`}
+          aria-expanded={mostrarSeletorData}
+          title="Tocar na data para programar outro dia"
+          onClick={() => setMostrarSeletorData((v) => !v)}
+        >
+          {/* Ícone e data num invólucro só: quando a seta desce para a
               linha de baixo, o calendário desce COM o texto dele. Soltos
               no mesmo flex, o ícone ficava sozinho numa linha. */}
           <span className="marca-titulo-do-dia">
             <IconeCalendario tamanho={20} />
             <span className="titulo-planejamento">Produção de {dataFormatada}</span>
           </span>
-          {/* A troca de data mora AQUI, e não dentro da Programação geral
-              (ago/2026). Lá ela era um link discreto no meio da montagem,
-              e ficou invisível: quem quer planejar outro dia procura ao
-              lado da DATA, que é o que ele quer mudar. */}
-          <button
-            type="button"
-            className="secundario trocar-data"
-            aria-expanded={mostrarSeletorData}
-            onClick={() => setMostrarSeletorData((v) => !v)}
-          >
-            {mostrarSeletorData ? "amanhã" : "outra data"}
-          </button>
-        </div>
+          <IconeSeta className="seta-sessao" />
+        </button>
+
         {mostrarSeletorData && (
-          <input
-            type="date"
-            aria-label="Data da produção"
-            value={dataAlvo}
-            onChange={(e) => trocarData(e.target.value)}
-          />
+          <div className="escolha-de-data">
+            <input
+              type="date"
+              aria-label="Data da produção"
+              value={dataAlvo}
+              onChange={(e) => trocarData(e.target.value)}
+            />
+            {/* O caminho de volta ao dia normal de trabalho. Sem ele,
+                voltar de uma data distante exigiria lembrar qual é a data
+                de amanhã e digitá-la. */}
+            {dataAlvo !== dataDeAmanhaIso() && (
+              <button type="button" className="link" onClick={() => trocarData(dataDeAmanhaIso())}>
+                voltar para amanhã
+              </button>
+            )}
+          </div>
         )}
       </div>
 
       {/*
-        CARD 1 — PROGRAMAÇÃO GERAL (ago/2026)
+        CARD 1 — PROGRAMAÇÃO GERAL: TODAS AS LOJAS REUNIDAS (ago/2026,
+        pedido do dono do negócio)
         ---------------------------------------------------------------
-        A lista inteira: a sanfona das 5 sessões e, dentro de cada uma,
-        os produtos com a quantidade pedida. Vem primeiro porque é o
-        assunto da aba — os cards das lojas abaixo são o mesmo conteúdo
-        repartido por destino.
+        Este card era onde a matriz MONTAVA o cronograma dela. Ficava
+        estranho: um card chamado "geral" que na prática era o lançamento
+        de uma loja só, enquanto as outras duas tinham card próprio.
+
+        Agora ele é o que o nome diz — a lista do dia inteira, com a
+        quantidade total de cada item. Só leitura: é o retrato de tudo
+        que foi lançado, matriz e filiais somadas. Quem lança, lança no
+        card da própria loja, logo abaixo.
       */}
       <CardCronograma
         nome="Programação geral"
-        /* Um plano confirmado com edições na tela não pode dizer
-           "confirmado": quem separa de manhã leria a lista antiga, e quem
-           editou acharia que já tinha salvo. O aviso só aparece quando o
-           que está na tela DIFERE do que está gravado. */
-        situacao={
-          temAlteracoesNaoConfirmadas
-            ? { texto: "alterações não confirmadas", tom: "pendente" }
-            : planoExistente?.status === "confirmado"
-              ? { texto: "cronograma confirmado", tom: "ok" }
-              : totalItens > 0
-                ? { texto: "montando", tom: "pendente" }
-                : { texto: "sem itens ainda", tom: "pendente" }
-        }
-        contagem={contagemDeItens(totalItens)}
+        situacao={situacaoDoCronograma(variedadesGerais)}
+        contagem={variedadesGerais > 0 ? contagemDeItens(variedadesGerais) : "—"}
         aberto={!!cardsAbertos.programacao}
         onAlternar={() => alternarCard("programacao")}
       >
@@ -727,6 +786,85 @@ export function TelaCronograma({
           </p>
         )}
 
+        {sessoesGerais.length === 0 ? (
+          <p className="nota-rodape">Nada lançado para esta data ainda.</p>
+        ) : (
+          <>
+            {sessoesGerais.map((sessao) => (
+              <div key={sessao.chave} className="sessao-do-card">
+                <h4>{sessao.rotulo}</h4>
+                {sessao.itens.map((item) => (
+                  <div key={item.codigoPdv} className="item-da-loja">
+                    <span className="nome-item-loja">{nomeDoProduto(item.codigoPdv)}</span>
+                    <span className="qtd-item-loja">{arred(item.quantidadeUnidades)} un</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+            <p className="nota-rodape">
+              {contagemDeItens(variedadesGerais)} ·{" "}
+              {arred(totalUnidadesGerais).toLocaleString("pt-BR")} unidades — matriz e filiais
+              somadas
+            </p>
+          </>
+        )}
+      </CardCronograma>
+
+      {/*
+        CARD 2 — CONFIRMAÇÃO DO QUE FOI PRODUZIDO HOJE
+        ---------------------------------------------------------------
+        Fica logo abaixo da programação porque é a outra metade do mesmo
+        ciclo: o card de cima diz o que foi PEDIDO, este diz o que
+        realmente SAIU. Só aparece quando existe plano confirmado hoje —
+        sem plano não há o que conferir.
+      */}
+      {planoDeHoje && (
+        <CardCronograma
+          nome="Confirmar o que foi produzido"
+          /* Confirmado não mostra segunda linha (ago/2026): "produção
+             confirmada" logo abaixo de um título que já diz o assunto era
+             a mesma frase duas vezes, e o número à direita já conta a
+             história inteira. Pendente continua avisando, porque aí falta
+             uma ação. */
+          situacao={
+            hojeJaConfirmado ? null : { texto: "ainda não confirmado", tom: "pendente" }
+          }
+          contagem={`${confirmadosDeHoje} de ${itensDoPlanoDeHoje} confirmados`}
+          aberto={!!cardsAbertos.confirmacao}
+          onAlternar={() => alternarCard("confirmacao")}
+        >
+          <ConfirmarProducao
+            embutido
+            plano={planoDeHoje}
+            produtos={produtos}
+            operador={operador}
+            totaisPedidos={totaisPedidosDeHoje}
+            codigosComFornada={codigosComFornadaNoDia(fornadas, hojeIso)}
+            onConfirmar={(codigos) => onConfirmarProducao(planoDeHoje.id, codigos)}
+          />
+        </CardCronograma>
+      )}
+
+      {/*
+        CARD 3 — MATRIZ: ONDE ELA LANÇA O PRÓPRIO CRONOGRAMA (ago/2026,
+        pedido do dono do negócio)
+        ---------------------------------------------------------------
+        Cada loja lança o cronograma dela no card dela. A filial lança
+        enviando a lista do próprio aparelho; a matriz lança aqui, na
+        sanfona das cinco sessões — é a mesma ideia, no mesmo lugar da
+        tela, e agora as três lojas se leem do mesmo jeito.
+
+        A montagem morava na Programação geral, o que misturava duas
+        coisas: o que UMA loja quer e o que a padaria inteira vai
+        produzir. Separado, cada card responde uma pergunta só.
+      */}
+      <CardCronograma
+        nome={LOJA_MATRIZ.nomeCurto}
+        situacao={situacaoDoCronograma(totalItens)}
+        contagem={totalItens > 0 ? contagemDeItens(totalItens) : "—"}
+        aberto={!!cardsAbertos[LOJA_MATRIZ.id]}
+        onAlternar={() => alternarCard(LOJA_MATRIZ.id)}
+      >
         {GRUPOS.map((chave) => {
           const rotulo = rotuloDaCategoria(chave);
           const itensDoGrupo = itensPorGrupo[chave] ?? [];
@@ -869,47 +1007,12 @@ export function TelaCronograma({
         </div>
       </CardCronograma>
 
-      {/*
-        CARD 2 — CONFIRMAÇÃO DO QUE FOI PRODUZIDO HOJE
-        ---------------------------------------------------------------
-        Fica logo abaixo da programação porque é a outra metade do mesmo
-        ciclo: o card de cima diz o que foi PEDIDO, este diz o que
-        realmente SAIU. Só aparece quando existe plano confirmado hoje —
-        sem plano não há o que conferir.
-      */}
-      {planoDeHoje && (
-        <CardCronograma
-          nome="Confirmar o que foi produzido"
-          /* Confirmado não mostra segunda linha (ago/2026): "produção
-             confirmada" logo abaixo de um título que já diz o assunto era
-             a mesma frase duas vezes, e o número à direita já conta a
-             história inteira. Pendente continua avisando, porque aí falta
-             uma ação. */
-          situacao={
-            hojeJaConfirmado ? null : { texto: "ainda não confirmado", tom: "pendente" }
-          }
-          contagem={`${confirmadosDeHoje} de ${itensDoPlanoDeHoje} confirmados`}
-          aberto={!!cardsAbertos.confirmacao}
-          onAlternar={() => alternarCard("confirmacao")}
-        >
-          <ConfirmarProducao
-            embutido
-            plano={planoDeHoje}
-            produtos={produtos}
-            operador={operador}
-            totaisPedidos={totaisPedidosDeHoje}
-            codigosComFornada={codigosComFornadaNoDia(fornadas, hojeIso)}
-            onConfirmar={(codigos) => onConfirmarProducao(planoDeHoje.id, codigos)}
-          />
-        </CardCronograma>
-      )}
-
       {/* As reposições saíram desta tela (ago/2026): elas são de HOJE e
           moram na aba "Nova fornada", junto do resto do que acontece
           durante o expediente. O Cronograma é sobre AMANHÃ. */}
 
       {/*
-        CARDS 3 A 5 — UM POR LOJA (ago/2026).
+        CARDS 4 E 5 — UM POR FILIAL (ago/2026).
         Substituiu o quadro único "Quanto vai para cada loja". A tabela
         com uma coluna por loja obrigava a matriz a cruzar linha e coluna
         de cabeça; e quem separa de manhã separa UMA loja de cada vez,
@@ -920,19 +1023,14 @@ export function TelaCronograma({
         continua no rodapé do card, junto dos produtos — lá ele tem
         contexto; no cabeçalho ele só competia com o número que importa.
       */}
-      {porLoja.map(({ loja: destino, sessoes, total, variedades }) => {
-        const ehFilial = destino.papel === "filial";
+      {porFilial.map(({ loja: destino, sessoes, total, variedades }) => {
         const enviou = filiaisQueEnviaram.some((f) => f.id === destino.id);
 
-        // Filial: o que importa é se a lista chegou. Matriz: em que pé
-        // está o cronograma que ela mesma monta.
-        const situacao: SituacaoDoCard = ehFilial
-          ? enviou
-            ? { texto: "lista enviada", tom: "ok" }
-            : { texto: "lista pendente", tom: "pendente" }
-          : planoExistente?.status === "confirmado"
-            ? { texto: "cronograma confirmado", tom: "ok" }
-            : { texto: "montando", tom: "pendente" };
+        // O que importa aqui é se a lista da loja chegou: sem ela, a
+        // matriz produz no escuro para aquele destino.
+        const situacao: SituacaoDoCard = enviou
+          ? { texto: "lista enviada", tom: "ok" }
+          : { texto: "lista pendente", tom: "pendente" };
 
         return (
           <CardCronograma
@@ -945,9 +1043,9 @@ export function TelaCronograma({
           >
             {sessoes.length === 0 ? (
               <p className="nota-rodape">
-                {ehFilial && !enviou
-                  ? "Esta filial ainda não enviou o pedido do dia."
-                  : "Nada destinado a esta loja neste cronograma."}
+                {enviou
+                  ? "Nada destinado a esta loja neste cronograma."
+                  : "Esta filial ainda não enviou o pedido do dia."}
               </p>
             ) : (
               <>
@@ -972,6 +1070,32 @@ export function TelaCronograma({
       })}
     </div>
   );
+}
+
+/**
+ * Agrupa itens nas 5 sessões fixas de produção, na ordem em que a padaria
+ * produz.
+ *
+ * A SOBRA NO FIM É DE PROPÓSITO. A filial pode pedir um produto cuja
+ * categoria não é uma das cinco — cadastro antigo, item recém-criado, a
+ * antiga sessão de encomendas. A versão anterior filtrava por categoria e
+ * pronto: esses itens simplesmente NÃO APARECIAM no card, sem nenhum
+ * sinal, e a loja recebia menos do que pediu sem ninguém entender por
+ * quê. Aqui eles caem em "Outros" e ficam visíveis.
+ */
+function agruparEmSessoes<T extends { codigoPdv: number }>(itens: T[], produtos: Produto[]) {
+  const categoriaDe = new Map(produtos.map((p) => [p.codigoPdv, p.categoria]));
+  const sessoes = GRUPOS.map((chave) => ({
+    chave,
+    rotulo: rotuloDaCategoria(chave),
+    itens: itens.filter((i) => categoriaDe.get(i.codigoPdv) === chave),
+  })).filter((sessao) => sessao.itens.length > 0);
+
+  const agrupados = new Set(sessoes.flatMap((sessao) => sessao.itens.map((i) => i.codigoPdv)));
+  const sobra = itens.filter((i) => !agrupados.has(i.codigoPdv));
+  if (sobra.length > 0) sessoes.push({ chave: "outros", rotulo: "Outros", itens: sobra });
+
+  return sessoes;
 }
 
 /** Estado curto que cada card mostra no próprio cabeçalho. */

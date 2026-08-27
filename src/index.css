@@ -1549,44 +1549,65 @@ button.perigo:hover { background: #822525; }
 /* ---------------------------------------------------------------
    Título do dia no Cronograma (TelaCronograma.tsx, ago/2026)
    Os cinco cards abaixo falam todos do mesmo dia; a data aparece uma
-   vez, aqui, e deixou de ser botão — a porta da montagem passou a ser o
-   card da Programação geral, que é onde a montagem mora.
+   vez, aqui — e é ela o botão que troca o dia programado. O botão
+   "outra data" ao lado saiu: dois alvos para um assunto só, com um
+   rótulo que precisava ser lido.
    --------------------------------------------------------------- */
 .titulo-do-dia { display: block; }
-/* Quebra em duas linhas quando o botão não couber ao lado da data, em vez
-   de espremer o título: "Produção de Quinta-feira, 28/08/2026" em quatro
-   linhas de duas palavras é pior que o botão numa linha própria. O
-   min-width é o gatilho — abaixo de 60% da largura, o botão desce. */
+/* A linha inteira é o botão: alvo grande, como pede um dedo no balcão.
+   Quebra em duas linhas quando a seta não couber ao lado da data, em vez
+   de espremer o título — "Produção de Quinta-feira, 28/08/2026" em quatro
+   linhas de duas palavras é pior. O min-width da marca é o gatilho. */
 .linha-titulo-do-dia {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 10px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
+/* A base é 60%, não `auto` (ago/2026). Com `auto`, o flex quebra a linha
+   comparando o tamanho MÁXIMO do texto (a data inteira numa linha só) —
+   antes de encolher — e a seta caía sozinha na linha de baixo por uma
+   diferença de poucos pixels. Com base declarada, marca e seta sempre
+   dividem a mesma linha e o texto quebra dentro do espaço que sobra. */
 .marca-titulo-do-dia {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1 1 auto;
-  min-width: 60%;
+  flex: 1 1 60%;
+  min-width: 0;
 }
 .linha-titulo-do-dia svg { color: var(--cor-acento); flex-shrink: 0; }
+.linha-titulo-do-dia .seta-sessao {
+  margin-left: auto;
+  color: var(--cor-texto-suave);
+  transition: transform 0.15s ease;
+}
+.linha-titulo-do-dia.aberta .seta-sessao { transform: rotate(180deg); }
 .titulo-planejamento {
   min-width: 0;
   font-size: 16px;
   font-weight: 700;
   line-height: 1.3;
 }
-/* Botão pequeno e ao lado da data — é o que ele muda. Antes era um link
-   discreto no meio da montagem, e ninguém achava. */
-.trocar-data {
-  flex-shrink: 0;
-  margin-left: auto;
-  padding: 6px 10px;
-  font-size: 13px;
-  white-space: nowrap;
+/* O seletor e o atalho de volta na mesma linha: escolher outro dia e
+   desistir dele são a mesma decisão, e separá-los faria o "voltar para
+   amanhã" parecer outro assunto. */
+.escolha-de-data {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
 }
-.titulo-do-dia input[type="date"] { margin: 10px 0 0; }
+.escolha-de-data input[type="date"] { flex: 1 1 180px; margin: 0; }
 
 /* ---------------------------------------------------------------
    Reposições agrupadas por filial (ago/2026)

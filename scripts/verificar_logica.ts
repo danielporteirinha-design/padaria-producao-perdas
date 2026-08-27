@@ -65,6 +65,7 @@ import {
   mapasIguais,
   rascunhosVencidos,
 } from "../src/lib/rascunhoCronograma";
+import { ordenarPorAnuncioRecente, ultimaSaidaPorProduto } from "../src/lib/ordemDaReposicao";
 import {
   codigosComFornadaNoDia,
   fornadasDoProduto,
@@ -2589,6 +2590,72 @@ const perdas: RegistroPerda[] = [
     rascunhosVencidos([`padaria:rascunho-cronograma:sexta`], HOJE).length === 1,
     "chave de rascunho com data invalida e' descartada"
   );
+}
+
+// ---------------------------------------------------------------
+// Ordem da lista de anúncios da Reposição: do mais recente para o mais
+// antigo, com o que ainda não saiu no fim (ver src/lib/ordemDaReposicao.ts)
+// ---------------------------------------------------------------
+{
+  const DIA = "2026-08-27";
+  const forn = (codigoPdv: number, hora: string, data = DIA): FornadaPronta => ({
+    id: `${data}_${codigoPdv}_${hora}`,
+    data,
+    codigoPdv,
+    marcadaPor: "MATRIZ",
+    marcadaEm: `${data}T${hora}:00.000Z`,
+  });
+
+  // A lista chega na ordem do cronograma: 10, 20, 30, 40.
+  const doCronograma = [10, 20, 30, 40];
+  const fornadas = [
+    forn(10, "06:00"),
+    forn(30, "09:30"),
+    forn(10, "10:15"), // pão francês sai de novo: 10 volta para o topo
+    forn(20, "07:45"),
+  ];
+
+  const ordenada = ordenarPorAnuncioRecente(doCronograma, fornadas, DIA);
+  afirmar(
+    JSON.stringify(ordenada) === JSON.stringify([10, 30, 20, 40]),
+    `anunciados do mais recente ao mais antigo, nao anunciado por ultimo (obtido: ${ordenada.join(",")})`
+  );
+
+  afirmar(
+    ordenarPorAnuncioRecente(doCronograma, fornadas, DIA).length === doCronograma.length,
+    "reordenar nao perde nem inventa item"
+  );
+
+  // Fornada de OUTRO dia nao pode promover nada: a lista e' do dia corrente.
+  const deOntem = [forn(40, "05:00", "2026-08-26")];
+  afirmar(
+    JSON.stringify(ordenarPorAnuncioRecente(doCronograma, deOntem, DIA)) ===
+      JSON.stringify(doCronograma),
+    "fornada de outro dia nao muda a ordem de hoje"
+  );
+
+  // Sem fornada nenhuma, a ordem do cronograma sobrevive inteira — e' a
+  // ordem em que a padaria produz.
+  afirmar(
+    JSON.stringify(ordenarPorAnuncioRecente(doCronograma, [], DIA)) ===
+      JSON.stringify(doCronograma),
+    "sem anuncio, mantem a ordem do cronograma"
+  );
+
+  // Empate exato de horario: quem vinha antes continua antes (ordem estavel).
+  const empate = [forn(20, "08:00"), forn(30, "08:00")];
+  afirmar(
+    JSON.stringify(ordenarPorAnuncioRecente(doCronograma, empate, DIA)) ===
+      JSON.stringify([20, 30, 10, 40]),
+    "empate de horario mantem a ordem do cronograma entre os dois"
+  );
+
+  const saidas = ultimaSaidaPorProduto(fornadas, DIA);
+  afirmar(
+    saidas.get(10) === `${DIA}T10:15:00.000Z`,
+    "guarda a ULTIMA fornada do produto, nao a primeira"
+  );
+  afirmar(saidas.get(40) === undefined, "produto sem fornada nao entra no mapa");
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);
