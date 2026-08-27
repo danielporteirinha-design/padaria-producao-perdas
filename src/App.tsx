@@ -5,14 +5,12 @@ import type { PlanoDeProducaoDiario } from "./types/producao";
 import type { RegistroPerda, LancamentoPerdaInput } from "./types/perda";
 import { RepositorioFirestore } from "./data/repositorioFirestore";
 import { auth } from "./lib/firebase";
-import { lojaPorEmail, nomeDaLoja } from "./lib/lojas";
+import { lojaPorEmail } from "./lib/lojas";
 import { TelaLogin } from "./components/TelaLogin";
 import { ImportarDadosLocais } from "./components/ImportarDadosLocais";
 import { AvisoGlobal, type Aviso } from "./components/AvisoGlobal";
 import { ehFalhaTemporariaDeRede, mensagemDeFalhaAoSalvar } from "./lib/errosFirestore";
-import { dataDeHojeIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "./lib/data";
-import { agruparPorCategoria } from "./lib/blocosDeImpressao";
-import { gerarCanvasesFita } from "./lib/gerarImagemLista";
+import { dataDeHojeIso, diaDaSemanaDeData } from "./lib/data";
 import { incluirItemProduzido, planoDeHojeCom } from "./lib/producaoDeHoje";
 import { gerarId } from "./lib/id";
 import { TelaCronograma } from "./components/TelaCronograma";
@@ -833,20 +831,26 @@ export default function App() {
      * está gravado e a matriz o vê na tela de qualquer forma.
      */
     /**
-     * EM PARALELO, E NÃO EM FILA (ago/2026 — defeito relatado no uso).
+     * A IMPRESSÃO AUTOMÁTICA SAIU DAQUI (ago/2026, decisão do dono do
+     * negócio: "desabilite a impressão automática quando a lista de
+     * produção vier das filiais").
      *
-     * Os dois efeitos estavam encadeados: primeiro o aviso, depois o
-     * papel. Como o aviso é uma chamada de rede, bastava ela demorar para
-     * a impressão atrasar junto — e, se ela nunca respondesse (função
-     * hibernada acordando, conexão que trava sem fechar), o papel
-     * simplesmente NUNCA saía. Os dois falhavam juntos e sem mensagem
-     * nenhuma, que é exatamente o sintoma que apareceu na padaria.
+     * A lista da filial passava direto para a fila da impressora do caixa
+     * assim que era enviada. O papel saía sozinho, e saía de novo a cada
+     * reenvio: filial que corrige uma quantidade três vezes deixava três
+     * bobinas quase iguais no balcão da matriz, e quem separa de manhã
+     * ficava com o problema de descobrir qual valia.
      *
-     * Agora cada um corre por conta própria e cuida do próprio erro.
-     * `allSettled` porque nenhum dos dois pode derrubar o outro: o pedido
-     * já está gravado, e é ele que vale.
+     * Imprimir continua possível, e no momento certo: depois de confirmar
+     * o cronograma, a matriz escolhe o documento e manda para o caixa
+     * (ver ExportarFita em TelaCronograma.tsx). Aí o papel sai UMA vez,
+     * com as listas já consolidadas, e não uma por envio de filial.
+     *
+     * O AVISO CONTINUA. Ele é o que dá fim conhecido à espera: a matriz
+     * monta o cronograma no fim do expediente e, se uma filial atrasa, a
+     * produção sai sem ela e a loja abre no dia seguinte sem mercadoria.
      */
-    await Promise.allSettled([avisarMatrizDoPedido(pedido), imprimirPedidoNoCaixa(pedido)]);
+    await avisarMatrizDoPedido(pedido);
   }
 
   /**
@@ -877,75 +881,6 @@ export default function App() {
       // Falhar aqui não desfaz o pedido: ele já está gravado e a matriz o
       // vê na tela de qualquer forma.
       console.warn("Pedido gravado, mas o aviso à matriz não saiu:", erro);
-    }
-  }
-
-  /**
-   * Enfileira a lista da filial para a impressora do caixa da matriz.
-   *
-   * A IMAGEM É GERADA AQUI, no aparelho da filial, e não na matriz: a
-   * matriz pode estar com o app fechado quando o pedido chega, e um papel
-   * que só sai quando alguém abre a tela não é impressão automática.
-   *
-   * A fila (`fila_impressao`) é compartilhada e o agente do caixa imprime
-   * tudo que estiver pendente, sem olhar de que loja veio — ver
-   * agente-impressao/agente.py. As regras do Firestore continuam exigindo
-   * que o trabalho seja carimbado com a loja de quem gravou, então cada
-   * papel é rastreável até quem o mandou.
-   */
-  async function imprimirPedidoNoCaixa(pedido: PedidoFilial) {
-    // A decisão de imprimir mora aqui, junto da impressão: espalhada na
-    // chamada, ela precisava ser repetida em todo lugar que mandasse
-    // pedido. Reposição não imprime — é decidida na tela, uma por vez, e
-    // um papel por reposição gastaria bobina o dia inteiro.
-    if (ehReposicao(pedido) || pedido.status !== "enviado") return;
-    try {
-      const sessoes = agruparPorCategoria(pedido.itens, produtos);
-      if (sessoes.length === 0) return;
-
-      const agora = new Date();
-      const hora = agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-      const canvases = gerarCanvasesFita({
-        titulo: `Pedido — ${nomeDaLoja(pedido.lojaId)}`,
-        dataFormatada: `${rotuloDoDia(diaDaSemanaDeData(pedido.data))}, ${formatarDataBr(pedido.data)}`,
-        sessoes,
-        produtos,
-        // A HORA vai junto de quem montou de propósito: a filial pode
-        // reenviar a lista corrigida, e aí saem dois papéis parecidos. Sem
-        // a hora, não há como saber qual dos dois é o que vale.
-        montadoPor: `${operador} · enviado ${hora}`,
-      });
-
-      const nomeBase = `pedido-${pedido.lojaId.toLowerCase()}-${pedido.data}`;
-      const criadoEm = agora.toISOString();
-      const trabalhos: TrabalhoImpressao[] = canvases.map((canvas, indice) => ({
-        id: `${nomeBase}-${indice + 1}-${agora.getTime()}`,
-        lojaId: loja!.id,
-        documento: `Pedido — ${nomeDaLoja(pedido.lojaId)}`,
-        nomeArquivo:
-          canvases.length > 1 ? `${nomeBase}-parte${indice + 1}.png` : `${nomeBase}.png`,
-        parte: indice + 1,
-        totalPartes: canvases.length,
-        imagemBase64: base64DoDataUrl(canvas.toDataURL("image/png"), nomeBase),
-        status: "pendente",
-        criadoPor: operador,
-        criadoEm,
-      }));
-
-      await repositorio!.enviarParaImpressao(trabalhos);
-    } catch (erro) {
-      /**
-       * O pedido JÁ está gravado e a matriz JÁ foi avisada por push — o
-       * papel é conveniência, não o canal. Por isso a mensagem diz o que
-       * continua valendo, em vez de sugerir que o envio falhou e precisa
-       * ser refeito.
-       */
-      console.warn("Pedido enviado, mas não foi para a impressora do caixa:", erro);
-      setAviso({
-        tipo: "erro",
-        texto:
-          "Pedido enviado para a matriz, mas não consegui mandar para a impressora do caixa. A matriz vê o pedido normalmente na tela dela.",
-      });
     }
   }
 

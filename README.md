@@ -731,45 +731,40 @@ nesta ordem:
 Sobra o caso que motivou tudo: tela parada, sem nada digitado, apontando para
 um dia que já chegou ou já passou.
 
-## A lista da filial sai no papel sozinha (ago/2026)
+## A lista da filial NÃO imprime sozinha (ago/2026)
 
-Quando a filial envia a lista do próximo dia útil, além do push, o pedido é
-**enfileirado direto para a impressora do caixa da matriz**. Quem monta a
-produção de manhã trabalha com papel na mão; até aqui, para ter esse papel, a
-matriz precisava abrir o app, ir ao Cronograma, confirmar e só então imprimir.
+Por um tempo ela imprimia: ao enviar a lista do próximo dia útil, a filial
+enfileirava o papel direto na impressora do caixa da matriz, além do push. A
+ideia era poupar passos de quem monta a produção de manhã.
 
-Quatro decisões:
+**O uso derrubou a ideia** (decisão do dono do negócio): o papel saía a cada
+ENVIO, e reenviar é normal — a filial corrige uma quantidade, confere e manda de
+novo. Três envios viravam três bobinas quase iguais no balcão, e quem separa de
+manhã herdava o pior tipo de problema: descobrir qual das três valia. A hora
+impressa em cada uma ajudava a decidir, mas só depois de alguém parar para
+comparar papel com papel.
 
-- **A imagem é gerada no aparelho da FILIAL**, não na matriz. A matriz pode
-  estar com o app fechado quando o pedido chega, e um papel que só sai quando
-  alguém abre a tela não é impressão automática.
-- **A fila é compartilhada e o agente imprime tudo que está pendente**, sem
-  olhar de que loja veio (`agente-impressao/agente.py`). As regras do Firestore
-  continuam exigindo que o trabalho seja carimbado com a loja de quem gravou —
-  então cada papel é rastreável até quem o mandou, sem nenhuma mudança nas
-  regras.
-- **A hora do envio sai impressa**, junto de quem montou: "Montado por: Ana ·
-  enviado 18:42". A filial pode reenviar a lista corrigida, e aí saem dois
-  papéis parecidos — sem a hora não há como saber qual dos dois vale.
-- **Só a lista diária imprime.** Reposição não: ela é decidida na tela, uma por
-  vez, e um papel por reposição gastaria bobina o dia inteiro para dizer o que
-  o push já disse.
+A impressão continua existindo, no momento em que a informação está pronta:
+**depois de confirmar o cronograma**, a matriz escolhe o documento — Produção,
+Filiais (todas), ou uma loja — e manda para o caixa (`ExportarFita` em
+`TelaCronograma.tsx`). Um papel, com as listas já consolidadas, em vez de um por
+envio de filial.
 
-O agrupamento por setor virou `src/lib/blocosDeImpressao.ts`, compartilhado com
-o romaneio que a matriz imprime. A ordem é a de `CATEGORIAS_PRODUCAO`, e não a
-ordem em que a filial digitou: os dois papéis do mesmo dia são conferidos um
-contra o outro, e setores em ordens diferentes transformariam conferência em
-procura. Categoria fora das cinco não some — cai num bloco no fim, porque item
-que não aparece na lista é item que ninguém separa.
+**O aviso continua automático.** Ele é o que dá fim conhecido à espera: a matriz
+monta o cronograma no fim do expediente e, se uma filial atrasa, a produção sai
+sem ela e a loja abre no dia seguinte sem mercadoria. Push resolve isso; papel
+não resolvia.
 
-**Falha de impressão não vira alarme falso.** O pedido já está gravado e a
-matriz já foi avisada por push; o papel é conveniência, não o canal. Se a fila
-recusar, a mensagem diz o que continua valendo em vez de sugerir que o envio
-precisa ser refeito.
+O agrupamento por setor (`src/lib/blocosDeImpressao.ts`) sobreviveu e continua
+compartilhado por todos os papéis. A ordem é a de `CATEGORIAS_PRODUCAO`, e não a
+ordem em que alguém digitou: os papéis do mesmo dia são conferidos um contra o
+outro, e setores em ordens diferentes transformariam conferência em procura.
+Categoria fora das cinco não some — cai num bloco no fim, porque item que não
+aparece na lista é item que ninguém separa.
 
-> **Depende do agente rodando no PC do caixa** (`agente-impressao/instalar-servico.bat`,
-> como administrador). Sem ele a fila enche e nada sai — e é a matriz, não a
-> filial, quem percebe isso.
+> **A impressão manual depende do agente rodando no PC do caixa**
+> (`agente-impressao/instalar-servico.bat`, como administrador). Sem ele a fila
+> enche e nada sai.
 
 ## "Hoje" e "Amanhã": as abas nomeadas pelo prazo (ago/2026)
 

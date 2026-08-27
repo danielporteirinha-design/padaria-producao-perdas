@@ -512,9 +512,12 @@ export function TelaPedidoFilial({
             palavra diz o que o toque faz. */}
         {enviando ? "Enviando..." : jaEnviado ? "Atualizar" : "Enviar pedido"}
       </button>
+      {/* A frase sobre a impressora saiu (ago/2026): a lista não vai mais
+          sozinha para o caixa da matriz — quem imprime é a matriz, depois
+          de confirmar o cronograma. Prometer um papel que não sai é pior
+          que não prometer nada. */}
       <p className="nota-rodape">
-        Enviando como {operador}, pela {loja.nome}. Ao enviar, a lista também sai na impressora do
-        caixa da matriz.
+        Enviando como {operador}, pela {loja.nome}.
       </p>
     </div>
   );

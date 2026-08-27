@@ -68,7 +68,8 @@ const CONFERENCIAS = [
   ["src/App.tsx", "avisarMatrizDoPedido", "Aviso e impressão em paralelo"],
   ["src/lib/avisarFiliais.ts", "SEGUNDOS_ATE_DESISTIR_DO_AVISO", "Limite de espera do aviso"],
   ["src/lib/avisarFiliais.ts", "avisarListaEnviada", "Aviso de lista enviada"],
-  ["src/lib/blocosDeImpressao.ts", "agruparPorCategoria", "Impressão automática da lista"],
+  ["src/lib/blocosDeImpressao.ts", "agruparPorCategoria", "Setores na mesma ordem em todo papel"],
+  ["src/App.tsx", "A IMPRESSÃO AUTOMÁTICA SAIU DAQUI", "Lista da filial nao imprime sozinha"],
   ["public/firebase-messaging-sw.js", "tocar-aviso", "Som com a janela em segundo plano"],
   ["src/lib/somDeAviso.ts", "PARCIAIS", "Campainha"],
 
