@@ -14,6 +14,7 @@ import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
 import type { PedidoFilial } from "../types/pedido";
 import type { FornadaPronta } from "../types/fornada";
+import type { AnuncioEncerrado } from "../types/anuncio";
 import type { EstadoTrabalhoImpressao } from "../types/impressao";
 import produtosSeed from "../../data/produtos.seed.json";
 import type { Repositorio } from "./repositorio";
@@ -165,6 +166,30 @@ export class RepositorioLocalStorage implements Repositorio {
   async desmarcarFornada(fornadaId: string): Promise<void> {
     const todas = ler<FornadaPronta[]>("padaria:fornadas", []);
     escrever("padaria:fornadas", todas.filter((f) => f.id !== fornadaId));
+  }
+
+  async listarAnunciosEncerrados(data: string): Promise<AnuncioEncerrado[]> {
+    return ler<AnuncioEncerrado[]>("padaria:anuncios-encerrados", []).filter(
+      (a) => a.data === data
+    );
+  }
+
+  observarAnunciosEncerrados(
+    data: string,
+    aoMudar: (anuncios: AnuncioEncerrado[]) => void
+  ): () => void {
+    void this.listarAnunciosEncerrados(data).then(aoMudar);
+    return () => {};
+  }
+
+  async encerrarAnuncio(anuncio: AnuncioEncerrado): Promise<void> {
+    const todos = ler<AnuncioEncerrado[]>("padaria:anuncios-encerrados", []);
+    escrever("padaria:anuncios-encerrados", [...todos.filter((a) => a.id !== anuncio.id), anuncio]);
+  }
+
+  async reabrirAnuncio(anuncioId: string): Promise<void> {
+    const todos = ler<AnuncioEncerrado[]>("padaria:anuncios-encerrados", []);
+    escrever("padaria:anuncios-encerrados", todos.filter((a) => a.id !== anuncioId));
   }
 
   /**

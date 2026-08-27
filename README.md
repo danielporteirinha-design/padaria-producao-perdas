@@ -262,6 +262,50 @@ caminho de volta ("N itens fora da lista · mostrar de novo") fica fora da lista
 porque é justamente quando alguém tira o último item que ele precisa estar
 visível.
 
+## Tirar da vitrine: a exclusão da matriz precisava chegar às filiais (ago/2026)
+
+**Defeito de desenho relatado no uso:** a matriz excluía o item anunciado e a
+filial continuava vendo o produto disponível para pedido.
+
+Estava certo pelo código e errado pela operação. Eu tinha construído a exclusão
+como uma lista **local do aparelho** — resolvia o motivo original (não tocar por
+engano no nome do produto) e parava aí. Só que o efeito ficava pela metade: a
+matriz parava de ver, a filial continuava pedindo mercadoria que tinha acabado.
+
+O que faltava reconhecer é que são **duas coisas diferentes**:
+
+| | Quem decide | Onde mora | Efeito |
+|---|---|---|---|
+| **Tirar da vitrine** (matriz) | quem produz | nuvem (`anuncios_encerrados`) | as três lojas param de ver o produto hoje |
+| **Excluir aviso** (filial) | quem recebe | aparelho | some só daquela tela, para arrumar a própria lista |
+
+Disponibilidade é decisão de quem produz e precisa chegar às filiais **no mesmo
+instante** — por `onSnapshot`, não no próximo recarregamento. Arrumação da
+própria tela é de quem olha para ela.
+
+**Nenhuma fornada é apagada.** As marcações continuam gravadas, com a hora de
+cada uma, e continuam alimentando o relatório do forno em Análises. O documento
+diz "não ofereça mais hoje", não "isto nunca aconteceu" — uma padaria que
+apagasse o histórico para parar de vender perderia justamente o dado mais
+valioso que ela produziu.
+
+**Anunciar devolve à vitrine.** Se a matriz encerra e depois anuncia de novo, o
+encerramento é apagado junto com a marcação nova. Sem isso ela anunciaria no
+vazio: a fornada sairia e ninguém do outro lado veria.
+
+O desfazer também mudou de forma: em vez de uma contagem com "mostrar tudo", os
+itens fora da vitrine aparecem **nomeados um a um**, cada um com "devolver à
+lista". É o que a operação pede — acabou o pão francês e voltou o bolo, não
+"voltou tudo".
+
+Verificado com as duas telas na mesma página e um estado compartilhado entre
+elas: 3 itens dos dois lados, a matriz tira um, os dois lados vão a 2, o nome
+aparece em "fora da lista", "devolver à lista" leva os dois de volta a 3.
+
+> **Regras do Firestore mudaram.** A coleção `anuncios_encerrados` é lida por
+> qualquer loja e escrita só pela matriz. O texto completo tem que ser colado no
+> console — sem isso, encerrar dá erro de permissão.
+
 ## Botão ausente é indistinguível de recurso ausente (ago/2026)
 
 O microfone só era desenhado em navegador com reconhecimento de voz — a regra

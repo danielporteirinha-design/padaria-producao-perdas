@@ -48,6 +48,7 @@ import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
 import type { PedidoFilial } from "../types/pedido";
 import type { EstadoTrabalhoImpressao, TrabalhoImpressao } from "../types/impressao";
 import type { FornadaPronta } from "../types/fornada";
+import type { AnuncioEncerrado } from "../types/anuncio";
 import type { Repositorio } from "./repositorio";
 
 const COL_PRODUTOS = "produtos";
@@ -56,6 +57,7 @@ const COL_PERDAS = "perdas";
 const COL_PEDIDOS = "pedidos";
 const COL_IMPRESSAO = "fila_impressao";
 const COL_FORNADAS = "fornadas";
+const COL_ANUNCIOS = "anuncios_encerrados";
 
 /** Erro de domínio — sempre com mensagem apresentável ao operador. */
 export class ErroRepositorio extends Error {}
@@ -325,6 +327,38 @@ export class RepositorioFirestore implements Repositorio {
 
   async desmarcarFornada(fornadaId: string): Promise<void> {
     await deleteDoc(doc(db, COL_FORNADAS, fornadaId));
+  }
+
+  // ------------------------------------------------ anúncios encerrados
+
+  async listarAnunciosEncerrados(data: string): Promise<AnuncioEncerrado[]> {
+    const snap = await getDocs(query(collection(db, COL_ANUNCIOS), where("data", "==", data)));
+    return snap.docs.map((d) => d.data() as AnuncioEncerrado);
+  }
+
+  /**
+   * Em tempo real: a filial precisa parar de oferecer o produto no mesmo
+   * instante em que a matriz o retira. Se dependesse de recarregar a
+   * tela, a loja continuaria pedindo mercadoria que acabou — que é
+   * exatamente o problema que o encerramento existe para resolver.
+   */
+  observarAnunciosEncerrados(
+    data: string,
+    aoMudar: (anuncios: AnuncioEncerrado[]) => void
+  ): () => void {
+    return onSnapshot(
+      query(collection(db, COL_ANUNCIOS), where("data", "==", data)),
+      (snap) => aoMudar(snap.docs.map((d) => d.data() as AnuncioEncerrado)),
+      (erro) => console.warn("Escuta de anúncios encerrados interrompida:", erro)
+    );
+  }
+
+  async encerrarAnuncio(anuncio: AnuncioEncerrado): Promise<void> {
+    await setDoc(doc(db, COL_ANUNCIOS, anuncio.id), limpar(anuncio));
+  }
+
+  async reabrirAnuncio(anuncioId: string): Promise<void> {
+    await deleteDoc(doc(db, COL_ANUNCIOS, anuncioId));
   }
 
   // ------------------------------------------------------------ migração

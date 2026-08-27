@@ -45,6 +45,16 @@ interface PainelFornadasFilialProps {
   fornadas: FornadaPronta[];
   pedidos: PedidoFilial[];
   operador: string;
+  /**
+   * Produtos que a MATRIZ tirou da vitrine de hoje (ago/2026).
+   *
+   * Diferente do "excluir aviso" logo abaixo, que é arrumação da própria
+   * tela: isto é DISPONIBILIDADE, decidida por quem produz e gravada na
+   * nuvem. Acabou o produto, ou o anúncio foi sem querer — a loja precisa
+   * parar de oferecer no mesmo instante, e não continuar pedindo
+   * mercadoria que não existe mais.
+   */
+  encerrados: Set<number>;
   onSalvarPedido: (pedido: PedidoFilial) => Promise<void>;
 }
 
@@ -54,6 +64,7 @@ export function PainelFornadasFilial({
   fornadas,
   pedidos,
   operador,
+  encerrados,
   onSalvarPedido,
 }: PainelFornadasFilialProps) {
   const hoje = dataDeHojeIso();
@@ -72,7 +83,14 @@ export function PainelFornadasFilial({
     const codigos = [
       ...new Set(
         fornadas
-          .filter((f) => f.data === hoje && !dispensadas.has(f.codigoPdv))
+          .filter(
+            (f) =>
+              f.data === hoje &&
+              // Encerrado pela matriz: sumiu da vitrine para todo mundo.
+              !encerrados.has(f.codigoPdv) &&
+              // Dispensado por esta loja: sumiu só desta tela.
+              !dispensadas.has(f.codigoPdv)
+          )
           .map((f) => f.codigoPdv)
       ),
     ];
@@ -83,7 +101,7 @@ export function PainelFornadasFilial({
       }))
       .filter((item): item is { produto: Produto; doDia: FornadaPronta[] } => Boolean(item.produto))
       .sort((a, b) => b.doDia[0].marcadaEm.localeCompare(a.doDia[0].marcadaEm));
-  }, [fornadas, produtos, hoje, dispensadas]);
+  }, [fornadas, produtos, hoje, dispensadas, encerrados]);
 
   /**
    * O que esta loja já pediu hoje E o que a matriz respondeu.

@@ -13,6 +13,7 @@ import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
 import type { PedidoFilial } from "../types/pedido";
 import type { EstadoTrabalhoImpressao, TrabalhoImpressao } from "../types/impressao";
 import type { FornadaPronta } from "../types/fornada";
+import type { AnuncioEncerrado } from "../types/anuncio";
 
 export interface Repositorio {
   listarProdutos(): Promise<Produto[]>;
@@ -94,4 +95,20 @@ export interface Repositorio {
   marcarFornada(fornada: FornadaPronta): Promise<void>;
   /** Desfaz uma marcação feita por engano. */
   desmarcarFornada(fornadaId: string): Promise<void>;
+
+  /**
+   * Anúncios que a matriz encerrou hoje — ver src/types/anuncio.ts.
+   *
+   * Mora na nuvem porque é DISPONIBILIDADE: a matriz retira o produto da
+   * vitrine do dia e as três lojas precisam parar de oferecer. A lista de
+   * avisos que cada filial esconde da própria tela continua local.
+   */
+  listarAnunciosEncerrados(data: string): Promise<AnuncioEncerrado[]>;
+  observarAnunciosEncerrados(
+    data: string,
+    aoMudar: (anuncios: AnuncioEncerrado[]) => void
+  ): () => void;
+  encerrarAnuncio(anuncio: AnuncioEncerrado): Promise<void>;
+  /** Devolve o produto à vitrine — apagar o encerramento é reabrir. */
+  reabrirAnuncio(anuncioId: string): Promise<void>;
 }

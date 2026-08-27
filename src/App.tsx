@@ -25,6 +25,7 @@ import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
 import { decidirReposicao, ehReposicao, type PedidoFilial } from "./types/pedido";
 import { base64DoDataUrl, resumoDaImpressao, type TrabalhoImpressao } from "./types/impressao";
 import { codigosComFornadaNoDia, idDaFornada, type FornadaPronta } from "./types/fornada";
+import { codigosEncerrados, idDoEncerramento, type AnuncioEncerrado } from "./types/anuncio";
 import {
   avisarDesfechoReposicao,
   avisarFiliais,
@@ -251,6 +252,12 @@ export default function App() {
   const [perdas, setPerdas] = useState<RegistroPerda[]>([]);
   const [pedidos, setPedidos] = useState<PedidoFilial[]>([]);
   const [fornadas, setFornadas] = useState<FornadaPronta[]>([]);
+  /**
+   * Produtos que a matriz tirou da vitrine de hoje. Vem da nuvem porque é
+   * disponibilidade: a decisão da matriz tem que chegar às filiais na
+   * hora — ver src/types/anuncio.ts.
+   */
+  const [anunciosEncerrados, setAnunciosEncerrados] = useState<AnuncioEncerrado[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   const [erroCarregamento, setErroCarregamento] = useState("");
@@ -427,9 +434,14 @@ export default function App() {
     // de ontem para sempre, e as fornadas de hoje nunca chegariam à tela
     // de um app que não foi fechado.
     const desligarFornadas = repositorio.observarFornadas(diaCorrente, setFornadas);
+    const desligarAnuncios = repositorio.observarAnunciosEncerrados(
+      diaCorrente,
+      setAnunciosEncerrados
+    );
     return () => {
       desligarPedidos();
       desligarFornadas();
+      desligarAnuncios();
     };
   }, [repositorio, loja, carregando, diaCorrente]);
 
@@ -660,6 +672,41 @@ export default function App() {
   }
 
   /**
+   * A matriz tira um produto da vitrine do dia — ou o devolve.
+   *
+   * Não apaga fornada nenhuma: as marcações continuam gravadas e
+   * continuam alimentando o relatório do forno. O que muda é o que as
+   * filiais podem pedir hoje.
+   */
+  async function handleEncerrarAnuncio(codigoPdv: number) {
+    const hoje = dataDeHojeIso();
+    const anuncio: AnuncioEncerrado = {
+      id: idDoEncerramento(hoje, codigoPdv),
+      data: hoje,
+      codigoPdv,
+      encerradoPor: operador,
+      encerradoEm: new Date().toISOString(),
+    };
+    const nome = produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? "Produto";
+    await comRetorno(
+      () => repositorio!.encerrarAnuncio(anuncio),
+      `${nome} saiu da lista — as filiais não veem mais hoje.`
+    );
+    setAnunciosEncerrados((atual) => [...atual.filter((a) => a.id !== anuncio.id), anuncio]);
+  }
+
+  async function handleReabrirAnuncio(codigoPdv: number) {
+    const hoje = dataDeHojeIso();
+    const id = idDoEncerramento(hoje, codigoPdv);
+    const nome = produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? "Produto";
+    await comRetorno(
+      () => repositorio!.reabrirAnuncio(id),
+      `${nome} voltou para a lista.`
+    );
+    setAnunciosEncerrados((atual) => atual.filter((a) => a.id !== id));
+  }
+
+  /**
    * Histórico de fornadas para a tela de Análises.
    *
    * useCallback e não uma função solta: a tela busca dentro de um
@@ -690,6 +737,22 @@ export default function App() {
     const nome = produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? "Produto";
     await comRetorno(() => repositorio!.marcarFornada(fornada), `${nome} saiu do forno.`);
     setFornadas((atual) => [...atual, fornada]);
+
+    /**
+     * Anunciar DEVOLVE o produto à vitrine. Quem tinha encerrado e
+     * anunciou de novo voltou a ter o item — e a filial precisa poder
+     * pedir. Sem isto, a matriz anunciaria no vazio: a fornada sairia e
+     * ninguém do outro lado veria.
+     */
+    if (codigosEncerrados(anunciosEncerrados, hoje).has(codigoPdv)) {
+      try {
+        const id = idDoEncerramento(hoje, codigoPdv);
+        await repositorio!.reabrirAnuncio(id);
+        setAnunciosEncerrados((atual) => atual.filter((a) => a.id !== id));
+      } catch (erro) {
+        console.warn("Fornada marcada, mas o anúncio não reabriu:", erro);
+      }
+    }
 
     /**
      * Avisar as filiais é EFEITO, não a operação. Se o push falhar (chave
@@ -1220,6 +1283,9 @@ export default function App() {
                 produtos={produtos}
                 fornadas={fornadas}
                 dataHoje={diaCorrente}
+                encerrados={codigosEncerrados(anunciosEncerrados, diaCorrente)}
+                onEncerrarAnuncio={handleEncerrarAnuncio}
+                onReabrirAnuncio={handleReabrirAnuncio}
                 onMarcarFornada={handleMarcarFornada}
               />
             </>
@@ -1230,6 +1296,7 @@ export default function App() {
               fornadas={fornadas}
               pedidos={pedidos}
               operador={operador}
+              encerrados={codigosEncerrados(anunciosEncerrados, diaCorrente)}
               onSalvarPedido={handleSalvarPedido}
             />
           ))}

@@ -27,13 +27,6 @@ import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import { contemBusca } from "../lib/texto";
-import { LOJA_MATRIZ } from "../lib/lojas";
-import {
-  devolverFornada,
-  dispensarFornada,
-  fornadasDispensadas,
-  restaurarFornadas,
-} from "../lib/fornadasDispensadas";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
 import { IconeLixeira } from "./Icones";
@@ -56,6 +49,16 @@ interface PainelFornoDeHojeProps {
   produtos: Produto[];
   fornadas: FornadaPronta[];
   dataHoje: string;
+  /**
+   * Produtos que a matriz tirou da vitrine de hoje. Vem de fora porque
+   * mora na NUVEM: quem decide o que está disponível é a matriz, e a
+   * decisão precisa chegar às filiais — ver src/types/anuncio.ts. Antes
+   * isto era uma lista local do aparelho, e por isso a filial continuava
+   * oferecendo o que a matriz já tinha tirado.
+   */
+  encerrados: Set<number>;
+  onEncerrarAnuncio: (codigoPdv: number) => Promise<void>;
+  onReabrirAnuncio: (codigoPdv: number) => Promise<void>;
   onMarcarFornada: (codigoPdv: number) => Promise<void>;
 }
 
@@ -64,6 +67,9 @@ export function PainelFornoDeHoje({
   produtos,
   fornadas,
   dataHoje,
+  encerrados,
+  onEncerrarAnuncio,
+  onReabrirAnuncio,
   onMarcarFornada,
 }: PainelFornoDeHojeProps) {
   const [marcando, setMarcando] = useState<number | null>(null);
@@ -96,11 +102,18 @@ export function PainelFornoDeHoje({
   const buscando = busca.trim().length > 0;
 
   /**
-   * Itens que a matriz tirou da lista de hoje, neste aparelho. Reaproveita
-   * o mesmo mecanismo da filial (src/lib/fornadasDispensadas.ts): local,
-   * por dia, sem tocar em nada gravado na nuvem.
+   * O que está fora da vitrine, nomeado um a um.
+   *
+   * Antes era só uma contagem com "mostrar de novo", que devolvia tudo de
+   * uma vez. Devolver item por item é o que a operação pede: acabou o pão
+   * francês e voltou o bolo, não "voltou tudo".
    */
-  const [fora, setFora] = useState(() => fornadasDispensadas(LOJA_MATRIZ.id, dataHoje));
+  const itensEncerrados = useMemo(
+    () => [...encerrados].sort((a, b) => nomeDoProduto(a).localeCompare(nomeDoProduto(b), "pt-BR")),
+    // nomeDoProduto depende de `produtos`, que é o que muda de verdade.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [encerrados, produtos]
+  );
 
   /**
    * A lista do dia achatada: os itens do cronograma na ordem em que a
@@ -113,13 +126,13 @@ export function PainelFornoDeHoje({
     const lista: number[] = [];
     for (const sessao of plano.sessoes) {
       for (const item of sessao.itens) {
-        if (vistos.has(item.codigoPdv) || fora.has(item.codigoPdv)) continue;
+        if (vistos.has(item.codigoPdv) || encerrados.has(item.codigoPdv)) continue;
         vistos.add(item.codigoPdv);
         lista.push(item.codigoPdv);
       }
     }
     return lista;
-  }, [plano, fora]);
+  }, [plano, encerrados]);
 
   /** Nomes que a IA pode escolher ao interpretar o que foi ditado. */
   const nomesAtivos = useMemo(
@@ -140,17 +153,10 @@ export function PainelFornoDeHoje({
           onClick={async () => {
             setMarcando(codigoPdv);
             try {
+              // Anunciar devolve o produto à vitrine — quem reabre é o
+              // App, junto da gravação na nuvem, para a filial voltar a
+              // ver no mesmo instante.
               await onMarcarFornada(codigoPdv);
-              // Anunciar DEVOLVE o item à lista. Tirar da lista é sobre
-              // não tocar por engano, não sobre sumir com o produto: quem
-              // procurou e anunciou voltou a trabalhar com ele, e a linha
-              // reaparece com a contagem de fornadas e a hora da última —
-              // números que nunca saíram do banco.
-              setFora((atual) =>
-                atual.has(codigoPdv)
-                  ? devolverFornada(LOJA_MATRIZ.id, dataHoje, codigoPdv)
-                  : atual
-              );
             } catch {
               /* o aviso global cuida da mensagem */
             } finally {
@@ -168,19 +174,21 @@ export function PainelFornoDeHoje({
           </span>
         </button>
 
-        {/* Tirar da LISTA, não do histórico: as fornadas já marcadas
-            continuam gravadas e continuam alimentando o relatório do
-            forno em Análises. O que sai é o alvo de toque — o item que
-            já saiu tudo que tinha para sair não pode ficar no caminho do
-            dedo, porque um toque sem querer anuncia uma fornada que não
-            existiu, e a filial vai pedir em cima dela. */}
+        {/* Tirar da VITRINE, não do histórico (ago/2026). As fornadas já
+            marcadas continuam gravadas e continuam alimentando o
+            relatório do forno em Análises; o que muda é que as FILIAIS
+            param de ver o produto como disponível hoje.
+
+            Antes isto era só uma lista local deste aparelho, e o efeito
+            ficava pela metade: a matriz parava de ver, a filial continuava
+            pedindo mercadoria que tinha acabado. */}
         {podeTirarDaLista && (
           <button
             type="button"
             className="tirar-da-lista"
-            aria-label={`Tirar ${nomeDoProduto(codigoPdv)} da lista de hoje`}
-            title="Tirar da lista de hoje"
-            onClick={() => setFora(dispensarFornada(LOJA_MATRIZ.id, dataHoje, codigoPdv))}
+            aria-label={`Tirar ${nomeDoProduto(codigoPdv)} da lista de hoje e das filiais`}
+            title="Tirar da lista — as filiais param de ver hoje"
+            onClick={() => void onEncerrarAnuncio(codigoPdv)}
           >
             <IconeLixeira tamanho={16} />
           </button>
@@ -255,17 +263,24 @@ export function PainelFornoDeHoje({
             {/* O caminho de volta. Fica fora da lista de propósito: quando
                 alguém tira o último item, é justamente aqui que ele
                 precisa estar. */}
-            {plano && fora.size > 0 && (
-              <p className="nota-rodape">
-                {fora.size} {fora.size === 1 ? "item fora da lista" : "itens fora da lista"} hoje.{" "}
-                <button
-                  type="button"
-                  className="link"
-                  onClick={() => setFora(restaurarFornadas(LOJA_MATRIZ.id, dataHoje))}
-                >
-                  mostrar de novo
-                </button>
-              </p>
+            {itensEncerrados.length > 0 && (
+              <div className="fora-da-vitrine">
+                <p className="nota-rodape">
+                  Fora da lista hoje — as filiais não veem estes:
+                </p>
+                {itensEncerrados.map((codigoPdv) => (
+                  <div key={codigoPdv} className="linha-encerrada">
+                    <span>{nomeDoProduto(codigoPdv)}</span>
+                    <button
+                      type="button"
+                      className="link"
+                      onClick={() => void onReabrirAnuncio(codigoPdv)}
+                    >
+                      devolver à lista
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </>
         )}

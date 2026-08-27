@@ -139,6 +139,23 @@ service cloud.firestore {
       allow delete: if ehMatriz();
     }
 
+    // Anúncios encerrados (ago/2026). A matriz retira um produto da
+    // vitrine do dia: acabou, ou o toque foi sem querer.
+    //
+    // Só a MATRIZ escreve, porque disponibilidade é decisão de quem
+    // produz. Todas leem, porque é justamente a filial que precisa parar
+    // de oferecer — e parar no mesmo instante, não no próximo
+    // recarregamento.
+    //
+    // NÃO substitui apagar fornada: as marcações continuam gravadas, com
+    // a hora de cada uma, e continuam alimentando o relatório do forno.
+    // Este documento diz "não ofereça mais hoje", não "isto nunca
+    // aconteceu".
+    match /anuncios_encerrados/{anuncioId} {
+      allow read: if lojaConhecida();
+      allow write: if ehMatriz();
+    }
+
     // Fila de impressão no caixa (ago/2026). O celular grava o trabalho
     // aqui e o agente que roda no PC do caixa busca, imprime e marca.
     //
