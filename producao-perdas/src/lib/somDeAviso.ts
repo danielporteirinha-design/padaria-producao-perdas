@@ -12,8 +12,8 @@
  * está olhando. No balcão da padaria ela não está — a janela fica atrás
  * do PDV, e um aviso mudo é um aviso que não existe.
  *
- * Daí o som ser gerado aqui, com WebAudio: duas notas curtas, sem
- * arquivo de áudio para baixar (o app abre em conexão ruim) e sem
+ * Daí o som ser gerado aqui, com WebAudio: uma campainha sintetizada,
+ * sem arquivo de áudio para baixar (o app abre em conexão ruim) e sem
  * depender de o sistema decidir tocar alguma coisa.
  *
  * O DESBLOQUEIO
@@ -54,38 +54,77 @@ export function prepararSom(): void {
 }
 
 /**
- * Duas notas curtas, subindo. Sobe de propósito: som descendente é lido
- * como erro, e isto aqui é chamado tanto para "saiu do forno" quanto
- * para "a filial pediu" — nenhum dos dois é problema.
+ * Uma badalada de campainha, e não dois bipes (ago/2026, pedido do dono
+ * do negócio: no PC do balcão o aviso precisa soar como campainha).
+ *
+ * COMO UM SINO SOA, E POR QUE O BIPE NÃO SERVIA
+ * ---------------------------------------------
+ * Duas notas de onda senoidal eram um alarme de eletrodoméstico. O que
+ * faz o ouvido reconhecer um sino são duas coisas que o bipe não tinha:
+ *
+ * 1. HARMÔNICOS NÃO INTEIROS. Um sino soa a nota fundamental junto de
+ *    parciais que não são múltiplos exatos dela — é o que dá o brilho
+ *    metálico. As razões abaixo (2,76 / 5,40 / 8,93) vêm da física de
+ *    sinos reais.
+ * 2. ATAQUE INSTANTÂNEO E CAUDA LONGA. O badalo bate e o metal decai por
+ *    quase dois segundos. Cada parcial mais agudo decai MAIS RÁPIDO que
+ *    o grave, senão o som fica estridente do começo ao fim.
+ *
+ * Duas badaladas, com folga entre elas: uma só se perde no barulho do
+ * balcão, três viram alarme.
  */
 export function tocarAvisoSonoro(): void {
   try {
     prepararSom();
     if (!contexto || contexto.state !== "running") return;
 
-    const inicio = contexto.currentTime;
-    for (const [atraso, frequencia] of [
-      [0, 880],
-      [0.16, 1174.66],
-    ] as const) {
-      const oscilador = contexto.createOscillator();
-      const volume = contexto.createGain();
-      oscilador.type = "sine";
-      oscilador.frequency.value = frequencia;
-
-      // Envelope curto: sem a rampa, ligar e desligar o oscilador produz
-      // um estalo alto — pior que não ter som nenhum num ambiente que já
-      // é barulhento.
-      const t = inicio + atraso;
-      volume.gain.setValueAtTime(0.0001, t);
-      volume.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
-      volume.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
-
-      oscilador.connect(volume).connect(contexto.destination);
-      oscilador.start(t);
-      oscilador.stop(t + 0.16);
+    const agora = contexto.currentTime;
+    for (const atraso of [0, 0.42]) {
+      badalada(contexto, agora + atraso);
     }
   } catch (erro) {
     console.warn("Não foi possível tocar o aviso sonoro:", erro);
+  }
+}
+
+/** Nota fundamental da campainha, em hertz (Ré#6 — clara sem ser aguda demais). */
+const FUNDAMENTAL = 1244.5;
+
+/**
+ * As parciais de um sino: razão em relação à fundamental, peso no volume
+ * e quanto tempo cada uma leva para sumir. O grave sustenta, os agudos
+ * dão o brilho do ataque e saem primeiro.
+ */
+const PARCIAIS: { razao: number; peso: number; duracao: number }[] = [
+  { razao: 0.5, peso: 0.32, duracao: 1.9 },
+  { razao: 1.0, peso: 0.5, duracao: 1.5 },
+  { razao: 2.76, peso: 0.22, duracao: 0.9 },
+  { razao: 5.4, peso: 0.12, duracao: 0.5 },
+  { razao: 8.93, peso: 0.07, duracao: 0.28 },
+];
+
+function badalada(ctx: AudioContext, quando: number): void {
+  const mestre = ctx.createGain();
+  // Volume total num nível de aviso, não de susto: o PC fica ao lado de
+  // quem atende, e sobressalto no balcão é pior que aviso perdido.
+  mestre.gain.value = 0.32;
+  mestre.connect(ctx.destination);
+
+  for (const { razao, peso, duracao } of PARCIAIS) {
+    const oscilador = ctx.createOscillator();
+    const volume = ctx.createGain();
+    oscilador.type = "sine";
+    oscilador.frequency.value = FUNDAMENTAL * razao;
+
+    // Ataque de 4ms: rápido o bastante para soar como batida, longo o
+    // bastante para não estalar. Ligar o oscilador direto no volume
+    // cheio produz um clique que o alto-falante do PC exagera.
+    volume.gain.setValueAtTime(0.0001, quando);
+    volume.gain.exponentialRampToValueAtTime(peso, quando + 0.004);
+    volume.gain.exponentialRampToValueAtTime(0.0001, quando + duracao);
+
+    oscilador.connect(volume).connect(mestre);
+    oscilador.start(quando);
+    oscilador.stop(quando + duracao + 0.05);
   }
 }

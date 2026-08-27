@@ -23,6 +23,7 @@ import { perdaEstaValida } from "../types/perda";
 import { CATEGORIAS_PRODUCAO } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
 import { IconeSeta } from "./Icones";
+import { CampoDeBusca } from "./CampoDeBusca";
 import { LOJA_MATRIZ, nomeDaLoja, type Loja } from "../lib/lojas";
 import { IconeLixeira } from "./Icones";
 import { diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
@@ -220,6 +221,9 @@ export function TelaPerdas({
 
   const candidatoSelecionado = candidatos.find((c) => c.produto.codigoPdv === codigoSelecionado);
 
+  /** Nomes que a IA pode escolher ao interpretar o que foi ditado. */
+  const nomesDosCandidatos = useMemo(() => candidatos.map((c) => c.produto.nome), [candidatos]);
+
   const resultadosDaBusca = useMemo(() => {
     const termo = buscaProduto.trim();
     if (!termo) return [];
@@ -249,11 +253,13 @@ export function TelaPerdas({
               Busca no topo para quem sabe o nome, acordeão por categoria
               para quem está procurando; o mesmo padrão da tela de Pedido,
               que o operador já conhece (ago/2026). */}
-          <input
+          <CampoDeBusca
             className="campo-busca"
+            valor={buscaProduto}
+            onMudar={setBuscaProduto}
             placeholder="Buscar produto pelo nome..."
-            value={buscaProduto}
-            onChange={(e) => setBuscaProduto(e.target.value)}
+            rotulo="Buscar produto pelo nome para lançar a perda"
+            nomesParaVoz={nomesDosCandidatos}
           />
 
           {buscaProduto.trim() ? (

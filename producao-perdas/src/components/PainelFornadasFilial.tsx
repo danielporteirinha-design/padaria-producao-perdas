@@ -29,6 +29,12 @@ import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "..
 import { contemBusca } from "../lib/texto";
 import { IconeChama, IconeConfere } from "./Icones";
 import { TesteDeAvisos } from "./TesteDeAvisos";
+import { CampoDeBusca } from "./CampoDeBusca";
+import {
+  dispensarFornada,
+  fornadasDispensadas,
+  restaurarFornadas,
+} from "../lib/fornadasDispensadas";
 
 /** Quantos resultados a busca mostra — ver PainelFornoDeHoje.tsx. */
 const MAXIMO_RESULTADOS = 12;
@@ -55,10 +61,21 @@ export function PainelFornadasFilial({
   const [quantidade, setQuantidade] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [busca, setBusca] = useState("");
+  /**
+   * Avisos que esta loja já resolveu e tirou da lista. Some da tela, não
+   * do banco — ver src/lib/fornadasDispensadas.ts.
+   */
+  const [dispensadas, setDispensadas] = useState(() => fornadasDispensadas(loja.id, hoje));
 
-  /** Produtos com fornada hoje, o mais recente primeiro. */
+  /** Produtos com fornada hoje, o mais recente primeiro, sem os dispensados. */
   const prontosHoje = useMemo(() => {
-    const codigos = [...new Set(fornadas.filter((f) => f.data === hoje).map((f) => f.codigoPdv))];
+    const codigos = [
+      ...new Set(
+        fornadas
+          .filter((f) => f.data === hoje && !dispensadas.has(f.codigoPdv))
+          .map((f) => f.codigoPdv)
+      ),
+    ];
     return codigos
       .map((codigo) => ({
         produto: produtos.find((p) => p.codigoPdv === codigo),
@@ -66,7 +83,7 @@ export function PainelFornadasFilial({
       }))
       .filter((item): item is { produto: Produto; doDia: FornadaPronta[] } => Boolean(item.produto))
       .sort((a, b) => b.doDia[0].marcadaEm.localeCompare(a.doDia[0].marcadaEm));
-  }, [fornadas, produtos, hoje]);
+  }, [fornadas, produtos, hoje, dispensadas]);
 
   /**
    * O que esta loja já pediu hoje E o que a matriz respondeu.
@@ -158,7 +175,7 @@ export function PainelFornadasFilial({
    * o produto ainda não foi assado hoje, e a linha diz isso em vez de
    * fingir uma hora que não existe.
    */
-  function linhaDoProduto(produto: Produto, doDia: FornadaPronta[]) {
+  function linhaDoProduto(produto: Produto, doDia: FornadaPronta[], mostrarExcluir = false) {
     const pedindo = codigoPedindo === produto.codigoPdv;
     const meuPedido = jaPedidoHoje.get(produto.codigoPdv);
     const jaPedi = meuPedido?.unidades ?? 0;
@@ -224,16 +241,34 @@ export function PainelFornadasFilial({
             </button>
           </div>
         ) : (
-          <button
-            type="button"
-            className="secundario"
-            onClick={() => {
-              setCodigoPedindo(produto.codigoPdv);
-              setQuantidade("");
-            }}
-          >
-            Pedir
-          </button>
+          <div className="acoes-fornada">
+            <button
+              type="button"
+              className="secundario"
+              onClick={() => {
+                setCodigoPedindo(produto.codigoPdv);
+                setQuantidade("");
+              }}
+            >
+              Pedir
+            </button>
+            {/* Excluir o AVISO, não a fornada: ela continua registrada na
+                nuvem e no relatório do forno. O que some é esta linha,
+                nesta loja, neste aparelho, hoje — para o que ainda precisa
+                de decisão não ficar enterrado no meio do que já foi
+                resolvido. Não aparece na busca: lá o item nem estava na
+                lista para ser tirado dela. */}
+            {mostrarExcluir && (
+              <button
+                type="button"
+                className="link"
+                title="Tirar este aviso da lista"
+                onClick={() => setDispensadas(dispensarFornada(loja.id, hoje, produto.codigoPdv))}
+              >
+                excluir aviso
+              </button>
+            )}
+          </div>
         )}
       </div>
     );
@@ -241,26 +276,31 @@ export function PainelFornadasFilial({
 
   const buscando = busca.trim().length > 0;
 
+  /** Nomes que a IA pode escolher ao interpretar o que foi ditado. */
+  const nomesAtivos = useMemo(
+    () => produtos.filter((p) => p.ativoNaProducao).map((p) => p.nome),
+    [produtos]
+  );
+
   return (
     <div className="painel-fornadas">
-      {/* Sem título aqui dentro: a aba já se chama "Hoje", e repetir o
+      {/* Sem título aqui dentro: a aba já se chama "Reposição", e repetir o
           nome logo abaixo dela é a definição de ruído. */}
       <div className="corpo-fornadas">
         {/* A busca vem ANTES da lista: quem chegou aqui pelo aviso já vê
             o item no topo da lista; quem veio porque falta alguma coisa
             no balcão vem justamente digitar o nome dela. */}
-        <div className="busca-forno">
-          <input
-            type="search"
-            inputMode="search"
-            placeholder="Buscar produto para pedir..."
-            aria-label="Buscar produto no catálogo para pedir à matriz"
-            value={busca}
-            onChange={(e) => {
-              setBusca(e.target.value);
-              setCodigoPedindo(null);
-            }}
-          />
+        <CampoDeBusca
+          className="busca-forno"
+          valor={busca}
+          onMudar={(v) => {
+            setBusca(v);
+            setCodigoPedindo(null);
+          }}
+          placeholder="Buscar produto para pedir..."
+          rotulo="Buscar produto no catálogo para pedir à matriz"
+          nomesParaVoz={nomesAtivos}
+        >
           {buscando && (
             <button
               type="button"
@@ -273,7 +313,7 @@ export function PainelFornadasFilial({
               limpar
             </button>
           )}
-        </div>
+        </CampoDeBusca>
 
         {buscando ? (
           <>
@@ -292,7 +332,11 @@ export function PainelFornadasFilial({
         ) : prontosHoje.length === 0 ? (
           <p className="aviso-forno-vazio">
             <IconeChama tamanho={20} />
-            <span>Nada saiu do forno na matriz ainda hoje. Precisa de algo? Use a busca acima.</span>
+            <span>
+              {dispensadas.size > 0
+                ? "Você já resolveu todos os avisos de hoje. Precisa de algo? Use a busca acima."
+                : "Nada saiu do forno na matriz ainda hoje. Precisa de algo? Use a busca acima."}
+            </span>
           </p>
         ) : (
           <>
@@ -300,8 +344,24 @@ export function PainelFornadasFilial({
                 primeira semana; agora a filial já sabe para que serve o
                 botão, e o que sobra é altura ocupada acima da lista. */}
             <p className="nota-rodape">Está sem no balcão? Peça reposição.</p>
-            {prontosHoje.map(({ produto, doDia }) => linhaDoProduto(produto, doDia))}
+            {prontosHoje.map(({ produto, doDia }) => linhaDoProduto(produto, doDia, true))}
           </>
+        )}
+
+        {/* Vale com a lista cheia E vazia: quem escondeu tudo por engano
+            precisa do caminho de volta, e é justamente na tela vazia que
+            ele some se ficar dentro da lista. */}
+        {!buscando && dispensadas.size > 0 && (
+          <p className="nota-rodape">
+            {dispensadas.size} {dispensadas.size === 1 ? "aviso escondido" : "avisos escondidos"} hoje.{" "}
+            <button
+              type="button"
+              className="link"
+              onClick={() => setDispensadas(restaurarFornadas(loja.id, hoje))}
+            >
+              mostrar de novo
+            </button>
+          </p>
         )}
 
       {/* Diagnóstico da direção filial -> matriz: dispara um aviso de

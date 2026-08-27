@@ -578,6 +578,21 @@ export function TelaCronograma({
 
   const itensDoPlanoDeHoje = planoDeHoje ? itensPlanejados(planoDeHoje).length : 0;
   const hojeJaConfirmado = planoDeHoje ? producaoFoiConfirmada(planoDeHoje) : false;
+  /**
+   * Quantos itens de hoje saíram do forno, dos que foram pedidos.
+   *
+   * Antes o cabeçalho mostrava só o tamanho da lista ("14 itens"), que é
+   * a mesma informação dos cards das lojas e não dizia nada sobre o
+   * assunto DESTE card. "12 de 14 confirmados" responde a pergunta que
+   * traz alguém aqui — falta alguma coisa? — sem abrir o card.
+   *
+   * Antes da conferência do fim do dia, nada foi confirmado ainda: o
+   * número parte de zero em vez de fingir que tudo saiu.
+   */
+  const confirmadosDeHoje =
+    planoDeHoje && hojeJaConfirmado
+      ? itensDoPlanoDeHoje - (planoDeHoje.producaoRealizada?.codigosNaoProduzidos.length ?? 0)
+      : 0;
 
   return (
     <div className="tela">
@@ -810,13 +825,16 @@ export function TelaCronograma({
       */}
       {planoDeHoje && (
         <CardCronograma
-          nome="Confirmação de hoje"
+          nome="Confirmar o que foi produzido"
+          /* Confirmado não mostra segunda linha (ago/2026): "produção
+             confirmada" logo abaixo de um título que já diz o assunto era
+             a mesma frase duas vezes, e o número à direita já conta a
+             história inteira. Pendente continua avisando, porque aí falta
+             uma ação. */
           situacao={
-            hojeJaConfirmado
-              ? { texto: "produção confirmada", tom: "ok" }
-              : { texto: "confirmação pendente", tom: "pendente" }
+            hojeJaConfirmado ? null : { texto: "ainda não confirmado", tom: "pendente" }
           }
-          contagem={contagemDeItens(itensDoPlanoDeHoje)}
+          contagem={`${confirmadosDeHoje} de ${itensDoPlanoDeHoje} confirmados`}
           aberto={!!cardsAbertos.confirmacao}
           onAlternar={() => alternarCard("confirmacao")}
         >
@@ -910,7 +928,8 @@ interface SituacaoDoCard {
 
 interface CardCronogramaProps {
   nome: string;
-  situacao: SituacaoDoCard;
+  /** `null` quando não há nada a dizer além do nome e da contagem. */
+  situacao: SituacaoDoCard | null;
   /** Tamanho da lista, em VARIEDADES: "12 itens". */
   contagem: string;
   aberto: boolean;
@@ -936,7 +955,7 @@ function CardCronograma({ nome, situacao, contagem, aberto, onAlternar, children
       <button type="button" className="cabecalho-card" aria-expanded={aberto} onClick={onAlternar}>
         <span className="texto-card">
           <span className="nome-card">{nome}</span>
-          <span className={`situacao-card ${situacao.tom}`}>{situacao.texto}</span>
+          {situacao && <span className={`situacao-card ${situacao.tom}`}>{situacao.texto}</span>}
         </span>
         <span className="contagem-card">{contagem}</span>
         <IconeSeta className="seta-sessao" />

@@ -29,6 +29,7 @@ import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import { rotuloDaCategoria } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
 import { TesteDeAvisos } from "./TesteDeAvisos";
+import { CampoDeBusca } from "./CampoDeBusca";
 
 /**
  * Quantos resultados a busca mostra. O catálogo tem centenas de itens; a
@@ -87,6 +88,12 @@ export function PainelFornoDeHoje({
 
   const buscando = busca.trim().length > 0;
 
+  /** Nomes que a IA pode escolher ao interpretar o que foi ditado. */
+  const nomesAtivos = useMemo(
+    () => produtos.filter((p) => p.ativoNaProducao).map((p) => p.nome),
+    [produtos]
+  );
+
   /** A linha é a mesma na busca e na lista do dia — um jeito só de marcar. */
   function linhaDoProduto(codigoPdv: number) {
     const doDia = fornadasDoProduto(fornadas, dataHoje, codigoPdv);
@@ -128,21 +135,20 @@ export function PainelFornoDeHoje({
             que acabou de sair. O progresso do dia se lê no card de
             confirmação, no Cronograma, que é onde ele decide alguma
             coisa. */}
-        <div className="busca-forno">
-          <input
-            type="search"
-            inputMode="search"
-            placeholder="Buscar produto para anunciar..."
-            aria-label="Buscar produto no catálogo para anunciar a fornada"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-          />
+        <CampoDeBusca
+          className="busca-forno"
+          valor={busca}
+          onMudar={setBusca}
+          placeholder="Buscar produto para anunciar..."
+          rotulo="Buscar produto no catálogo para anunciar a fornada"
+          nomesParaVoz={nomesAtivos}
+        >
           {buscando && (
             <button type="button" className="link" onClick={() => setBusca("")}>
               limpar
             </button>
           )}
-        </div>
+        </CampoDeBusca>
 
         {buscando ? (
           <>

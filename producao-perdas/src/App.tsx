@@ -70,37 +70,41 @@ interface DefinicaoAba {
  * contador no próprio nome do botão avisa que há novidade sem precisar
  * de nada aberto na tela.
  *
- * HOJE E AMANHÃ (ago/2026, decisão do dono do negócio)
- * -----------------------------------------------------
- * Os rótulos "Nova fornada" e "Pedido" viraram "Hoje" e "Amanhã". O
- * problema que isso resolve é de vocabulário, não de estética: as duas
- * abas recebem PEDIDO, e os nomes antigos não diziam qual era qual —
- * "Nova fornada" descrevia só metade do que a aba faz (a filial também
- * pede por ali), e "Pedido" descrevia as duas.
+ * REPOSIÇÃO E PROGRAMAÇÃO (ago/2026, decisão do dono do negócio)
+ * ---------------------------------------------------------------
+ * Os rótulos passaram por "Nova fornada"/"Pedido", depois "Hoje"/"Amanhã",
+ * e pararam em "Reposição" e "Programação". O problema sempre foi o
+ * mesmo: as duas abas recebem PEDIDO, e o nome tinha que dizer qual era
+ * qual sem ninguém precisar ler duas vezes.
  *
- * Nomeadas pelo prazo, a diferença vira óbvia sem explicação: "Hoje" é o
- * que ainda dá para resolver no expediente de agora — a matriz anuncia o
- * que sai do forno e a filial pede o que está faltando no balcão;
- * "Amanhã" é a lista do próximo dia útil, montada no fim do expediente.
+ * Agora cada aba leva o nome do DOCUMENTO que sai dela, que é como a
+ * padaria já fala: reposição é o pedido de hoje, feito enquanto o forno
+ * trabalha; programação é a lista do próximo dia útil, montada no fim do
+ * expediente. "Programação" é a mesma palavra do card "Programação geral"
+ * no Cronograma — o mesmo assunto com o mesmo nome nas duas pontas.
+ *
+ * Uma palavra cada, de propósito: "Programar produção" descreve melhor,
+ * mas na barra de abas do celular ele empurraria "Perdas" e "Análises"
+ * para fora da tela.
  *
  * As CHAVES internas continuam "fornada" e "pedido": elas aparecem nos
  * links dos avisos (`/?aba=fornada`, ver src/lib/rota.ts) e renomeá-las
  * quebraria o toque em qualquer notificação já entregue.
  *
- * Na matriz "Hoje" fica logo depois de Cronograma; na filial, antes de
- * "Amanhã" — é o que é perecível.
+ * Na matriz "Reposição" fica logo depois de Cronograma; na filial, antes
+ * de "Programação" — é o que é perecível.
  */
 const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
   matriz: [
     { chave: "cronograma", rotulo: "Cronograma" },
-    { chave: "fornada", rotulo: "Hoje" },
+    { chave: "fornada", rotulo: "Reposição" },
     { chave: "cadastro", rotulo: "Produtos" },
     { chave: "perdas", rotulo: "Perdas" },
     { chave: "analises", rotulo: "Análises" },
   ],
   filial: [
-    { chave: "fornada", rotulo: "Hoje" },
-    { chave: "pedido", rotulo: "Amanhã" },
+    { chave: "fornada", rotulo: "Reposição" },
+    { chave: "pedido", rotulo: "Programação" },
     { chave: "perdas", rotulo: "Perdas" },
     // Análises entrou para a filial em ago/2026, travada na própria loja:
     // quem decide o que pedir amanhã é quem está no balcão, e até aqui

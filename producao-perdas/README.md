@@ -164,6 +164,89 @@ Sem a chave configurada, o botão continua visível mas mostra uma mensagem
 clara pedindo a configuração — nunca trava a tela nem impede montar o
 cronograma manualmente.
 
+## Busca por voz, com o Gemini afinando o resultado (ago/2026)
+
+Todos os campos de busca de produto ganharam **microfone**. Quem usa a busca
+está com a mão suja de farinha ou com a bandeja na outra mão; digitar "BISCOITO
+DE QUEIJO ASSADO NA HORA" no teclado do celular assim é o caminho mais lento que
+existe.
+
+O fluxo tem dois passos, e **o segundo é opcional**:
+
+1. O navegador transcreve o que foi dito (Web Speech API, `pt-BR`).
+2. O Gemini casa a transcrição com um nome real do catálogo
+   (`api/interpretar-busca.ts`).
+
+O passo 2 existe porque o transcritor devolve o que ouviu, não como a padaria
+cadastra: "pãozinho francês", "fubá com goiabada". A busca por texto não acha
+nenhum desses, e o operador fala certo e lê "nenhum produto encontrado" — a pior
+resposta possível, porque parece defeito dele.
+
+**A IA pode falhar inteira sem consequência.** Sem chave, com erro, com o
+serviço fora do ar ou com resposta inesperada, o endpoint devolve `{termo:""}` e
+HTTP 200, e o campo fica com a transcrição crua — que já funciona sozinha,
+porque `contemBusca` ignora acento e caixa. E há uma trava contra invenção: o
+nome escolhido só vale se for **exatamente** um dos que mandamos; modelo que
+devolve um produto inexistente levaria a busca a zero resultados, pior que não
+ter tentado.
+
+O microfone **só aparece onde funciona** — navegador sem reconhecimento de voz
+não ganha o botão, porque oferecer e falhar é pior que não oferecer.
+
+Os quatro campos (perdas, fornada da matriz, pedido da filial, catálogo) passaram
+a ser o mesmo componente, `CampoDeBusca.tsx`: quatro cópias virariam quatro
+comportamentos diferentes na primeira correção.
+
+## Reposição e Programação: os rótulos finais das abas (ago/2026)
+
+Cada aba passou a levar o nome do **documento** que sai dela, que é como a
+padaria já fala: **Reposição** é o pedido de hoje, feito enquanto o forno
+trabalha; **Programação** é a lista do próximo dia útil, montada no fim do
+expediente — a mesma palavra do card "Programação geral" no Cronograma.
+
+Uma palavra cada, de propósito: "Programar produção" descreve melhor, mas na
+barra de abas do celular empurraria "Perdas" e "Análises" para fora da tela.
+
+## Três textos que estavam dizendo a coisa errada (ago/2026)
+
+**"Hoje não teve perda" virou "lançar mais tarde".** A saída anterior pedia uma
+AFIRMAÇÃO — quem tocava declarava que o dia fechou sem desperdício. Só que
+ninguém tocava ali por isso: tocava porque estava no meio de outra coisa. O app
+registrava como "dia sem perda" um dia que ninguém tinha conferido, e o aviso
+não voltava mais. "Lançar mais tarde" diz a verdade sobre o que o toque
+significa, e por isso pode voltar: o aviso adormece por duas horas — dentro do
+mesmo expediente, porque o lançamento tem que acontecer hoje — e reaparece
+sozinho, inclusive num app que ficou aberto na mesma tela.
+
+**O card de confirmação.** O título virou "Confirmar o que foi produzido", que
+diz a ação em vez de nomear a seção. O subtítulo "produção confirmada" saiu:
+logo abaixo de um título que já diz o assunto, era a mesma frase duas vezes. E a
+contagem deixou de repetir o tamanho da lista — que é a mesma informação dos
+cards das lojas — para responder a pergunta que traz alguém ali: **"12 de 14
+confirmados"**. Falta alguma coisa? Sem abrir o card.
+
+**"Excluir aviso" na lista da filial.** Ao longo do dia a lista chega a dezenas
+de itens, a maioria já resolvida, e o que ainda precisa de decisão fica
+enterrado no meio. O botão tira o AVISO daquela loja, naquele aparelho, hoje —
+não a fornada, que continua registrada e alimenta o relatório do forno (e que as
+regras do Firestore só deixam a matriz apagar). Tem desfazer: "N avisos
+escondidos · mostrar de novo", visível inclusive quando a lista esvaziou por
+completo.
+
+## A campainha do balcão (ago/2026)
+
+O aviso sonoro deixou de ser dois bipes e virou uma **campainha**. Duas notas de
+onda senoidal soavam como alarme de eletrodoméstico; o que faz o ouvido
+reconhecer um sino são duas coisas que o bipe não tinha: **harmônicos não
+inteiros** (as parciais 2,76 / 5,40 / 8,93 vêm da física de sinos reais) e
+**ataque instantâneo com cauda longa**, onde cada parcial mais aguda decai mais
+rápido que a grave. Duas badaladas com folga entre elas: uma só se perde no
+barulho do balcão, três viram alarme.
+
+Continua valendo o motivo de o som ser gerado pelo app: a Web Notifications API
+não deixa escolher som, e com o app em primeiro plano o sistema costuma silenciar
+a notificação — no balcão a janela fica atrás do PDV.
+
 ## O convite para instalar, e o evento que se perdia (ago/2026)
 
 **O defeito:** o Chrome dispara `beforeinstallprompt` UMA vez, logo depois que a
