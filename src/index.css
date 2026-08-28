@@ -1597,10 +1597,96 @@ button.perigo:hover { background: #822525; }
   background: #9b2c2c;
   animation: pulso-selo 1.2s ease-in-out infinite;
 }
+/* A escolha da loja na tela de entrada: três alvos grandes, um por
+   unidade. Substituiu a lista suspensa quando a entrada passou a ser de
+   um toque só — lista suspensa exige dois toques e uma leitura. */
+/* O comprovante do que a loja já pediu hoje, na aba Reposição. Existe
+   porque o pedido feito por voz saía da tela sem deixar rastro — e a
+   leitura natural disso é "o app apagou o que eu pedi". */
+.ja-pedi-hoje {
+  margin: 4px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--cor-borda);
+  border-left: 4px solid var(--cor-sucesso);
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+}
+.titulo-ja-pedi {
+  display: block;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--cor-texto-suave);
+  margin-bottom: 6px;
+}
+.linha-ja-pedi {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 0;
+  border-top: 1px solid var(--cor-borda);
+}
+.linha-ja-pedi:first-of-type { border-top: none; }
+.nome-ja-pedi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 15px;
+  min-width: 0;
+}
+.vezes-ja-pedi {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--cor-texto-suave);
+}
+.qtd-ja-pedi {
+  flex: 0 0 auto;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--cor-texto);
+}
+
+.escolha-de-loja {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin: 4px 0 12px;
+}
+.botao-loja {
+  width: 100%;
+  padding: 15px 12px;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  color: var(--cor-texto);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.botao-loja:disabled { opacity: 0.6; cursor: default; }
+.botao-loja.escolhida {
+  border-color: var(--cor-acento);
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+}
+
 .instrucao-assistente {
   margin: 8px 0 0;
   font-size: 14px;
   color: var(--cor-texto-suave);
+  text-align: center;
+}
+
+/* O exemplo vem menor e mais claro que a instrução: ele ensina o formato
+   sem competir com ela pela leitura. */
+.exemplo-assistente {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  font-style: italic;
+  color: var(--cor-texto-suave);
+  opacity: 0.85;
   text-align: center;
 }
 

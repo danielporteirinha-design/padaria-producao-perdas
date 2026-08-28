@@ -32,7 +32,8 @@
  * decidir. Um pedido com o produto errado custa uma entrega errada.
  */
 
-import { paraBusca } from "./texto";
+import { paraBusca, radicalDaFrase } from "./texto";
+import { trocarApelidos } from "./apelidosDeProdutos";
 import { entenderQuantidade } from "./vozRespostas";
 
 export interface ItemFalado {
@@ -81,7 +82,12 @@ const COMANDOS = [
 ];
 
 /** Palavras que sobram depois do número e não ajudam a achar o produto. */
-const RUIDO = ["UNIDADES", "UNIDADE", "UN", "PECAS", "PECA", "ITENS", "ITEM", "DE", "DO", "DA"];
+const RUIDO = [
+  "UNIDADES", "UNIDADE", "UN",
+  "PECAS", "PECA", "ITENS", "ITEM",
+  "DUZIA", "DUZIAS",
+  "DE", "DO", "DA", "DOS", "DAS",
+];
 
 /**
  * Quebra a frase em trechos, um por item.
@@ -114,13 +120,99 @@ function semComandos(texto: string): string {
  * comparação de substring perderia os dois casos. Palavras de uma ou
  * duas letras não contam — "DE" casaria com metade do catálogo.
  */
+/**
+ * Distância de edição: quantas letras é preciso trocar, inserir ou tirar
+ * para uma palavra virar a outra.
+ *
+ * Existe por um caso real (ago/2026): "ROSCA TATU" ditado saía do
+ * transcritor como "ROSCA TATTOO" — ele conhece a palavra inglesa e não
+ * conhece o bicho. A comparação letra por letra dava zero, e o produto
+ * ficava impossível de pedir por voz. Não é exceção: o reconhecedor
+ * anglicaniza nome próprio o tempo todo.
+ */
+function distancia(a: string, b: string): number {
+  if (a === b) return 0;
+  const linha = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let anterior = linha[0];
+    linha[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const guardado = linha[j];
+      linha[j] = Math.min(
+        linha[j] + 1, // remoção
+        linha[j - 1] + 1, // inserção
+        anterior + (a[i - 1] === b[j - 1] ? 0 : 1) // troca
+      );
+      anterior = guardado;
+    }
+  }
+  return linha[b.length];
+}
+
+/**
+ * Letra repetida some antes da comparação.
+ *
+ * O transcritor dobra consoante e vogal quando acha que está escrevendo
+ * inglês: "TATU" virou "TATTOO". Em português a letra dobrada quase não
+ * muda o som ("TATTOO" e "TATO" se leem igual), então colapsar antes de
+ * medir a distância corrige a grafia sem afrouxar o limite para palavras
+ * que são de fato diferentes.
+ */
+function semLetraDobrada(palavra: string): string {
+  return palavra.replace(/(.)\1+/g, "$1");
+}
+
+/**
+ * Duas palavras são "a mesma coisa mal ouvida"?
+ *
+ * Mede a distância JÁ SEM as letras dobradas. "TATU" e "TATTOO" viram
+ * "TATU" e "TATO" — distância 1, passa. "BROA" e "BOLO" continuam a
+ * distância 3, e não passam. A folga é um terço das letras, no máximo
+ * duas; palavra curta quase não tem folga, porque nela uma letra trocada
+ * já é outra palavra.
+ */
+function pareceMesmaPalavra(a: string, b: string): boolean {
+  if (a === b) return true;
+  const ca = semLetraDobrada(a);
+  const cb = semLetraDobrada(b);
+  if (ca === cb) return true;
+  const maior = Math.max(ca.length, cb.length);
+  if (maior < 4) return false;
+  const folga = Math.min(2, Math.floor(maior / 3));
+  return distancia(ca, cb) <= folga;
+}
+
+/**
+ * `trecho` chega AQUI já em radical (ver `melhorProduto`); o nome do
+ * catálogo é reduzido do mesmo jeito. É essa simetria que faz "pães
+ * sovados" encontrar "PÃO SOVADO" sem afrouxar nada: as duas pontas
+ * viram "PAO SOVADO", e a comparação segue exigindo palavra inteira.
+ */
 function pontuar(nome: string, trecho: string): number {
-  const palavrasDoNome = paraBusca(nome)
+  const palavrasDoNome = radicalDaFrase(paraBusca(nome))
     .split(/\s+/)
     .filter((p) => p.length > 2);
   if (palavrasDoNome.length === 0) return 0;
+
+  const ditas = trecho.split(/\s+/).filter((p) => p.length > 2);
   const alvo = ` ${trecho} `;
-  const encontradas = palavrasDoNome.filter((p) => alvo.includes(` ${p} `)).length;
+
+  let exatas = 0;
+  let aproximadas = 0;
+  for (const palavra of palavrasDoNome) {
+    if (alvo.includes(` ${palavra} `)) exatas++;
+    else if (ditas.some((d) => pareceMesmaPalavra(palavra, d))) aproximadas++;
+  }
+
+  /**
+   * APROXIMAÇÃO SÓ VALE COM ÂNCORA. Um nome que casa apenas por
+   * semelhança não casa: seria abrir o catálogo inteiro para palpite de
+   * transcrição. Com pelo menos uma palavra EXATA — "ROSCA" em "rosca
+   * tattoo" — a semelhança na outra deixa de ser chute e vira correção.
+   */
+  if (exatas === 0) return 0;
+
+  const encontradas = exatas + aproximadas;
 
   /**
    * UMA PALAVRA SÓ NÃO BASTA quando o nome tem mais de uma.
@@ -134,7 +226,12 @@ function pontuar(nome: string, trecho: string): number {
    * única: aí não há ambiguidade a resolver.
    */
   if (encontradas < 2 && palavrasDoNome.length > 1) return 0;
-  return encontradas / palavrasDoNome.length;
+
+  /**
+   * A palavra exata vale mais que a parecida no desempate. Entre dois
+   * produtos que casaram, ganha o que a pessoa disse por inteiro.
+   */
+  return (exatas + aproximadas * 0.9) / palavrasDoNome.length;
 }
 
 /**
@@ -146,13 +243,25 @@ function pontuar(nome: string, trecho: string): number {
  * palavras casadas), que é o que a pessoa disse por extenso.
  */
 function melhorProduto(trecho: string, nomes: string[]): string {
+  /**
+   * Duas reduções antes de comparar, nesta ordem:
+   *
+   * 1. RADICAL — singular e plural passam a ser a mesma palavra, dos
+   *    dois lados ("pães sovados" e "PÃO SOVADO" viram "PAO SOVADO").
+   * 2. APELIDO — o nome do balcão vira o nome do cadastro ("pão de sal"
+   *    vira "PAO FRANCES"). Depois do radical, para que o apelido valha
+   *    também no plural: "pães de sal".
+   */
+  const alvo = trocarApelidos(radicalDaFrase(trecho), nomes);
+  if (!alvo) return "";
+
   let melhor = "";
   let melhorNota = 0;
   let melhorTamanho = 0;
   for (const nome of nomes) {
-    const nota = pontuar(nome, trecho);
+    const nota = pontuar(nome, alvo);
     if (nota < 0.5) continue;
-    const tamanho = paraBusca(nome).split(/\s+/).filter((p) => p.length > 2).length;
+    const tamanho = radicalDaFrase(paraBusca(nome)).split(/\s+/).filter((p) => p.length > 2).length;
     if (nota > melhorNota || (nota === melhorNota && tamanho > melhorTamanho)) {
       melhor = nome;
       melhorNota = nota;
@@ -172,6 +281,49 @@ function soONome(trecho: string): string {
 }
 
 /**
+ * Quebra um trecho que traz VÁRIOS produtos sem "e" nem vírgula.
+ *
+ * No balcão ninguém dita pontuação. A frase real é "vinte pão francês
+ * dez broa de fubá" — dois pedidos colados. O único sinal confiável de
+ * onde um acaba e o outro começa é o número, e ele aparece nas duas
+ * cadências: antes do nome ("20 pão francês 10 broa") ou depois dele
+ * ("pão francês 20 broa 10").
+ *
+ * Por isso as duas partições são TESTADAS contra o catálogo, e só vale a
+ * que faz TODAS as partes casarem com um produto. Se nenhuma casa
+ * inteira, o trecho segue inteiro — errar a divisão é pior que não
+ * dividir, porque produziria um pedido que ninguém fez.
+ */
+function separarPorNumeros(trecho: string, nomes: string[]): string[] {
+  const tokens = trecho.split(/\s+/).filter((t) => t.length > 0);
+  const numeros = tokens.map((t, i) => (/^\d+$/.test(t) ? i : -1)).filter((i) => i >= 0);
+  if (numeros.length < 2) return [trecho];
+
+  const cortar = (pontos: number[]): string[] => {
+    const partes: string[] = [];
+    let inicio = 0;
+    for (const p of pontos) {
+      if (p <= inicio || p >= tokens.length) continue;
+      partes.push(tokens.slice(inicio, p).join(" "));
+      inicio = p;
+    }
+    partes.push(tokens.slice(inicio).join(" "));
+    return partes.filter((p) => p.length > 0);
+  };
+
+  const candidatas = [
+    cortar(numeros), // número ABRE o item: "20 pão francês 10 broa"
+    cortar(numeros.map((i) => i + 1)), // número FECHA o item: "pão francês 20 broa 10"
+  ];
+
+  for (const partes of candidatas) {
+    if (partes.length < 2) continue;
+    if (partes.every((parte) => melhorProduto(soONome(parte), nomes) !== "")) return partes;
+  }
+  return [trecho];
+}
+
+/**
  * Lê a frase inteira e devolve os itens reconhecidos.
  *
  * `nomes` são os nomes EXATOS do catálogo — o que sai daqui é sempre um
@@ -184,7 +336,9 @@ export function interpretarFrase(frase: string, nomes: string[]): LeituraDaFrase
   const itens: ItemFalado[] = [];
   const naoReconhecidos: string[] = [];
 
-  for (const trecho of emTrechos(limpa)) {
+  const trechos = emTrechos(limpa).flatMap((t) => separarPorNumeros(t, nomes));
+
+  for (const trecho of trechos) {
     const quantidade = entenderQuantidade(trecho);
     const nome = melhorProduto(soONome(trecho), nomes);
     if (!nome) {

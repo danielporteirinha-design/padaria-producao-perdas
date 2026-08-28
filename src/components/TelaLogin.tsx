@@ -16,7 +16,7 @@
  */
 
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithCustomToken, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import { LOJAS } from "../lib/lojas";
 import { BannerInstalar } from "./BannerInstalar";
@@ -42,11 +42,59 @@ function mensagemDeErro(codigo: string): string {
   }
 }
 
+/**
+ * Tenta a entrada SEM SENHA (ago/2026, provisória — ver
+ * api/entrar-como-loja.ts).
+ *
+ * Devolve `false` em qualquer contratempo — recurso desligado no
+ * servidor, sem internet, resposta estranha. Nunca lança: quem chama usa
+ * o `false` para mostrar o campo de senha, que é o caminho que sempre
+ * funcionou. Um atalho de conveniência não pode ser o motivo de alguém
+ * ficar do lado de fora às cinco da manhã.
+ */
+async function entrarSemSenha(lojaId: string): Promise<boolean> {
+  try {
+    const resposta = await fetch("/api/entrar-como-loja", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ loja: lojaId }),
+    });
+    if (!resposta.ok) return false;
+    const dados = (await resposta.json()) as { token?: string };
+    if (!dados.token) return false;
+    await signInWithCustomToken(auth, dados.token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function TelaLogin() {
   const [lojaId, setLojaId] = useState(LOJAS[0].id);
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [entrando, setEntrando] = useState(false);
+  /**
+   * O campo de senha começa ESCONDIDO e só aparece quando a entrada sem
+   * senha não funciona. Assim a mesma tela serve nos dois modos, e
+   * religar a senha é apagar uma variável na Vercel — sem publicar
+   * versão nova e sem ninguém ficar trancado do lado de fora.
+   */
+  const [pedirSenha, setPedirSenha] = useState(false);
+
+  /** Um toque na loja: tenta entrar direto; se não der, pede a senha. */
+  async function escolherLoja(id: string) {
+    setLojaId(id);
+    setErro("");
+    if (pedirSenha) return;
+
+    setEntrando(true);
+    const entrou = await entrarSemSenha(id);
+    setEntrando(false);
+    // Sem `else`: quando entra, é o onAuthStateChanged do App que troca
+    // a tela — mexer no estado daqui competiria com a desmontagem.
+    if (!entrou) setPedirSenha(true);
+  }
 
   async function entrar(evento: React.FormEvent) {
     evento.preventDefault();
@@ -87,34 +135,45 @@ export function TelaLogin() {
           entrar — ou seja, nunca, para quem ainda não tinha senha. */}
       <BannerInstalar emDestaque />
 
-      <form onSubmit={entrar}>
-        <label>
-          Loja
-          <select value={lojaId} onChange={(e) => setLojaId(e.target.value)}>
-            {LOJAS.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.nome}
-              </option>
-            ))}
-          </select>
-        </label>
+      {/* A loja é um BOTÃO por unidade, e não uma lista suspensa: são
+          três opções, o alvo fica grande para o dedo, e num toque só o
+          aparelho já entra. */}
+      <div className="escolha-de-loja">
+        {LOJAS.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            className={`botao-loja ${pedirSenha && lojaId === l.id ? "escolhida" : ""}`}
+            disabled={entrando}
+            onClick={() => void escolherLoja(l.id)}
+          >
+            {l.nome}
+          </button>
+        ))}
+      </div>
 
-        <label>
-          Senha da loja
-          <input
-            type="password"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-            autoComplete="current-password"
-            placeholder="Senha"
-          />
-        </label>
+      {/* O campo de senha só existe quando a entrada direta não valeu. */}
+      {pedirSenha && (
+        <form onSubmit={entrar}>
+          <label>
+            Senha da loja
+            <input
+              type="password"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              autoComplete="current-password"
+              placeholder="Senha"
+              autoFocus
+            />
+          </label>
 
-        <button type="submit" className="primario" disabled={entrando || senha === ""}>
-          {entrando ? "Entrando..." : "Entrar"}
-        </button>
-      </form>
+          <button type="submit" className="primario" disabled={entrando || senha === ""}>
+            {entrando ? "Entrando..." : "Entrar"}
+          </button>
+        </form>
+      )}
 
+      {entrando && !pedirSenha && <p className="nota-rodape">Entrando...</p>}
       {erro && <p className="erro-conversao">{erro}</p>}
 
       <p className="nota-rodape">

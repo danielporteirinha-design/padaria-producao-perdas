@@ -227,12 +227,20 @@ export function AssistenteDeVoz({
       </button>
 
       {/* A instrução fica SEMPRE visível, e não só no erro: é ela que
-          ensina que dá para dizer produto e quantidade de uma vez. */}
+          ensina que dá para dizer produto e quantidade de uma vez — e,
+          na filial, que a MESMA frase aceita vários produtos. Sem isso a
+          pessoa dita um item, espera, dita outro, e conclui que o
+          recurso só faz um. */}
       <p className="instrucao-assistente">
         {pedindo
-          ? "Diga o nome do produto e a quantidade desejada"
+          ? "Diga o nome do produto e a quantidade. Pode pedir vários de uma vez."
           : "Diga: anunciar fornada de Palito Vegetariano"}
       </p>
+      {pedindo && (
+        <p className="exemplo-assistente">
+          Ex.: "20 pão francês, 10 broa de fubá e meia dúzia de sonho"
+        </p>
+      )}
 
       {pensando && <p className="nota-rodape">Entendendo o que você disse...</p>}
       {erro && <p className="erro-conversao">{erro}</p>}

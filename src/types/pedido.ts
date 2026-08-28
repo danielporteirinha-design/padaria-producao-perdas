@@ -109,6 +109,70 @@ export function desfechoDaReposicao(pedido: PedidoFilial): DesfechoReposicao {
   return pedido.atendimento?.desfecho ?? "pendente";
 }
 
+/** Uma linha do "o que já pedi hoje", pronta para a tela. */
+export interface ReposicaoPedidaHoje {
+  codigoPdv: number;
+  /** Soma de TUDO que esta loja pediu deste produto hoje. */
+  unidades: number;
+  /** Instante ISO do pedido mais recente deste produto. */
+  ultimoEm: string;
+  /** Quantas vezes o produto foi pedido hoje (lotes diferentes). */
+  vezes: number;
+  confirmado: boolean;
+  /** Motivo do cancelamento, quando a matriz recusou. */
+  cancelado?: string;
+}
+
+/**
+ * O QUE ESTA LOJA JÁ PEDIU HOJE, por produto (ago/2026).
+ *
+ * O DEFEITO QUE ISTO RESOLVE, relatado em produção: a filial ditava cinco
+ * itens, o pedido saía, e os itens sumiam da tela. Não era perda de dado —
+ * o pedido chegava à matriz —, era falta de COMPROVANTE: a aba Reposição
+ * só desenha linha para o que saiu do forno hoje ou para o que a busca
+ * trouxe, e a busca é limpa depois do envio. Produto pedido que não tinha
+ * fornada hoje ficava sem lugar nenhum onde aparecer.
+ *
+ * Quem pede precisa ver o que já pediu — senão pede de novo, e chega o
+ * dobro.
+ *
+ * Ordena do MAIS RECENTE para o mais antigo, como o resto das listas de
+ * reposição do app. Lotes diferentes do mesmo produto SOMAM: quem pediu 10
+ * às 9h e 5 às 11h pediu 15 hoje, e é esse número que evita o pedido
+ * repetido.
+ */
+export function reposicoesDeHojePorProduto(
+  pedidos: PedidoFilial[],
+  hoje: string,
+  lojaId: string
+): ReposicaoPedidaHoje[] {
+  const mapa = new Map<number, ReposicaoPedidaHoje>();
+
+  for (const pedido of pedidos) {
+    if (pedido.data !== hoje || pedido.lojaId !== lojaId || !ehReposicao(pedido)) continue;
+    const desfecho = desfechoDaReposicao(pedido);
+    const quando = pedido.enviadoEm ?? pedido.criadoEm ?? "";
+
+    for (const item of pedido.itens) {
+      const atual = mapa.get(item.codigoPdv);
+      mapa.set(item.codigoPdv, {
+        codigoPdv: item.codigoPdv,
+        unidades: (atual?.unidades ?? 0) + item.quantidadeUnidades,
+        // O mais recente vence, mesmo que os lotes cheguem fora de ordem.
+        ultimoEm: !atual || quando > atual.ultimoEm ? quando : atual.ultimoEm,
+        vezes: (atual?.vezes ?? 0) + 1,
+        confirmado: (atual?.confirmado ?? false) || desfecho === "confirmado",
+        cancelado:
+          desfecho === "cancelado"
+            ? pedido.atendimento?.motivo || "sem motivo informado"
+            : atual?.cancelado,
+      });
+    }
+  }
+
+  return [...mapa.values()].sort((a, b) => b.ultimoEm.localeCompare(a.ultimoEm));
+}
+
 export function reposicaoEstaPendente(pedido: PedidoFilial): boolean {
   return ehReposicao(pedido) && desfechoDaReposicao(pedido) === "pendente";
 }
