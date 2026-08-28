@@ -52,22 +52,54 @@ function mensagemDeErro(codigo: string): string {
  * funcionou. Um atalho de conveniência não pode ser o motivo de alguém
  * ficar do lado de fora às cinco da manhã.
  */
-async function entrarSemSenha(lojaId: string): Promise<boolean> {
+/**
+ * Tenta a entrada SEM SENHA (ago/2026, provisória — ver
+ * api/entrar-como-loja.ts).
+ *
+ * Devolve o MOTIVO da falha junto, e não só "não deu".
+ *
+ * Isso mudou depois de uma tarde perdida: a tela caía no campo de senha
+ * sem dizer por quê, e as quatro causas possíveis (variável ausente,
+ * variável com o texto de exemplo, UID errado, chave de serviço
+ * faltando) se pareciam exatamente igual para quem estava olhando. O
+ * motivo aparece em letra miúda no rodapé; quem está no balcão ignora,
+ * quem está configurando resolve em um minuto.
+ */
+async function entrarSemSenha(lojaId: string): Promise<{ ok: boolean; motivo: string }> {
   try {
     const resposta = await fetch("/api/entrar-como-loja", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ loja: lojaId }),
     });
-    if (!resposta.ok) return false;
+    if (resposta.status === 404) {
+      return { ok: false, motivo: "a função de entrada não subiu no deploy" };
+    }
+    if (!resposta.ok) {
+      const dados = (await resposta.json().catch(() => ({}))) as { motivo?: string };
+      return { ok: false, motivo: MOTIVOS[dados.motivo ?? ""] ?? `recusado (${resposta.status})` };
+    }
     const dados = (await resposta.json()) as { token?: string };
-    if (!dados.token) return false;
+    if (!dados.token) return { ok: false, motivo: "o servidor não devolveu credencial" };
     await signInWithCustomToken(auth, dados.token);
-    return true;
-  } catch {
-    return false;
+    return { ok: true, motivo: "" };
+  } catch (e) {
+    const codigo = (e as { code?: string }).code ?? "";
+    if (codigo.includes("custom-token")) {
+      return { ok: false, motivo: "o UID desta loja em UIDS_LOJAS não confere" };
+    }
+    if (codigo.includes("network")) return { ok: false, motivo: "sem conexão" };
+    return { ok: false, motivo: codigo || "falha ao entrar sem senha" };
   }
 }
+
+/** Tradução dos códigos que api/entrar-como-loja.ts devolve. */
+const MOTIVOS: Record<string, string> = {
+  "sem-uids": "falta a variável UIDS_LOJAS na Vercel",
+  "loja-sem-uid": "esta loja não está em UIDS_LOJAS",
+  "sem-credencial": "falta FIREBASE_SERVICE_ACCOUNT na Vercel",
+  "falha-ao-assinar": "a chave de serviço não pôde assinar (confira o JSON)",
+};
 
 export function TelaLogin() {
   const [lojaId, setLojaId] = useState(LOJAS[0].id);
@@ -81,6 +113,8 @@ export function TelaLogin() {
    * versão nova e sem ninguém ficar trancado do lado de fora.
    */
   const [pedirSenha, setPedirSenha] = useState(false);
+  /** Por que a entrada direta não valeu — só para quem está configurando. */
+  const [motivoSemSenha, setMotivoSemSenha] = useState("");
 
   /** Um toque na loja: tenta entrar direto; se não der, pede a senha. */
   async function escolherLoja(id: string) {
@@ -89,11 +123,14 @@ export function TelaLogin() {
     if (pedirSenha) return;
 
     setEntrando(true);
-    const entrou = await entrarSemSenha(id);
+    const tentativa = await entrarSemSenha(id);
     setEntrando(false);
     // Sem `else`: quando entra, é o onAuthStateChanged do App que troca
     // a tela — mexer no estado daqui competiria com a desmontagem.
-    if (!entrou) setPedirSenha(true);
+    if (!tentativa.ok) {
+      setMotivoSemSenha(tentativa.motivo);
+      setPedirSenha(true);
+    }
   }
 
   async function entrar(evento: React.FormEvent) {
@@ -184,6 +221,9 @@ export function TelaLogin() {
       {/* A versão também aparece AQUI, e não só depois do login (ago/2026):
           esta é a primeira tela de qualquer aparelho, e é onde se confere
           se a atualização entrou sem precisar acessar uma loja. */}
+      {motivoSemSenha && (
+        <p className="rodape-versao">entrada direta indisponível: {motivoSemSenha}</p>
+      )}
       <p className="rodape-versao">versão de {__VERSAO_APP__}</p>
     </div>
   );

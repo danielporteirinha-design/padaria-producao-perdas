@@ -117,7 +117,6 @@ export function TelaSuprimentos({
   const totalItens = itens.filter((i) => i.quantidade > 0).length;
 
   const ativos = useMemo(() => catalogo.filter((s) => s.ativo), [catalogo]);
-  const nomesDoCatalogo = useMemo(() => ativos.map((s) => s.nome), [ativos]);
   const buscando = busca.trim().length > 0;
 
   const resultados = useMemo(() => {
@@ -292,7 +291,6 @@ export function TelaSuprimentos({
         onMudar={setBusca}
         placeholder="Buscar produto, embalagem ou material..."
         rotulo="Buscar suprimento pelo nome"
-        nomesParaVoz={nomesDoCatalogo}
       >
         {buscando && (
           <button type="button" className="link" onClick={() => setBusca("")}>

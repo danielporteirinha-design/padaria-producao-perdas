@@ -1,57 +1,36 @@
 /**
  * src/components/CampoDeBusca.tsx
  * ---------------------------------------------------------------
- * O campo de busca de produto do app inteiro, com ditado (ago/2026).
+ * O campo de busca de produto do app inteiro.
  *
- * UM COMPONENTE, QUATRO TELAS
+ * UM COMPONENTE, VÁRIAS TELAS
  * ----------------------------
- * Busca de perda, de fornada, de pedido da filial e do catálogo eram
- * quatro `<input>` parecidos e independentes. Com o microfone entrando em
- * todos, quatro cópias virariam quatro comportamentos ligeiramente
- * diferentes na primeira correção. Aqui é um só.
+ * Busca de perda, de fornada, de pedido da filial, de suprimento e do
+ * catálogo eram `<input>` parecidos e independentes. Cinco cópias viram
+ * cinco comportamentos ligeiramente diferentes na primeira correção.
+ * Aqui é um só.
  *
- * O MICROFONE APARECE SEMPRE — E EXPLICA QUANDO NÃO DÁ
- * -----------------------------------------------------
- * A primeira versão escondia o botão em navegador sem reconhecimento de
- * voz, com o argumento de que oferecer e falhar é pior que não oferecer.
- * O uso real mostrou o custo disso (ago/2026): quem não via o microfone
- * não tinha como saber se o recurso não existia, se não tinha sido
- * publicado ainda, ou se o navegador dele é que não servia. Botão ausente
- * é indistinguível de recurso ausente, e a pessoa reporta como defeito
- * uma coisa que está funcionando na máquina do lado.
+ * O MICROFONE SAIU DAQUI (ago/2026, decisão do dono do negócio: "o
+ * microfone dentro de todas as caixas de texto do app deve ser retirado,
+ * gerou ruído").
  *
- * Agora ele aparece sempre. Onde a voz existe, o fluxo é: toca, fala, o
- * navegador transcreve, o Gemini casa a transcrição com um nome real do
- * catálogo (ver api/interpretar-busca.ts) e o termo entra no campo. Onde
- * não existe, um toque responde em uma frase o que fazer — que é o que
- * um botão desabilitado nunca diz.
+ * O motivo é de desenho, e vale registrar: havia DOIS microfones na
+ * mesma tela fazendo coisas diferentes — o do assistente, que monta um
+ * pedido inteiro a partir de uma frase, e este, que só preenchia um
+ * termo de busca. Dois botões com o mesmo ícone e resultados diferentes
+ * é uma armadilha: a pessoa toca no errado, o app faz outra coisa, e a
+ * conclusão é que o reconhecimento de voz não funciona.
  *
- * A IA É OPCIONAL EM TODAS AS ETAPAS. Sem chave, com erro ou com resposta
- * inesperada, o campo recebe a transcrição crua — e como `contemBusca`
- * ignora acento e caixa, "pao frances" já acha "PÃO FRANCÊS" sozinho. O
- * Gemini entra para o que o texto não resolve: fala coloquial
- * ("pãozinho") e nome parcial ("pão de queijo" para "PAO DE QUEIJO
- * CONGELADO GRANDE").
- *
- * O TERMO FICA VISÍVEL E EDITÁVEL depois do ditado. Ditado que executa a
- * busca e some não deixa a pessoa corrigir uma palavra — ela teria que
- * falar tudo de novo.
+ * Ficou um microfone por tela, no assistente, que é o que resolve o
+ * trabalho de verdade. Aqui ficou o que um campo de busca precisa ser:
+ * um campo de busca.
  */
-
-import { useEffect, useRef, useState } from "react";
-import { afinarComIA, ErroDeVoz, ouvirUmaFrase, vozDisponivel } from "../lib/vozParaBusca";
-import { IconeMicrofone } from "./Icones";
 
 interface CampoDeBuscaProps {
   valor: string;
   onMudar: (valor: string) => void;
   placeholder: string;
   rotulo: string;
-  /**
-   * Nomes do catálogo que a IA pode escolher. Vazio desliga o afinamento
-   * e mantém a transcrição crua — que continua funcionando.
-   */
-  nomesParaVoz?: string[];
   /** Botão extra à direita, como o "limpar" dos painéis de fornada. */
   children?: React.ReactNode;
   className?: string;
@@ -62,111 +41,20 @@ export function CampoDeBusca({
   onMudar,
   placeholder,
   rotulo,
-  nomesParaVoz = [],
   children,
   className = "",
 }: CampoDeBuscaProps) {
-  const [ouvindo, setOuvindo] = useState(false);
-  const [pensando, setPensando] = useState(false);
-  const [erro, setErro] = useState("");
-  const cancelar = useRef<(() => void) | null>(null);
-  // Evita mexer no estado depois que a tela saiu — ditado é assíncrono e
-  // a pessoa pode trocar de aba no meio.
-  const montado = useRef(true);
-  useEffect(() => {
-    montado.current = true;
-    return () => {
-      montado.current = false;
-      cancelar.current?.();
-    };
-  }, []);
-
-  const temVoz = vozDisponivel();
-
-  /**
-   * A frase para quem tocou num navegador que não reconhece voz.
-   *
-   * Nomeia os navegadores em vez de dizer "não suportado": o Firefox no
-   * computador é o caso mais comum, e quem está com ele na tela não tem
-   * como adivinhar que o Chrome resolve.
-   */
-  function explicarFaltaDeVoz() {
-    setErro(
-      "Este navegador não reconhece voz. No computador funciona no Chrome ou no Edge; " +
-        "no celular, no Chrome (Android) ou no Safari (iPhone). Digitar o nome continua funcionando."
-    );
-  }
-
-  async function ditar() {
-    if (ouvindo || pensando) {
-      cancelar.current?.();
-      return;
-    }
-    setErro("");
-    setOuvindo(true);
-    try {
-      const sessao = ouvirUmaFrase();
-      cancelar.current = sessao.cancelar;
-      const falado = await sessao.promessa;
-      if (!montado.current) return;
-      setOuvindo(false);
-      if (!falado) return;
-
-      // A transcrição já vale como busca. Ela entra no campo ANTES de
-      // consultar a IA: se o afinamento demorar ou falhar, a pessoa já
-      // está vendo resultado.
-      onMudar(falado);
-
-      if (nomesParaVoz.length === 0) return;
-      setPensando(true);
-      const afinado = await afinarComIA(falado, nomesParaVoz);
-      if (!montado.current) return;
-      if (afinado) onMudar(afinado);
-    } catch (falha) {
-      if (!montado.current) return;
-      setErro(falha instanceof ErroDeVoz ? falha.message : "Não consegui usar o microfone agora.");
-    } finally {
-      if (montado.current) {
-        setOuvindo(false);
-        setPensando(false);
-        cancelar.current = null;
-      }
-    }
-  }
-
   return (
-    <>
-      <div className={`campo-com-voz ${className}`}>
-        <input
-          type="search"
-          inputMode="search"
-          placeholder={placeholder}
-          aria-label={rotulo}
-          value={valor}
-          onChange={(e) => onMudar(e.target.value)}
-        />
-        <button
-          type="button"
-          className={`botao-microfone ${ouvindo ? "ouvindo" : ""} ${temVoz ? "" : "indisponivel"}`}
-          aria-label={ouvindo ? "Parar de ouvir" : "Buscar falando o nome do produto"}
-          title={ouvindo ? "Ouvindo... toque para parar" : "Falar o nome do produto"}
-          disabled={pensando}
-          onClick={temVoz ? ditar : explicarFaltaDeVoz}
-        >
-          <IconeMicrofone tamanho={20} />
-        </button>
-        {children}
-      </div>
-      {(ouvindo || pensando) && (
-        <p className="nota-rodape" role="status">
-          {ouvindo ? "Ouvindo... fale o nome do produto." : "Procurando no catálogo..."}
-        </p>
-      )}
-      {erro && (
-        <p className="erro-conversao" role="alert">
-          {erro}
-        </p>
-      )}
-    </>
+    <div className={`campo-com-voz ${className}`}>
+      <input
+        type="search"
+        inputMode="search"
+        placeholder={placeholder}
+        aria-label={rotulo}
+        value={valor}
+        onChange={(e) => onMudar(e.target.value)}
+      />
+      {children}
+    </div>
   );
 }

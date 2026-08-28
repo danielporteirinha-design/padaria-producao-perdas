@@ -185,9 +185,6 @@ export function TelaPerdas({
 
   const candidatoSelecionado = candidatos.find((c) => c.produto.codigoPdv === codigoSelecionado);
 
-  /** Nomes que a IA pode escolher ao interpretar o que foi ditado. */
-  const nomesDosCandidatos = useMemo(() => candidatos.map((c) => c.produto.nome), [candidatos]);
-
   const resultadosDaBusca = useMemo(() => {
     const termo = buscaProduto.trim();
     if (!termo) return [];
@@ -223,7 +220,6 @@ export function TelaPerdas({
             onMudar={setBuscaProduto}
             placeholder="Buscar produto pelo nome..."
             rotulo="Buscar produto pelo nome para lançar a perda"
-            nomesParaVoz={nomesDosCandidatos}
           />
 
           {buscaProduto.trim() ? (

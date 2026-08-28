@@ -120,7 +120,16 @@ export function AssistenteDeVoz({
       );
       return;
     }
-    limpar();
+    /**
+     * NÃO LIMPA A LISTA (ago/2026 — defeito relatado em produção: "se eu
+     * já tiver na lista 1 ou mais produtos lançados por voz e quiser
+     * acrescentar mais, a primeira lista é substituída pela nova").
+     *
+     * Era isto: cada nova fala zerava o que já tinha sido entendido.
+     * Falar de novo é ACRESCENTAR — a lista só some por decisão da
+     * pessoa (o "cancelar" abaixo) ou depois de confirmada.
+     */
+    setErro("");
     setOuvindo(true);
     try {
       const sessao = ouvirUmaFrase();
@@ -173,7 +182,26 @@ export function AssistenteDeVoz({
       setPensando(false);
     }
 
-    setItens(paraItens(encontrados));
+    /**
+     * ACUMULA. O mesmo produto dito duas vezes SOMA, em vez de virar
+     * duas linhas: quem falou "10 pão francês" e depois "mais 5 pão
+     * francês" está pedindo 15. A quantidade continua editável na
+     * linha, então a soma nunca é irreversível.
+     */
+    const novos = paraItens(encontrados);
+    setItens((atual) => {
+      const lista = [...atual];
+      for (const novo of novos) {
+        const onde = lista.findIndex((i) => i.produto.codigoPdv === novo.produto.codigoPdv);
+        if (onde >= 0) {
+          const somado = (lista[onde].quantidade ?? 0) + (novo.quantidade ?? 0);
+          lista[onde] = { ...lista[onde], quantidade: somado > 0 ? somado : null };
+        } else {
+          lista.push(novo);
+        }
+      }
+      return lista;
+    });
     setSobras(sobrando);
     if (encontrados.length === 0) {
       setErro(`Não achei nenhum produto em "${dito}".`);
@@ -218,29 +246,23 @@ export function AssistenteDeVoz({
       <button
         type="button"
         className={`botao-assistente ${ouvindo ? "ouvindo" : ""}`}
-        aria-label={ouvindo ? "Parar de ouvir" : "Falar"}
+        aria-label={ouvindo ? "Ouvindo" : "Falar"}
         disabled={pensando || enviando}
         onClick={() => void ditar()}
       >
         <IconeMicrofone tamanho={26} />
-        {ouvindo ? "Ouvindo... toque para parar" : pedindo ? "Pedir falando" : "Anunciar falando"}
+        {/* SEM "toque para parar" (ago/2026, decisão do dono do negócio:
+            "isso não faz sentido algum"). E ele tem razão: o
+            reconhecedor trabalha com `continuous = false` e FECHA
+            SOZINHO quando a pessoa para de falar — o convite a tocar
+            pedia um passo que o navegador já dá. */}
+        {ouvindo ? "Ouvindo..." : pedindo ? "Pedir falando" : "Anunciar falando"}
       </button>
 
-      {/* A instrução fica SEMPRE visível, e não só no erro: é ela que
-          ensina que dá para dizer produto e quantidade de uma vez — e,
-          na filial, que a MESMA frase aceita vários produtos. Sem isso a
-          pessoa dita um item, espera, dita outro, e conclui que o
-          recurso só faz um. */}
-      <p className="instrucao-assistente">
-        {pedindo
-          ? "Diga o nome do produto e a quantidade. Pode pedir vários de uma vez."
-          : "Diga: anunciar fornada de Palito Vegetariano"}
-      </p>
-      {pedindo && (
-        <p className="exemplo-assistente">
-          Ex.: "20 pão francês, 10 broa de fubá e meia dúzia de sonho"
-        </p>
-      )}
+      {/* A instrução escrita e o exemplo saíram (ago/2026, decisão do
+          dono do negócio). O rótulo do botão já diz o que ele faz, e a
+          conferência logo abaixo mostra o que foi entendido — as duas
+          linhas de texto ocupavam a dobra da tela repetindo isso. */}
 
       {pensando && <p className="nota-rodape">Entendendo o que você disse...</p>}
       {erro && <p className="erro-conversao">{erro}</p>}

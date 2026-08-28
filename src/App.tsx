@@ -130,7 +130,13 @@ const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
     { chave: "perdas", rotulo: "Perdas" },
     { chave: "cronograma", rotulo: "Lista de Produção" },
     { chave: "cadastro", rotulo: "Produtos" },
-    { chave: "analises", rotulo: "Análises" },
+    /**
+     * ANÁLISES SAIU DA BARRA, PROVISORIAMENTE (ago/2026, decisão do dono
+     * do negócio): "estou deixando o app mais resumido possível para
+     * facilitar a implantação na rotina da empresa". A tela continua no
+     * código e volta acrescentando uma linha aqui — o que sai é o item de
+     * menu, não o recurso.
+     */
   ],
   filial: [
     { chave: "fornada", rotulo: "Reposição" },
@@ -147,10 +153,8 @@ const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
     { chave: "suprimentos", rotulo: "Supri\u00ADmentos" },
     { chave: "perdas", rotulo: "Perdas" },
     { chave: "pedido", rotulo: "Lista de Produção" },
-    // Análises entrou para a filial em ago/2026, travada na própria loja:
-    // quem decide o que pedir amanhã é quem está no balcão, e até aqui
-    // ela pedia sem enxergar o próprio desperdício. Ver TelaAnalises.
-    { chave: "analises", rotulo: "Análises" },
+    // Análises saiu da barra junto com a da matriz — ver o comentário
+    // acima. A tela continua no código.
   ],
 };
 

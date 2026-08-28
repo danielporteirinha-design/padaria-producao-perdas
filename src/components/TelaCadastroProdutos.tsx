@@ -49,8 +49,6 @@ export function TelaCadastroProdutos({
   const [form, setForm] = useState<NovoProdutoInput>(VALOR_INICIAL);
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
-  /** Nomes que a IA pode escolher ao interpretar o que foi ditado. */
-  const nomesDoCatalogo = useMemo(() => produtos.map((p) => p.nome), [produtos]);
   /**
    * As abas "Sem categoria" e "Fora de escopo" foram removidas (ago/2026).
    * Eram ferramentas da migração inicial do catálogo do PDV (881 -> 89
@@ -236,7 +234,6 @@ export function TelaCadastroProdutos({
             onMudar={setBusca}
             placeholder="Buscar por nome ou categoria..."
             rotulo="Buscar produto por nome ou categoria"
-            nomesParaVoz={nomesDoCatalogo}
           />
           <div className="tabela-scroll">
             <table className="tabela-simples">

@@ -109,68 +109,67 @@ export function desfechoDaReposicao(pedido: PedidoFilial): DesfechoReposicao {
   return pedido.atendimento?.desfecho ?? "pendente";
 }
 
-/** Uma linha do "o que já pedi hoje", pronta para a tela. */
-export interface ReposicaoPedidaHoje {
+/** Uma linha das sanfonas de reposição da filial. */
+export interface LinhaDeReposicao {
+  /** Documento de origem — duas linhas do mesmo envio compartilham. */
+  pedidoId: string;
   codigoPdv: number;
-  /** Soma de TUDO que esta loja pediu deste produto hoje. */
   unidades: number;
-  /** Instante ISO do pedido mais recente deste produto. */
-  ultimoEm: string;
-  /** Quantas vezes o produto foi pedido hoje (lotes diferentes). */
-  vezes: number;
-  confirmado: boolean;
-  /** Motivo do cancelamento, quando a matriz recusou. */
-  cancelado?: string;
+  /** Instante ISO do envio. */
+  quando: string;
+  situacao: DesfechoReposicao;
+  /** Motivo da recusa, quando a matriz recusou. */
+  motivo?: string;
 }
 
 /**
- * O QUE ESTA LOJA JÁ PEDIU HOJE, por produto (ago/2026).
+ * TUDO QUE ESTA LOJA PEDIU HOJE, uma linha por produto por envio
+ * (ago/2026, pedido do dono do negócio).
  *
- * O DEFEITO QUE ISTO RESOLVE, relatado em produção: a filial ditava cinco
- * itens, o pedido saía, e os itens sumiam da tela. Não era perda de dado —
- * o pedido chegava à matriz —, era falta de COMPROVANTE: a aba Reposição
- * só desenha linha para o que saiu do forno hoje ou para o que a busca
- * trouxe, e a busca é limpa depois do envio. Produto pedido que não tinha
- * fornada hoje ficava sem lugar nenhum onde aparecer.
+ * A tela separa isto em duas sanfonas — PEDIDOS SEM RESPOSTA e PEDIDOS
+ * CONCLUÍDOS — porque as duas listas respondem a perguntas diferentes:
+ * uma diz de quem a filial ainda está esperando, a outra é histórico do
+ * dia. Misturadas, a pergunta que importa ("o que ainda não foi
+ * respondido?") exigia ler tudo.
  *
- * Quem pede precisa ver o que já pediu — senão pede de novo, e chega o
- * dobro.
+ * NÃO AGRUPA POR PRODUTO. Dois envios do mesmo produto podem ter
+ * desfechos diferentes — a matriz aceita o das 9h e recusa o das 11h — e
+ * somar as quantidades esconderia justamente a recusa.
  *
- * Ordena do MAIS RECENTE para o mais antigo, como o resto das listas de
- * reposição do app. Lotes diferentes do mesmo produto SOMAM: quem pediu 10
- * às 9h e 5 às 11h pediu 15 hoje, e é esse número que evita o pedido
- * repetido.
+ * Ordena do MAIS RECENTE para o mais antigo, como o resto do app.
  */
-export function reposicoesDeHojePorProduto(
+export function linhasDeReposicaoDoDia(
   pedidos: PedidoFilial[],
   hoje: string,
   lojaId: string
-): ReposicaoPedidaHoje[] {
-  const mapa = new Map<number, ReposicaoPedidaHoje>();
+): LinhaDeReposicao[] {
+  const linhas: LinhaDeReposicao[] = [];
 
   for (const pedido of pedidos) {
     if (pedido.data !== hoje || pedido.lojaId !== lojaId || !ehReposicao(pedido)) continue;
-    const desfecho = desfechoDaReposicao(pedido);
+    const situacao = desfechoDaReposicao(pedido);
     const quando = pedido.enviadoEm ?? pedido.criadoEm ?? "";
-
     for (const item of pedido.itens) {
-      const atual = mapa.get(item.codigoPdv);
-      mapa.set(item.codigoPdv, {
+      linhas.push({
+        pedidoId: pedido.id,
         codigoPdv: item.codigoPdv,
-        unidades: (atual?.unidades ?? 0) + item.quantidadeUnidades,
-        // O mais recente vence, mesmo que os lotes cheguem fora de ordem.
-        ultimoEm: !atual || quando > atual.ultimoEm ? quando : atual.ultimoEm,
-        vezes: (atual?.vezes ?? 0) + 1,
-        confirmado: (atual?.confirmado ?? false) || desfecho === "confirmado",
-        cancelado:
-          desfecho === "cancelado"
+        unidades: item.quantidadeUnidades,
+        quando,
+        situacao,
+        motivo:
+          situacao === "cancelado"
             ? pedido.atendimento?.motivo || "sem motivo informado"
-            : atual?.cancelado,
+            : undefined,
       });
     }
   }
 
-  return [...mapa.values()].sort((a, b) => b.ultimoEm.localeCompare(a.ultimoEm));
+  return linhas.sort((a, b) => b.quando.localeCompare(a.quando));
+}
+
+/** Pedido que a matriz ainda não aceitou nem recusou. */
+export function semRespostaDaMatriz(linha: LinhaDeReposicao): boolean {
+  return linha.situacao === "pendente";
 }
 
 export function reposicaoEstaPendente(pedido: PedidoFilial): boolean {

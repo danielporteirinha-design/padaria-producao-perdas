@@ -1,46 +1,56 @@
 /**
  * src/components/PainelFornadasFilial.tsx
  * ---------------------------------------------------------------
- * O que já saiu do forno na matriz HOJE, visto da filial, com pedido de
- * reposição embutido (ago/2026).
+ * A aba REPOSIÇÃO da filial (reescrita em ago/2026, a pedido do dono do
+ * negócio, para deixar o app "o mais resumido possível" na implantação).
  *
- * É o objetivo que o dono do negócio descreveu: a filial fica sabendo que
- * o produto ficou pronto AGORA e, se está sem ele no balcão, pede
- * enquanto ainda dá tempo de entregar hoje. A conferência do fim do
- * expediente chega tarde demais para isso.
+ * O QUE MUDOU, E POR QUÊ
+ * -----------------------
+ * 1. PEDIR VIROU MONTAR UMA LISTA, e não disparar um pedido por item.
+ *    Antes, cada produto falado virava um documento na nuvem na hora:
+ *    cinco itens, cinco pedidos, cinco avisos para a matriz. Pior, o item
+ *    saía da tela assim que era enviado — e "sumiu" é indistinguível de
+ *    "o app apagou o que eu pedi", que foi o defeito relatado.
  *
- * A reposição é separada do pedido diário de propósito — misturar as duas
- * esconderia a urgência. A matriz precisa ver que uma loja está pedindo
- * AGORA, não descobrir junto com o planejamento do dia seguinte.
+ *    Agora a fala MONTA. A lista fica na tela, aceita mais itens (falando
+ *    de novo ou pela busca), só é descartada por um botão explícito
+ *    ("Limpar pedido") e só vira pedido quando a pessoa clica em "Enviar
+ *    pedido" — um documento, um aviso.
  *
- * Lista ordenada pela fornada mais RECENTE primeiro: o que acabou de sair
- * é o que ainda está quente e o que a filial tem chance de receber hoje.
+ * 2. A LISTA DE AVISOS DE FORNADA SAIU, e no lugar dela ficaram duas
+ *    sanfonas que respondem à pergunta que a loja realmente faz:
+ *    PEDIDOS SEM RESPOSTA (de quem ainda estou esperando) e PEDIDOS
+ *    CONCLUÍDOS (o que já foi decidido hoje). O aviso de fornada continua
+ *    chegando por push; o que saiu foi a lista que ele alimentava.
+ *
+ * 3. A BUSCA É A SEGUNDA OPÇÃO, logo abaixo do microfone. Falar é o
+ *    caminho curto; digitar é o caminho para um item só, ou para quando o
+ *    reconhecimento não ajuda.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Produto } from "../types/produto";
+import type { ItemPlanoProducao } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
-import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
-import {
-  desfechoDaReposicao,
-  ehReposicao,
-  idDaReposicao,
-  reposicoesDeHojePorProduto,
-} from "../types/pedido";
+import { idDaReposicao } from "../types/pedido";
+import type { LinhaDoDia } from "../lib/reposicaoDoDia";
+import { estaPendente, montarLinhasDoDia } from "../lib/reposicaoDoDia";
+import { dispensarFornada, fornadasDispensadas } from "../lib/fornadasDispensadas";
 import type { Loja } from "../lib/lojas";
 import { dataDeHojeIso } from "../lib/data";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { contemBusca } from "../lib/texto";
-import { IconeChama, IconeConfere, IconeLixeira } from "./Icones";
+import { IconeConfere, IconeLixeira, IconeSeta } from "./Icones";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
 import { AssistenteDeVoz } from "./AssistenteDeVoz";
 import {
-  dispensarFornada,
-  fornadasDispensadas,
-  restaurarFornadas,
-} from "../lib/fornadasDispensadas";
+  apagarRascunhoReposicao,
+  gravarRascunhoReposicao,
+  lerRascunhoReposicao,
+  limparRascunhosDeReposicaoAntigos,
+} from "../lib/rascunhoReposicao";
 
 /** Quantos resultados a busca mostra — ver PainelFornoDeHoje.tsx. */
 const MAXIMO_RESULTADOS = 12;
@@ -48,17 +58,14 @@ const MAXIMO_RESULTADOS = 12;
 interface PainelFornadasFilialProps {
   loja: Loja;
   produtos: Produto[];
+  /** Avisos de fornada da matriz — o "pedido" que vem na outra direção. */
   fornadas: FornadaPronta[];
   pedidos: PedidoFilial[];
   operador: string;
   /**
-   * Produtos que a MATRIZ tirou da vitrine de hoje (ago/2026).
-   *
-   * Diferente do "excluir aviso" logo abaixo, que é arrumação da própria
-   * tela: isto é DISPONIBILIDADE, decidida por quem produz e gravada na
-   * nuvem. Acabou o produto, ou o anúncio foi sem querer — a loja precisa
-   * parar de oferecer no mesmo instante, e não continuar pedindo
-   * mercadoria que não existe mais.
+   * Produtos que a MATRIZ tirou da vitrine de hoje. Acabou o produto — a
+   * loja precisa parar de oferecer no mesmo instante, e não continuar
+   * pedindo mercadoria que não existe mais.
    */
   encerrados: Set<number>;
   onSalvarPedido: (pedido: PedidoFilial) => Promise<void>;
@@ -74,119 +81,118 @@ export function PainelFornadasFilial({
   onSalvarPedido,
 }: PainelFornadasFilialProps) {
   const hoje = dataDeHojeIso();
+  const [busca, setBusca] = useState("");
   const [codigoPedindo, setCodigoPedindo] = useState<number | null>(null);
   const [quantidade, setQuantidade] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [busca, setBusca] = useState("");
-  /**
-   * Avisos que esta loja já resolveu e tirou da lista. Some da tela, não
-   * do banco — ver src/lib/fornadasDispensadas.ts.
-   */
-  const [dispensadas, setDispensadas] = useState(() => fornadasDispensadas(loja.id, hoje));
-
-  /** Produtos com fornada hoje, o mais recente primeiro, sem os dispensados. */
-  const prontosHoje = useMemo(() => {
-    const codigos = [
-      ...new Set(
-        fornadas
-          .filter(
-            (f) =>
-              f.data === hoje &&
-              // Encerrado pela matriz: sumiu da vitrine para todo mundo.
-              !encerrados.has(f.codigoPdv) &&
-              // Dispensado por esta loja: sumiu só desta tela.
-              !dispensadas.has(f.codigoPdv)
-          )
-          .map((f) => f.codigoPdv)
-      ),
-    ];
-    return codigos
-      .map((codigo) => ({
-        produto: produtos.find((p) => p.codigoPdv === codigo),
-        doDia: fornadasDoProduto(fornadas, hoje, codigo),
-      }))
-      .filter((item): item is { produto: Produto; doDia: FornadaPronta[] } => Boolean(item.produto))
-      .sort((a, b) => b.doDia[0].marcadaEm.localeCompare(a.doDia[0].marcadaEm));
-  }, [fornadas, produtos, hoje, dispensadas, encerrados]);
+  const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false);
+  const [aberta, setAberta] = useState<Record<string, boolean>>({ semResposta: true });
 
   /**
-   * O que esta loja já pediu hoje E o que a matriz respondeu.
+   * A lista em montagem sobrevive a trocar de aba e a fechar o app.
    *
-   * A resposta fica na mesma linha do produto de propósito: quem está sem
-   * o item no balcão precisa saber, olhando uma vez só, se adianta
-   * esperar. Uma reposição cancelada num canto separado da tela seria
-   * descoberta tarde demais para a loja fazer outra coisa.
-   *
-   * Cancelamento manda no resumo: se a filial pediu duas vezes e a
-   * segunda foi recusada, é a recusa que muda o que ela faz agora.
+   * Sem isso ela viveria só na memória do componente, e sair da aba
+   * apagaria o que a pessoa acabou de ditar — que é exatamente a queixa
+   * que este painel existe para não repetir. Ver
+   * src/lib/rascunhoReposicao.ts.
    */
-  const jaPedidoHoje = useMemo(() => {
-    const mapa = new Map<
-      number,
-      { unidades: number; cancelado?: string; confirmado: boolean }
-    >();
-    for (const pedido of pedidos) {
-      if (pedido.data !== hoje || pedido.lojaId !== loja.id || !ehReposicao(pedido)) continue;
-      const desfecho = desfechoDaReposicao(pedido);
-      for (const item of pedido.itens) {
-        const atual = mapa.get(item.codigoPdv) ?? { unidades: 0, confirmado: false };
-        mapa.set(item.codigoPdv, {
-          unidades: atual.unidades + item.quantidadeUnidades,
-          cancelado: desfecho === "cancelado" ? pedido.atendimento?.motivo || "sem motivo informado" : atual.cancelado,
-          confirmado: atual.confirmado || desfecho === "confirmado",
-        });
-      }
-    }
-    return mapa;
-  }, [pedidos, hoje, loja.id]);
-
-  /**
-   * O COMPROVANTE DO QUE JÁ FOI PEDIDO HOJE (ago/2026).
-   *
-   * Defeito relatado em produção: a filial ditava cinco itens, o pedido
-   * saía para a matriz, e os itens sumiam da tela. O dado nunca se
-   * perdeu — o que faltava era onde vê-lo: a lista desta aba só desenha
-   * o que saiu do forno hoje, e a busca é limpa depois do envio. Quem
-   * pediu um produto que ainda não teve fornada ficava sem nenhum sinal
-   * de que o pedido existiu, e a leitura natural é "o app apagou".
-   *
-   * Sem isso a pessoa pede de novo, e chega o dobro.
-   */
-  const jaPedidosHoje = useMemo(
-    () => reposicoesDeHojePorProduto(pedidos, hoje, loja.id),
-    [pedidos, hoje, loja.id]
+  const [itens, setItens] = useState<ItemPlanoProducao[]>(
+    () => lerRascunhoReposicao(loja.id, hoje) ?? []
   );
+
+  useEffect(() => {
+    if (itens.length === 0) apagarRascunhoReposicao(loja.id, hoje);
+    else gravarRascunhoReposicao(loja.id, hoje, itens);
+  }, [loja.id, hoje, itens]);
+
+  useEffect(() => {
+    limparRascunhosDeReposicaoAntigos(hoje);
+  }, [hoje]);
 
   const nomePorCodigo = useMemo(
     () => new Map(produtos.map((p) => [p.codigoPdv, p.nome])),
     [produtos]
   );
+  const nomeDoProduto = (codigo: number) => nomePorCodigo.get(codigo) ?? `Produto ${codigo}`;
 
   /**
-   * Busca no catálogo INTEIRO (ago/2026, pedido do dono do negócio).
-   *
-   * A lista de cima só mostra o que já saiu do forno hoje. Mas a loja
-   * fica sem coisa que ainda não foi assada — e, até agora, para isso ela
-   * só tinha o pedido de amanhã, que chega tarde demais quando o produto
-   * está faltando no balcão AGORA. Aqui ela digita o nome, informa a
-   * quantidade e manda: a matriz decide se dá tempo de produzir e
-   * responde, com motivo quando não dá.
-   *
-   * Só produtos ATIVOS na produção: pedir item pausado no cadastro seria
-   * pedir coisa que a padaria decidiu não fazer, e a resposta seria
-   * sempre a mesma recusa.
+   * Avisos que esta loja já resolveu e tirou da frente. Some da tela, não
+   * do banco — ver src/lib/fornadasDispensadas.ts.
+   */
+  const [dispensadas, setDispensadas] = useState(() => fornadasDispensadas(loja.id, hoje));
+
+  /**
+   * O dia inteiro nas DUAS DIREÇÕES: o que eu pedi para a matriz e o que
+   * a matriz anunciou para mim, separados por quem ainda deve resposta.
+   */
+  const linhas = useMemo(
+    () => montarLinhasDoDia({ fornadas, pedidos, hoje, lojaId: loja.id, encerrados, dispensadas }),
+    [fornadas, pedidos, hoje, loja.id, encerrados, dispensadas]
+  );
+  const semResposta = useMemo(() => linhas.filter(estaPendente), [linhas]);
+  const concluidos = useMemo(() => linhas.filter((l) => !estaPendente(l)), [linhas]);
+
+  /**
+   * Busca no catálogo inteiro. Só produtos ATIVOS e não encerrados hoje:
+   * pedir item pausado no cadastro seria pedir coisa que a padaria
+   * decidiu não fazer, e a resposta seria sempre a mesma recusa.
    */
   const resultados = useMemo(() => {
     const termo = busca.trim();
     if (termo.length === 0) return [];
     return produtos
-      .filter((p) => p.ativoNaProducao && contemBusca(p.nome, termo))
+      .filter((p) => p.ativoNaProducao && !encerrados.has(p.codigoPdv) && contemBusca(p.nome, termo))
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
       .slice(0, MAXIMO_RESULTADOS);
-  }, [produtos, busca]);
+  }, [produtos, busca, encerrados]);
 
-  async function enviarReposicao(codigoPdv: number) {
-    if (!ehNumeroValidoPositivo(quantidade)) return;
+  /**
+   * Acrescenta à lista em montagem.
+   *
+   * O mesmo produto dito duas vezes SOMA, em vez de virar duas linhas:
+   * quem falou "10 pão francês" e depois "mais 5 pão francês" está
+   * pedindo 15. A quantidade continua editável na própria linha, então a
+   * soma nunca é uma decisão irreversível.
+   */
+  function acrescentar(novos: { codigoPdv: number; quantidadeUnidades: number }[]) {
+    if (novos.length === 0) return;
+    setItens((atual) => {
+      const lista = [...atual];
+      for (const novo of novos) {
+        if (novo.quantidadeUnidades <= 0) continue;
+        const onde = lista.findIndex((i) => i.codigoPdv === novo.codigoPdv);
+        if (onde >= 0) {
+          lista[onde] = {
+            ...lista[onde],
+            quantidadeUnidades: lista[onde].quantidadeUnidades + novo.quantidadeUnidades,
+          };
+        } else {
+          lista.push({ codigoPdv: novo.codigoPdv, quantidadeUnidades: novo.quantidadeUnidades });
+        }
+      }
+      return lista;
+    });
+  }
+
+  function mudarQuantidade(codigoPdv: number, bruto: string) {
+    const limpo = sanitizarEntradaNumerica(bruto);
+    setItens((atual) =>
+      atual.map((i) =>
+        i.codigoPdv === codigoPdv
+          ? { ...i, quantidadeUnidades: ehNumeroValidoPositivo(limpo) ? paraNumero(limpo) : 0 }
+          : i
+      )
+    );
+  }
+
+  /**
+   * ENVIAR É O ÚNICO MOMENTO EM QUE A MATRIZ FICA SABENDO. Um documento
+   * com a lista inteira, e por consequência um aviso só — e não um por
+   * item, que era o que enchia o celular da matriz.
+   */
+  async function enviarPedido() {
+    const validos = itens.filter((i) => i.quantidadeUnidades > 0);
+    if (validos.length === 0 || enviando) return;
     setEnviando(true);
     const agora = new Date().toISOString();
     try {
@@ -194,180 +200,55 @@ export function PainelFornadasFilial({
         id: idDaReposicao(hoje, loja.id, agora),
         lojaId: loja.id,
         data: hoje,
-        itens: [{ codigoPdv, quantidadeUnidades: paraNumero(quantidade) }],
+        itens: validos,
         status: "enviado",
         tipo: "reposicao",
         criadoPor: operador,
         criadoEm: agora,
         enviadoEm: agora,
       });
-      setCodigoPedindo(null);
-      setQuantidade("");
-      // A busca também sai: pedido mandado, o termo digitado não serve
-      // mais para nada e a lista do forno volta a ser o que a filial vê.
+      // Enviado, a lista da tela cumpriu a função: o que vale agora é o
+      // documento, e ele aparece logo abaixo em "Pedidos sem resposta".
+      setItens([]);
       setBusca("");
-    } catch {
-      // Mensagem vem do aviso global (ver App.tsx).
+      setCodigoPedindo(null);
+      setAberta((a) => ({ ...a, semResposta: true }));
     } finally {
       setEnviando(false);
     }
   }
 
-  /**
-   * Um pedido de reposição com VÁRIOS itens de uma vez (ago/2026, pedido
-   * do dono do negócio).
-   *
-   * O DEFEITO QUE ISTO CORRIGE: cada item virava um pedido e um push
-   * próprios. A loja que precisava de dez produtos disparava dez
-   * notificações para a matriz — e o décimo chegava quando o primeiro já
-   * tinha rolado para fora da bandeja. Uma frase, um pedido, um aviso.
-   */
-  async function enviarReposicaoDeVarios(
-    itens: { codigoPdv: number; quantidadeUnidades: number }[]
-  ) {
-    if (itens.length === 0) return;
-    const agora = new Date().toISOString();
-    await onSalvarPedido({
-      id: idDaReposicao(hoje, loja.id, agora),
-      lojaId: loja.id,
-      data: hoje,
-      itens,
-      status: "enviado",
-      tipo: "reposicao",
-      criadoPor: operador,
-      criadoEm: agora,
-      enviadoEm: agora,
-    });
-    setBusca("");
-  }
+  const totalUnidades = itens.reduce((soma, i) => soma + i.quantidadeUnidades, 0);
+  const faltaQuantidade = itens.some((i) => i.quantidadeUnidades <= 0);
 
-  /**
-   * A linha de um produto, igual na lista do forno e na busca.
-   *
-   * Um jeito só de pedir: a filial que aprendeu a pedir o que saiu do
-   * forno já sabe pedir o que não saiu. `doDia` vazio é o caso da busca —
-   * o produto ainda não foi assado hoje, e a linha diz isso em vez de
-   * fingir uma hora que não existe.
-   */
-  function linhaDoProduto(produto: Produto, doDia: FornadaPronta[], mostrarExcluir = false) {
-    const pedindo = codigoPedindo === produto.codigoPdv;
-    const meuPedido = jaPedidoHoje.get(produto.codigoPdv);
-    const jaPedi = meuPedido?.unidades ?? 0;
-    const saiu = doDia.length > 0;
-
+  /** Uma sanfona, igual nas duas listas. */
+  function sanfona(chave: string, titulo: string, linhasDaLista: LinhaDoDia[]) {
+    const abertaAgora = !!aberta[chave];
     return (
-      <div key={produto.codigoPdv} className="linha-fornada">
-        <div className="info-fornada">
-          <strong>{produto.nome}</strong>
-          <span className="status-filial">
-            {saiu ? (
-              <>
-                {doDia.length > 1 ? `${doDia.length} fornadas · ` : ""}última às{" "}
-                {horaDaUltimaFornada(fornadas, hoje, produto.codigoPdv)}
-              </>
-            ) : (
-              "ainda não saiu do forno hoje"
-            )}
-            {jaPedi > 0 && (
-              <>
-                {" · "}
-                <span className="ja-pedido">
-                  <IconeConfere tamanho={13} /> já pedi {jaPedi} un
-                </span>
-              </>
-            )}
-          </span>
-
-          {/* A RESPOSTA POSITIVA GANHOU LINHA PRÓPRIA (ago/2026).
-              Antes, "não vem" tinha um bloco destacado e o "sim" eram três
-              palavras cinzas coladas no fim de outra frase. A assimetria
-              não era só estética: quem pediu está sem o produto no balcão
-              e precisa saber, de relance, se pode parar de procurar
-              alternativa. Só o "não" respondia isso. */}
-          {meuPedido?.confirmado && (
-            <span className="reposicao-confirmada">
-              <IconeConfere tamanho={14} /> Separado — vem na próxima entrega.
+      <div className={`acordeao-sessao ${abertaAgora ? "aberta" : ""}`}>
+        <div className="cabecalho-sessao">
+          <button
+            type="button"
+            className="abrir-sessao"
+            aria-expanded={abertaAgora}
+            onClick={() => setAberta((a) => ({ ...a, [chave]: !a[chave] }))}
+          >
+            <span className="nome-sessao">{titulo}</span>
+            <span className="contagem-itens">
+              {linhasDaLista.length > 0
+                ? `${linhasDaLista.length} ${linhasDaLista.length === 1 ? "item" : "itens"}`
+                : ""}
             </span>
-          )}
-          {meuPedido?.cancelado && (
-            <span className="reposicao-negada">Não vem: {meuPedido.cancelado}</span>
-          )}
+            <IconeSeta className="seta-sessao" />
+          </button>
         </div>
 
-        {pedindo ? (
-          <div className="editor-quantidade">
-            <input
-              type="text"
-              inputMode="decimal"
-              pattern="[0-9]*[.,]?[0-9]*"
-              autoFocus
-              placeholder="Quantas unidades?"
-              value={quantidade}
-              onChange={(e) => setQuantidade(sanitizarEntradaNumerica(e.target.value))}
-            />
-            <span className="unidade-fixa">un</span>
-            <button
-              type="button"
-              className="primario"
-              disabled={enviando || !ehNumeroValidoPositivo(quantidade)}
-              onClick={() => enviarReposicao(produto.codigoPdv)}
-            >
-              {enviando ? "..." : "Pedir"}
-            </button>
-            <button
-              type="button"
-              className="link"
-              onClick={() => {
-                setCodigoPedindo(null);
-                setQuantidade("");
-              }}
-            >
-              cancelar
-            </button>
-          </div>
-        ) : (
-          /* DOIS BOTÕES DO MESMO TAMANHO, SEPARADOS PELA COR (ago/2026,
-              pedido do dono do negócio).
-
-              "Pedir" era um botão e "excluir aviso" era um link
-              sublinhado: tamanhos, pesos e alvos diferentes para duas
-              decisões que estão lado a lado e valem o mesmo peso — quero
-              este produto, ou tire este aviso da minha frente. O link
-              ainda era um alvo pequeno para um dedo com farinha.
-
-              Agora têm a mesma forma e se distinguem pela cor, que é o
-              que se lê antes do texto: verde é o caminho de seguir
-              adiante, vermelho é o de tirar. O ícone de lixeira repete a
-              mensagem — é o mesmo símbolo que a matriz usa para a mesma
-              ação na tela dela. */
-          <div className="acoes-fornada">
-            <button
-              type="button"
-              className="botao-fornada pedir"
-              onClick={() => {
-                setCodigoPedindo(produto.codigoPdv);
-                setQuantidade("");
-              }}
-            >
-              Pedir
-            </button>
-            {/* Excluir o AVISO, não a fornada: ela continua registrada na
-                nuvem e no relatório do forno. O que some é esta linha,
-                nesta loja, neste aparelho, hoje — para o que ainda precisa
-                de decisão não ficar enterrado no meio do que já foi
-                resolvido. Não aparece na busca: lá o item nem estava na
-                lista para ser tirado dela. */}
-            {mostrarExcluir && (
-              <button
-                type="button"
-                className="botao-fornada excluir"
-                title="Tirar este aviso da lista"
-                aria-label={`Tirar o aviso de ${produto.nome} da lista`}
-                onClick={() => setDispensadas(dispensarFornada(loja.id, hoje, produto.codigoPdv))}
-              >
-                <IconeLixeira tamanho={15} />
-                Excluir
-              </button>
+        {abertaAgora && (
+          <div className="corpo-sessao">
+            {linhasDaLista.length === 0 ? (
+              <p className="nota-rodape">Nada aqui hoje.</p>
+            ) : (
+              linhasDaLista.map((linha) => linhaDoDia(linha))
             )}
           </div>
         )}
@@ -375,63 +256,146 @@ export function PainelFornadasFilial({
     );
   }
 
-  const buscando = busca.trim().length > 0;
+  /**
+   * Uma linha das sanfonas.
+   *
+   * A ETIQUETA DE ORIGEM VEM PRIMEIRO porque as duas direções convivem
+   * na mesma lista: "Eu pedi" é coisa que eu mandei e espero resposta;
+   * "Saiu do forno" é coisa que a matriz mandou e espera a minha. Sem a
+   * etiqueta, as duas linhas se parecem e a pessoa não sabe de quem é a
+   * vez.
+   */
+  function linhaDoDia(linha: LinhaDoDia) {
+    const daMatriz = linha.origem === "matriz";
+    return (
+      <div key={linha.chave} className="linha-reposicao">
+        <span className="nome-reposicao">
+          <span className="topo-reposicao">
+            <em className={`etiqueta-origem ${daMatriz ? "matriz" : "filial"}`}>
+              {daMatriz ? "Saiu do forno" : "Eu pedi"}
+            </em>
+            <strong>{nomeDoProduto(linha.codigoPdv)}</strong>
+          </span>
 
-  /** Nomes que a IA pode escolher ao interpretar o que foi ditado. */
-  const nomesAtivos = useMemo(
-    () => produtos.filter((p) => p.ativoNaProducao).map((p) => p.nome),
-    [produtos]
-  );
+          {linha.situacao === "pendente" && (
+            <span className="reposicao-aguardando">
+              {daMatriz
+                ? `Disponível${linha.vezes && linha.vezes > 1 ? ` · ${linha.vezes} fornadas` : ""} — peça se precisar`
+                : "Aguardando a matriz responder"}
+            </span>
+          )}
+          {linha.situacao === "confirmado" && (
+            <span className="reposicao-confirmada">
+              <IconeConfere tamanho={14} /> Separado — vem na próxima entrega.
+            </span>
+          )}
+          {linha.situacao === "cancelado" && (
+            <span className="reposicao-negada">Não vem: {linha.motivo}</span>
+          )}
+          {linha.situacao === "atendido" && (
+            <span className="reposicao-confirmada">
+              <IconeConfere tamanho={14} /> Você já pediu este produto hoje.
+            </span>
+          )}
+          {linha.situacao === "dispensado" && (
+            <span className="reposicao-aguardando">Aviso dispensado por esta loja.</span>
+          )}
+
+          {/* O aviso pendente da matriz tem DUAS respostas possíveis, e
+              as duas ficam aqui: pedir (o caminho de seguir adiante) ou
+              tirar da frente. Sem elas, a sanfona de cima encheria de
+              avisos que ninguém consegue responder. */}
+          {daMatriz && linha.situacao === "pendente" && (
+            <span className="acoes-fornada">
+              <button
+                type="button"
+                className="botao-fornada pedir"
+                onClick={() => {
+                  setCodigoPedindo(linha.codigoPdv);
+                  setQuantidade("");
+                }}
+              >
+                Pedir
+              </button>
+              <button
+                type="button"
+                className="botao-fornada excluir"
+                aria-label={`Tirar o aviso de ${nomeDoProduto(linha.codigoPdv)} da lista`}
+                onClick={() => setDispensadas(dispensarFornada(loja.id, hoje, linha.codigoPdv))}
+              >
+                <IconeLixeira tamanho={15} />
+              </button>
+            </span>
+          )}
+
+          {/* Quem tocou em "Pedir" digita a quantidade na própria linha. */}
+          {daMatriz && codigoPedindo === linha.codigoPdv && (
+            <span className="editor-quantidade">
+              <input
+                type="text"
+                inputMode="decimal"
+                pattern="[0-9]*"
+                autoFocus
+                placeholder="Quantas unidades?"
+                value={quantidade}
+                onChange={(e) => setQuantidade(sanitizarEntradaNumerica(e.target.value))}
+              />
+              <span className="unidade-fixa">un</span>
+              <button
+                type="button"
+                className="primario"
+                disabled={!ehNumeroValidoPositivo(quantidade)}
+                onClick={() => {
+                  acrescentar([
+                    { codigoPdv: linha.codigoPdv, quantidadeUnidades: paraNumero(quantidade) },
+                  ]);
+                  setCodigoPedindo(null);
+                  setQuantidade("");
+                }}
+              >
+                Incluir
+              </button>
+              <button
+                type="button"
+                className="link"
+                onClick={() => {
+                  setCodigoPedindo(null);
+                  setQuantidade("");
+                }}
+              >
+                cancelar
+              </button>
+            </span>
+          )}
+        </span>
+
+        {linha.unidades !== undefined && <span className="qtd-reposicao">{linha.unidades} un</span>}
+      </div>
+    );
+  }
 
   return (
     <div className="painel-fornadas">
-      {/* Sem título aqui dentro: a aba já se chama "Reposição", e repetir o
-          nome logo abaixo dela é a definição de ruído. */}
       <div className="corpo-fornadas">
-        {/* A busca vem ANTES da lista: quem chegou aqui pelo aviso já vê
-            o item no topo da lista; quem veio porque falta alguma coisa
-            no balcão vem justamente digitar o nome dela. */}
-        {/* O ASSISTENTE VEM PRIMEIRO (ago/2026, pedido do dono do
-            negócio): pedir é o que traz a filial a esta aba, e falar a
-            lista inteira de uma vez é o caminho mais curto que existe
-            para isso. A busca continua abaixo para um item só. */}
+        {/* FALAR VEM PRIMEIRO: pedir é o que traz a filial a esta aba, e
+            dizer a lista inteira de uma vez é o caminho mais curto. */}
         <AssistenteDeVoz
           produtos={produtos}
           modo="pedir"
-          onConfirmar={(itens) =>
-            enviarReposicaoDeVarios(
-              itens
+          acao="adicionar"
+          onConfirmar={async (ditados) =>
+            acrescentar(
+              ditados
                 .filter((i) => i.quantidade && i.quantidade > 0)
-                .map((i) => ({ codigoPdv: i.produto.codigoPdv, quantidadeUnidades: i.quantidade! }))
+                .map((i) => ({
+                  codigoPdv: i.produto.codigoPdv,
+                  quantidadeUnidades: i.quantidade!,
+                }))
             )
           }
         />
 
-        {/* O comprovante fica LOGO ABAixo do microfone: é ali que o
-            pedido nasce, e é ali que a confirmação tem de aparecer. */}
-        {jaPedidosHoje.length > 0 && (
-          <div className="ja-pedi-hoje">
-            <strong className="titulo-ja-pedi">Você já pediu hoje</strong>
-            {jaPedidosHoje.map((linha) => (
-              <div key={linha.codigoPdv} className="linha-ja-pedi">
-                <span className="nome-ja-pedi">
-                  {nomePorCodigo.get(linha.codigoPdv) ?? `Produto ${linha.codigoPdv}`}
-                  {linha.vezes > 1 && <em className="vezes-ja-pedi"> ({linha.vezes} pedidos)</em>}
-                  {linha.confirmado && (
-                    <span className="reposicao-confirmada">
-                      <IconeConfere tamanho={14} /> Separado — vem na próxima entrega.
-                    </span>
-                  )}
-                  {linha.cancelado && (
-                    <span className="reposicao-negada">Não vem: {linha.cancelado}</span>
-                  )}
-                </span>
-                <span className="qtd-ja-pedi">{linha.unidades} un</span>
-              </div>
-            ))}
-          </div>
-        )}
-
+        {/* A BUSCA É A SEGUNDA OPÇÃO, logo abaixo do microfone. */}
         <CampoDeBusca
           className="busca-forno"
           valor={busca}
@@ -440,70 +404,168 @@ export function PainelFornadasFilial({
             setCodigoPedindo(null);
           }}
           placeholder="Buscar produto para pedir..."
-          rotulo="Buscar produto no catálogo para pedir à matriz"
-          nomesParaVoz={nomesAtivos}
-        >
-          {buscando && (
-            <button
-              type="button"
-              className="link"
-              onClick={() => {
-                setBusca("");
-                setCodigoPedindo(null);
-              }}
-            >
-              limpar
-            </button>
-          )}
-        </CampoDeBusca>
+          rotulo="Buscar produto pelo nome"
+        />
 
-        {buscando ? (
-          <>
-            {resultados.length === 0 ? (
-              <p className="nota-rodape">Nenhum produto ativo com esse nome.</p>
-            ) : (
-              resultados.map((produto) =>
-                linhaDoProduto(produto, fornadasDoProduto(fornadas, hoje, produto.codigoPdv))
-              )
+        {busca.trim().length > 0 &&
+          (resultados.length === 0 ? (
+            <p className="nota-rodape">Nenhum produto ativo com esse nome.</p>
+          ) : (
+            resultados.map((produto) => (
+              <div key={produto.codigoPdv} className="linha-fornada">
+                <div className="info-fornada">
+                  <strong>{produto.nome}</strong>
+                </div>
+                {codigoPedindo === produto.codigoPdv ? (
+                  <div className="editor-quantidade">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      pattern="[0-9]*[.,]?[0-9]*"
+                      autoFocus
+                      placeholder="Quantas unidades?"
+                      value={quantidade}
+                      onChange={(e) => setQuantidade(sanitizarEntradaNumerica(e.target.value))}
+                    />
+                    <span className="unidade-fixa">un</span>
+                    <button
+                      type="button"
+                      className="primario"
+                      disabled={!ehNumeroValidoPositivo(quantidade)}
+                      onClick={() => {
+                        acrescentar([
+                          {
+                            codigoPdv: produto.codigoPdv,
+                            quantidadeUnidades: paraNumero(quantidade),
+                          },
+                        ]);
+                        setCodigoPedindo(null);
+                        setQuantidade("");
+                        setBusca("");
+                      }}
+                    >
+                      Incluir
+                    </button>
+                    <button
+                      type="button"
+                      className="link"
+                      onClick={() => {
+                        setCodigoPedindo(null);
+                        setQuantidade("");
+                      }}
+                    >
+                      cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="acoes-fornada">
+                    <button
+                      type="button"
+                      className="botao-fornada pedir"
+                      onClick={() => {
+                        setCodigoPedindo(produto.codigoPdv);
+                        setQuantidade("");
+                      }}
+                    >
+                      Incluir
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          ))}
+
+        {/* A LISTA EM MONTAGEM. Só sai da tela por "Limpar pedido" ou
+            depois de enviada — decisão explícita do dono do negócio. */}
+        {itens.length > 0 && (
+          <div className="pedido-em-montagem">
+            <strong className="titulo-montagem">Pedido de reposição</strong>
+
+            {itens.map((item) => (
+              <div key={item.codigoPdv} className="linha-montagem">
+                <span className="nome-montagem">{nomeDoProduto(item.codigoPdv)}</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  pattern="[0-9]*"
+                  className="qtd-conferencia"
+                  aria-label={`Quantidade de ${nomeDoProduto(item.codigoPdv)}`}
+                  placeholder="qtd"
+                  value={item.quantidadeUnidades > 0 ? String(item.quantidadeUnidades) : ""}
+                  onChange={(e) => mudarQuantidade(item.codigoPdv, e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="tirar-da-lista"
+                  aria-label={`Tirar ${nomeDoProduto(item.codigoPdv)} da lista`}
+                  onClick={() =>
+                    setItens((atual) => atual.filter((i) => i.codigoPdv !== item.codigoPdv))
+                  }
+                >
+                  <IconeLixeira tamanho={16} />
+                </button>
+              </div>
+            ))}
+
+            <p className="nota-rodape">
+              {itens.length} {itens.length === 1 ? "item" : "itens"} · {totalUnidades} unidades
+            </p>
+            {faltaQuantidade && (
+              <p className="nota-rodape">Informe a quantidade dos itens em branco.</p>
             )}
-          </>
-        ) : prontosHoje.length === 0 ? (
-          <p className="aviso-forno-vazio">
-            <IconeChama tamanho={20} />
-            <span>
-              {dispensadas.size > 0
-                ? "Avisos resolvidos. Precisa de algo? Use a busca acima."
-                : "Nada saiu do forno ainda. Precisa de algo? Use a busca acima."}
-            </span>
-          </p>
-        ) : (
-          <>
-            {prontosHoje.map(({ produto, doDia }) => linhaDoProduto(produto, doDia, true))}
-          </>
+
+            <div className="acoes-montagem">
+              {confirmandoLimpeza ? (
+                <>
+                  <button
+                    type="button"
+                    className="perigo"
+                    onClick={() => {
+                      setItens([]);
+                      setConfirmandoLimpeza(false);
+                    }}
+                  >
+                    Apagar os {itens.length}?
+                  </button>
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => setConfirmandoLimpeza(false)}
+                  >
+                    não
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="secundario"
+                  onClick={() => setConfirmandoLimpeza(true)}
+                >
+                  Limpar pedido
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="primario"
+                disabled={enviando || faltaQuantidade}
+                onClick={() => void enviarPedido()}
+              >
+                {enviando ? "Enviando..." : `Enviar pedido (${itens.length})`}
+              </button>
+            </div>
+          </div>
         )}
 
-        {/* Vale com a lista cheia E vazia: quem escondeu tudo por engano
-            precisa do caminho de volta, e é justamente na tela vazia que
-            ele some se ficar dentro da lista. */}
-        {!buscando && dispensadas.size > 0 && (
-          <button
-            type="button"
-            className="pastilha-escondidos"
-            aria-label={`Mostrar de novo ${dispensadas.size} aviso(s) escondido(s)`}
-            onClick={() => setDispensadas(restaurarFornadas(loja.id, hoje))}
-          >
-            <IconeLixeira tamanho={15} />
-            {dispensadas.size}
-            <span className="acao-pastilha">mostrar</span>
-          </button>
-        )}
+        {sanfona("semResposta", "Pedidos sem resposta", semResposta)}
+        {sanfona("concluidos", "Pedidos concluídos", concluidos)}
 
-      {/* Diagnóstico da direção filial -> matriz: dispara um aviso de
-          teste sem criar pedido nenhum. Existe porque "a matriz não
-          recebeu meu pedido" tem três causas diferentes — aparelho não
-          registrado, FCM recusou, ou chegou e o celular não tocou — e as
-          três se parecem com "não chegou nada". */}
-      <TesteDeAvisos destino="matriz" />
+        {/* Diagnóstico da direção filial -> matriz: dispara um aviso de
+            teste sem criar pedido nenhum. Existe porque "a matriz não
+            recebeu meu pedido" tem três causas diferentes — aparelho não
+            registrado, FCM recusou, ou chegou e o celular não tocou — e as
+            três se parecem com "não chegou nada". */}
+        <TesteDeAvisos destino="matriz" />
       </div>
     </div>
   );

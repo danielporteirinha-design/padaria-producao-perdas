@@ -128,8 +128,49 @@ export function lerUidsConfigurados(bruto: string | undefined): Record<string, s
   }
 }
 
+/**
+ * DIAGNÓSTICO — abra no navegador: /api/entrar-como-loja
+ *
+ * Existe porque "ainda pede a senha" tem quatro causas que se parecem na
+ * tela: a variável não foi criada, foi criada com o texto de exemplo, o
+ * UID de uma loja está errado, ou falta a chave de serviço. Sem isto, a
+ * única saída é adivinhar — e adivinhar já custou tempo demais neste
+ * projeto.
+ *
+ * NÃO DEVOLVE SEGREDO. O UID identifica a conta e não autoriza nada; a
+ * chave de serviço aparece só como sim/não. Ainda assim, os UIDs vêm
+ * cortados: o suficiente para conferir, nunca o valor inteiro.
+ */
+function diagnostico(res: any) {
+  const uids = lerUidsConfigurados(process.env.UIDS_LOJAS);
+  const temCredencial = Boolean(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+  const lojas: Record<string, string> = {};
+  for (const id of IDS_DAS_LOJAS) {
+    const uid = uids?.[id];
+    lojas[id] = uid ? `configurado (${uid.slice(0, 6)}...)` : "FALTANDO";
+  }
+
+  res.status(200).json({
+    entradaSemSenhaLigada: Boolean(uids) && temCredencial,
+    variavelUidsLojas: uids ? "presente" : "AUSENTE ou inválida",
+    chaveDeServico: temCredencial ? "presente" : "AUSENTE",
+    lojas,
+    comoLigar:
+      "Na Vercel, crie a variável UIDS_LOJAS com " +
+      '{"MATRIZ":"<uid>","FILIAL_ARTHUR_BERNARDES":"<uid>","FILIAL_BENJAMIN_CONSTANT":"<uid>"} ' +
+      "— os UIDs vêm de Firebase > Authentication > Users, coluna User UID. " +
+      "Depois de salvar, é preciso um deploy novo para a variável valer.",
+  });
+}
+
 // Tipagem mínima e deliberadamente solta, igual às outras funções de /api.
 export default async function handler(req: any, res: any) {
+  // GET é o diagnóstico; POST é a entrada de verdade.
+  if (req.method === "GET") {
+    diagnostico(res);
+    return;
+  }
   if (req.method !== "POST") {
     res.status(405).json({ erro: "Método não permitido — use POST." });
     return;
@@ -138,7 +179,7 @@ export default async function handler(req: any, res: any) {
   const uids = lerUidsConfigurados(process.env.UIDS_LOJAS);
   if (!uids) {
     // DESLIGADO: a tela de login entende este 403 e pede a senha.
-    res.status(403).json({ erro: "Entrada sem senha não está ativa." });
+    res.status(403).json({ erro: "Entrada sem senha não está ativa.", motivo: "sem-uids" });
     return;
   }
 
@@ -150,13 +191,13 @@ export default async function handler(req: any, res: any) {
   // escolhe entre opções fixas, nunca informa um identificador livre.
   const loja = IDS_DAS_LOJAS.find((id) => id === lojaId);
   if (!loja || !uids[loja]) {
-    res.status(403).json({ erro: "Loja não configurada para entrada sem senha." });
+    res.status(403).json({ erro: "Loja não configurada para entrada sem senha.", motivo: "loja-sem-uid" });
     return;
   }
 
   const bruto = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!bruto) {
-    res.status(403).json({ erro: "Servidor sem credencial para assinar a entrada." });
+    res.status(403).json({ erro: "Servidor sem credencial para assinar a entrada.", motivo: "sem-credencial" });
     return;
   }
 
@@ -170,6 +211,6 @@ export default async function handler(req: any, res: any) {
     res.status(200).json({ token });
   } catch (e) {
     console.error("Falha ao assinar entrada sem senha:", e);
-    res.status(403).json({ erro: "Não foi possível preparar a entrada sem senha." });
+    res.status(403).json({ erro: "Não foi possível preparar a entrada sem senha.", motivo: "falha-ao-assinar" });
   }
 }

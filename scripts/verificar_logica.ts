@@ -45,13 +45,13 @@ import {
   idDoPedido,
   itensIguais,
   reposicaoEstaPendente,
-  reposicoesDeHojePorProduto,
   totalDoPedido,
   type PedidoFilial,
 } from "../src/types/pedido";
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "../src/lib/fornadasVistas";
 import { comoLiberarNotificacao, plataformaAtual } from "../src/lib/plataforma";
 import { contemBusca, paraBusca, radical } from "../src/lib/texto";
+import { estaPendente, montarLinhasDoDia } from "../src/lib/reposicaoDoDia";
 import {
   IDS_DAS_LOJAS,
   assinarTokenPersonalizado,
@@ -3473,9 +3473,10 @@ const perdas: RegistroPerda[] = [
 // COMPROVANTE DA REPOSIÇÃO: "o que já pedi hoje"
 // ===================================================================
 {
-  console.log("\n--- Reposicao: o que a filial ja pediu hoje ---");
+  console.log("\n--- Reposicao: as duas sanfonas, nas duas direcoes ---");
 
   const HOJE = "2026-08-28";
+  const LOJA = "FILIAL_ARTHUR_BERNARDES";
   const rep = (
     id: string,
     quando: string,
@@ -3483,19 +3484,24 @@ const perdas: RegistroPerda[] = [
     extra: Partial<PedidoFilial> = {}
   ): PedidoFilial =>
     ({
-      id,
-      lojaId: "FILIAL_ARTHUR_BERNARDES",
-      data: HOJE,
-      itens,
-      status: "enviado",
-      tipo: "reposicao",
-      criadoPor: "Teste",
-      criadoEm: quando,
-      enviadoEm: quando,
-      ...extra,
+      id, lojaId: LOJA, data: HOJE, itens, status: "enviado", tipo: "reposicao",
+      criadoPor: "Teste", criadoEm: quando, enviadoEm: quando, ...extra,
     }) as PedidoFilial;
+  const forno = (codigoPdv: number, quando: string): FornadaPronta =>
+    ({ data: HOJE, codigoPdv, marcadaEm: quando, marcadaPor: "Matriz" }) as FornadaPronta;
 
-  const doisLotes = [
+  const vazio = new Set<number>();
+  const montar = (entrada: Partial<Parameters<typeof montarLinhasDoDia>[0]>) =>
+    montarLinhasDoDia({
+      fornadas: [], pedidos: [], hoje: HOJE, lojaId: LOJA,
+      encerrados: vazio, dispensadas: vazio, ...entrada,
+    });
+
+  /**
+   * O CASO RELATADO: cinco itens ditados, intervalo, mais dois. Nada do
+   * primeiro envio pode sumir por causa do segundo.
+   */
+  const doisEnvios = [
     rep("a", `${HOJE}T09:00:00.000Z`, [
       { codigoPdv: 1, quantidadeUnidades: 20 },
       { codigoPdv: 2, quantidadeUnidades: 10 },
@@ -3506,66 +3512,92 @@ const perdas: RegistroPerda[] = [
       { codigoPdv: 1, quantidadeUnidades: 5 },
     ]),
   ];
+  const soMeus = montar({ pedidos: doisEnvios });
+  afirmar(soMeus.length === 5, `os dois envios convivem: 5 linhas (obtido: ${soMeus.length})`);
+  afirmar(
+    soMeus.some((l) => l.codigoPdv === 2 && l.unidades === 10),
+    "o item do PRIMEIRO envio continua na lista depois do segundo"
+  );
+  afirmar(
+    soMeus.filter((l) => l.codigoPdv === 1).length === 2,
+    "o mesmo produto em dois envios rende duas linhas, e nao uma soma"
+  );
+  afirmar(soMeus.every(estaPendente), "sem decisao da matriz, tudo fica sem resposta");
+  afirmar(soMeus.every((l) => l.origem === "filial"), "sem fornada, so ha linha da filial");
+  afirmar(soMeus[0].quando >= soMeus[4].quando, "do mais recente para o mais antigo");
 
-  const resumo = reposicoesDeHojePorProduto(doisLotes, HOJE, "FILIAL_ARTHUR_BERNARDES");
-  afirmar(resumo.length === 4, `os dois lotes convivem: 4 produtos (obtido: ${resumo.length})`);
-  afirmar(
-    resumo.find((r) => r.codigoPdv === 2)?.unidades === 10,
-    "o item do PRIMEIRO lote continua na lista depois do segundo"
-  );
-  afirmar(
-    resumo.find((r) => r.codigoPdv === 1)?.unidades === 25,
-    "o mesmo produto pedido em dois lotes SOMA (20 + 5 = 25)"
-  );
-  afirmar(
-    resumo.find((r) => r.codigoPdv === 1)?.vezes === 2,
-    "e a tela sabe dizer que foram dois pedidos"
-  );
-  afirmar(resumo[0].codigoPdv === 1 || resumo[0].codigoPdv === 4, "o mais recente vem primeiro");
-  afirmar(
-    resumo[resumo.length - 1].ultimoEm <= resumo[0].ultimoEm,
-    "a ordem e do mais recente para o mais antigo"
-  );
-
-  // Não mistura loja, dia nem o pedido diário.
-  const outraLoja = rep("c", `${HOJE}T12:00:00.000Z`, [{ codigoPdv: 9, quantidadeUnidades: 1 }], {
-    lojaId: "FILIAL_BENJAMIN_CONSTANT",
-  });
-  const ontem = rep("d", `2026-08-27T12:00:00.000Z`, [{ codigoPdv: 8, quantidadeUnidades: 1 }], {
-    data: "2026-08-27",
-  });
-  const diario = rep("e", `${HOJE}T12:00:00.000Z`, [{ codigoPdv: 7, quantidadeUnidades: 1 }], {
-    tipo: undefined,
-  });
-  const filtrado = reposicoesDeHojePorProduto(
-    [...doisLotes, outraLoja, ontem, diario],
-    HOJE,
-    "FILIAL_ARTHUR_BERNARDES"
-  );
-  afirmar(filtrado.length === 4, "outra loja, outro dia e o pedido diario ficam de fora");
-
-  // O desfecho da matriz acompanha o produto.
-  const decidido = [
-    rep("f", `${HOJE}T09:00:00.000Z`, [{ codigoPdv: 5, quantidadeUnidades: 4 }], {
-      atendimento: { desfecho: "cancelado", motivo: "acabou a farinha", decididoPor: "Matriz", decididoEm: `${HOJE}T09:30:00.000Z` },
+  /** A decisão da matriz move a linha para os concluídos. */
+  const decididos = [
+    rep("c", `${HOJE}T09:00:00.000Z`, [{ codigoPdv: 5, quantidadeUnidades: 4 }], {
+      atendimento: { desfecho: "cancelado", motivo: "tem bastante desse produto",
+        decididoPor: "Matriz", decididoEm: `${HOJE}T09:30:00.000Z` },
     } as Partial<PedidoFilial>),
-    rep("g", `${HOJE}T10:00:00.000Z`, [{ codigoPdv: 6, quantidadeUnidades: 4 }], {
-      atendimento: { desfecho: "confirmado", decididoPor: "Matriz", decididoEm: `${HOJE}T10:30:00.000Z` },
+    rep("d", `${HOJE}T10:00:00.000Z`, [{ codigoPdv: 6, quantidadeUnidades: 4 }], {
+      atendimento: { desfecho: "confirmado", decididoPor: "Matriz",
+        decididoEm: `${HOJE}T10:30:00.000Z` },
     } as Partial<PedidoFilial>),
   ];
-  const comDesfecho = reposicoesDeHojePorProduto(decidido, HOJE, "FILIAL_ARTHUR_BERNARDES");
+  const comDecisao = montar({ pedidos: decididos });
+  afirmar(comDecisao.filter(estaPendente).length === 0, "pedido respondido sai de 'sem resposta'");
   afirmar(
-    comDesfecho.find((r) => r.codigoPdv === 5)?.cancelado === "acabou a farinha",
-    "o motivo do cancelamento chega na linha"
+    comDecisao.find((l) => l.codigoPdv === 5)?.motivo === "tem bastante desse produto",
+    "a recusa leva o motivo junto"
   );
   afirmar(
-    comDesfecho.find((r) => r.codigoPdv === 6)?.confirmado === true,
-    "o produto separado aparece como separado"
+    comDecisao.find((l) => l.codigoPdv === 6)?.situacao === "confirmado",
+    "o aceite aparece como confirmado"
+  );
+
+  /**
+   * A OUTRA DIREÇÃO: o aviso de fornada é o "pedido" que a matriz manda,
+   * e fica sem resposta até a filial pedir o produto ou dispensar.
+   */
+  const avisos = [forno(7, `${HOJE}T08:00:00.000Z`), forno(7, `${HOJE}T10:00:00.000Z`), forno(8, `${HOJE}T08:30:00.000Z`)];
+  const soAvisos = montar({ fornadas: avisos });
+  afirmar(soAvisos.length === 2, `duas fornadas do mesmo produto viram UMA linha (obtido: ${soAvisos.length})`);
+  afirmar(soAvisos.every((l) => l.origem === "matriz"), "as linhas do forno sao da matriz");
+  afirmar(soAvisos.every(estaPendente), "aviso nao respondido fica em 'sem resposta'");
+  afirmar(soAvisos.find((l) => l.codigoPdv === 7)?.vezes === 2, "a linha diz quantas fornadas sairam");
+  afirmar(
+    soAvisos.find((l) => l.codigoPdv === 7)?.quando === `${HOJE}T10:00:00.000Z`,
+    "a hora e a da fornada mais recente"
+  );
+
+  const respondido = montar({
+    fornadas: avisos,
+    pedidos: [rep("e", `${HOJE}T11:00:00.000Z`, [{ codigoPdv: 7, quantidadeUnidades: 12 }])],
+  });
+  afirmar(
+    respondido.find((l) => l.origem === "matriz" && l.codigoPdv === 7)?.situacao === "atendido",
+    "pedir o produto responde o aviso da matriz"
   );
   afirmar(
-    reposicoesDeHojePorProduto([], HOJE, "FILIAL_ARTHUR_BERNARDES").length === 0,
-    "sem pedido nenhum, o comprovante nao aparece"
+    respondido.filter(estaPendente).length === 2,
+    "sobra o aviso nao respondido e o meu pedido sem resposta"
   );
+
+  const dispensado = montar({ fornadas: avisos, dispensadas: new Set([8]) });
+  afirmar(
+    dispensado.find((l) => l.codigoPdv === 8)?.situacao === "dispensado",
+    "dispensar o aviso tambem e uma resposta"
+  );
+  afirmar(dispensado.filter(estaPendente).length === 1, "so o aviso restante fica pendente");
+
+  const encerrado = montar({ fornadas: avisos, encerrados: new Set([7]) });
+  afirmar(
+    encerrado.every((l) => l.codigoPdv !== 7),
+    "produto encerrado pela matriz sai das duas listas"
+  );
+
+  /** Não mistura loja, dia nem o pedido diário. */
+  const ruido = [
+    ...doisEnvios,
+    rep("f", `${HOJE}T12:00:00.000Z`, [{ codigoPdv: 9, quantidadeUnidades: 1 }], { lojaId: "FILIAL_BENJAMIN_CONSTANT" }),
+    rep("g", "2026-08-27T12:00:00.000Z", [{ codigoPdv: 8, quantidadeUnidades: 1 }], { data: "2026-08-27" }),
+    rep("h", `${HOJE}T12:00:00.000Z`, [{ codigoPdv: 7, quantidadeUnidades: 1 }], { tipo: undefined }),
+  ];
+  afirmar(montar({ pedidos: ruido }).length === 5, "outra loja, outro dia e o pedido diario ficam de fora");
+  afirmar(montar({}).length === 0, "sem nada, as duas sanfonas ficam vazias");
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

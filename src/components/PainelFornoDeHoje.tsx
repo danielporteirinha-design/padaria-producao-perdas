@@ -146,12 +146,6 @@ export function PainelFornoDeHoje({
     return ordenarPorAnuncioRecente(lista, fornadas, dataHoje);
   }, [plano, encerrados, fornadas, dataHoje]);
 
-  /** Nomes que a IA pode escolher ao interpretar o que foi ditado. */
-  const nomesAtivos = useMemo(
-    () => produtos.filter((p) => p.ativoNaProducao).map((p) => p.nome),
-    [produtos]
-  );
-
   /**
    * Cadastra e anuncia numa ação só.
    *
@@ -293,7 +287,6 @@ export function PainelFornoDeHoje({
           onMudar={setBusca}
           placeholder="Buscar produto para anunciar..."
           rotulo="Buscar produto no catálogo para anunciar a fornada"
-          nomesParaVoz={nomesAtivos}
         >
           {buscando && (
             <button type="button" className="link" onClick={() => setBusca("")}>

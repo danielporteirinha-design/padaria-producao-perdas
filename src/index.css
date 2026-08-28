@@ -232,44 +232,6 @@ button.link {
 .campo-com-voz input { flex: 1; min-width: 0; margin: 0; }
 .campo-com-voz .link { flex-shrink: 0; }
 
-.botao-microfone {
-  flex-shrink: 0;
-  display: grid;
-  place-content: center;
-  /* 44px é o alvo de toque confortável — o dedo aqui é o mesmo que
-     acabou de mexer na massa. */
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  background: var(--cor-superficie);
-  border: 1px solid var(--cor-borda);
-  border-radius: var(--raio);
-  color: var(--cor-acento);
-  cursor: pointer;
-}
-.botao-microfone:disabled { opacity: 0.55; cursor: default; }
-/* Navegador sem reconhecimento de voz: o botão continua VISÍVEL, apagado.
-   Escondê-lo tornava "recurso não existe" indistinguível de "seu
-   navegador não serve" — e a pessoa reportava como defeito uma coisa que
-   funcionava na máquina do lado. Um toque aqui explica em uma frase. */
-.botao-microfone.indisponivel { color: var(--cor-texto-suave); opacity: 0.65; }
-
-/* Ouvindo: o botão inverte e pulsa. Sem sinal visível, ninguém sabe se
-   pode falar — e falar antes da hora perde a primeira palavra. */
-.botao-microfone.ouvindo {
-  background: var(--cor-acento);
-  border-color: var(--cor-acento);
-  color: var(--cor-acento-texto);
-  animation: pulso-microfone 1.1s ease-in-out infinite;
-}
-@keyframes pulso-microfone {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(160, 82, 45, 0.45); }
-  50% { box-shadow: 0 0 0 7px rgba(160, 82, 45, 0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .botao-microfone.ouvindo { animation: none; }
-}
-
 /* Dentro dos painéis de fornada o campo já tinha margem própria. */
 .campo-com-voz.busca-forno { margin-bottom: 10px; }
 .campo-com-voz.campo-busca { width: 100%; }
@@ -1593,58 +1555,108 @@ button.perigo:hover { background: #822525; }
 .botao-assistente:disabled { opacity: 0.6; cursor: not-allowed; }
 /* Enquanto ouve, o botão muda de cor E de texto: o mesmo alvo que abriu
    o microfone é o que fecha, e precisa ficar óbvio que ele está ativo. */
+/* Ouvindo: só a cor muda. A PULSAÇÃO SAIU (ago/2026, decisão do dono do
+   negócio) — o botão piscando enquanto a pessoa fala disputa a atenção
+   justamente no momento em que ela precisa se concentrar na frase. A cor
+   já responde "estou ouvindo", e o rótulo diz como parar. */
 .botao-assistente.ouvindo {
   background: #9b2c2c;
-  animation: pulso-selo 1.2s ease-in-out infinite;
 }
 /* A escolha da loja na tela de entrada: três alvos grandes, um por
    unidade. Substituiu a lista suspensa quando a entrada passou a ser de
    um toque só — lista suspensa exige dois toques e uma leitura. */
-/* O comprovante do que a loja já pediu hoje, na aba Reposição. Existe
-   porque o pedido feito por voz saía da tela sem deixar rastro — e a
-   leitura natural disso é "o app apagou o que eu pedi". */
-.ja-pedi-hoje {
-  margin: 4px 0 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--cor-borda);
-  border-left: 4px solid var(--cor-sucesso);
+/* A lista de reposição EM MONTAGEM, antes de virar pedido. Fica em
+   destaque porque é trabalho não gravado: quem está olhando precisa ver,
+   de relance, que ainda falta enviar. */
+.pedido-em-montagem {
+  margin: 12px 0;
+  padding: 12px;
+  border: 2px solid var(--cor-acento);
   border-radius: var(--raio);
   background: var(--cor-superficie);
 }
-.titulo-ja-pedi {
+.titulo-montagem {
   display: block;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--cor-texto-suave);
-  margin-bottom: 6px;
+  font-size: 15px;
+  margin-bottom: 8px;
 }
-.linha-ja-pedi {
+.linha-montagem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--cor-borda);
+}
+.linha-montagem:first-of-type { border-top: none; }
+.nome-montagem {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+}
+.acoes-montagem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* As duas sanfonas de histórico do dia (sem resposta / concluídos). */
+.linha-reposicao {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  padding: 5px 0;
+  padding: 7px 0;
   border-top: 1px solid var(--cor-borda);
 }
-.linha-ja-pedi:first-of-type { border-top: none; }
-.nome-ja-pedi {
+.linha-reposicao:first-of-type { border-top: none; }
+.nome-reposicao {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   font-size: 15px;
   min-width: 0;
 }
-.vezes-ja-pedi {
-  font-style: normal;
-  font-size: 12px;
-  color: var(--cor-texto-suave);
-}
-.qtd-ja-pedi {
+.qtd-reposicao {
   flex: 0 0 auto;
   font-weight: 700;
   font-size: 15px;
-  color: var(--cor-texto);
+}
+/* A etiqueta de origem: as duas direções convivem na mesma sanfona, e
+   sem ela "Eu pedi" e "Saiu do forno" viram a mesma linha. */
+.topo-reposicao {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.etiqueta-origem {
+  flex: 0 0 auto;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+.etiqueta-origem.filial {
+  background: var(--cor-alerta-fundo);
+  color: var(--cor-alerta);
+}
+.etiqueta-origem.matriz {
+  background: var(--cor-sucesso-fundo);
+  color: var(--cor-sucesso);
+}
+.linha-reposicao .acoes-fornada,
+.linha-reposicao .editor-quantidade {
+  margin-top: 4px;
+}
+
+.reposicao-aguardando {
+  font-size: 13px;
+  color: var(--cor-alerta);
 }
 
 .escolha-de-loja {

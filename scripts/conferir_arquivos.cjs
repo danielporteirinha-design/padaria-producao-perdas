@@ -54,10 +54,21 @@ const CONFERENCIAS = [
   // --- Filial: esconder aviso da própria tela
   ["src/lib/fornadasDispensadas.ts", "dispensarFornada", "Filial: excluir aviso"],
 
-  // --- Busca por voz
-  ["src/components/CampoDeBusca.tsx", "botao-microfone", "Microfone na busca"],
+  // --- Busca e voz
+  // O microfone SAIU do campo de busca (ago/2026): ficou um por tela, no
+  // assistente. Dois microfones com resultados diferentes na mesma tela
+  // faziam a pessoa tocar no errado e concluir que a voz não funciona.
+  ["src/components/CampoDeBusca.tsx", "campo-com-voz", "Campo de busca (sem microfone)"],
   ["src/lib/vozParaBusca.ts", "ouvirUmaFrase", "Reconhecimento de voz"],
   ["api/interpretar-busca.ts", "interpretar", "IA que casa a fala com o catálogo"],
+
+  // --- Reposição da filial: montar a lista e enviar de uma vez
+  ["src/lib/rascunhoReposicao.ts", "gravarRascunhoReposicao", "Reposição: lista em montagem"],
+  ["src/components/PainelFornadasFilial.tsx", "Limpar pedido", "Reposição: limpar e enviar"],
+  ["src/lib/reposicaoDoDia.ts", "montarLinhasDoDia", "Reposição: as duas sanfonas"],
+  ["src/components/PainelFornadasFilial.tsx", "etiqueta-origem", "Reposição: avisos da matriz nas sanfonas"],
+  ["src/components/AssistenteDeVoz.tsx", "NÃO LIMPA A LISTA", "Voz: falar de novo acrescenta"],
+  ["api/entrar-como-loja.ts", "diagnostico", "Entrada sem senha: diagnóstico"],
 
   // --- Sugestão por IA
   ["src/lib/sugestaoProducao.ts", "montarHistoricoDaFilial", "IA: sugestão para a filial"],
