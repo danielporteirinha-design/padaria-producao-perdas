@@ -60,6 +60,13 @@ import {
 import { somarDias } from "../src/lib/data";
 import { incluirItemProduzido, planoContemItem, planoDeHojeCom } from "../src/lib/producaoDeHoje";
 import { abaDaUrl, urlDaAba } from "../src/lib/rota";
+import {
+  agruparPorSegmento,
+  idDoPedidoSuprimentos,
+  idDoSuprimento,
+  variedadesDoPedidoSuprimentos,
+  type Suprimento,
+} from "../src/types/suprimento";
 import { agruparPorCategoria } from "../src/lib/blocosDeImpressao";
 import { proximaDataAlvo } from "../src/lib/dataAlvoDoDia";
 import {
@@ -3026,6 +3033,94 @@ const perdas: RegistroPerda[] = [
     grandes.every((p) => p.totalDoDestino === 40),
     "o rodape conta o DESTINO inteiro, nao so' o que coube na folha"
   );
+}
+
+// ---------------------------------------------------------------
+// Suprimentos: id normalizado, agrupamento por segmento
+// (ver src/types/suprimento.ts)
+// ---------------------------------------------------------------
+{
+  // O id vem do NOME NORMALIZADO: e' o que impede o catalogo de encher de
+  // quase-duplicatas quando cada loja digita do seu jeito.
+  afirmar(
+    idDoSuprimento("Saco Kraft 1kg") === idDoSuprimento("SACO KRAFT 1KG"),
+    "caixa diferente e' o mesmo item"
+  );
+  afirmar(
+    idDoSuprimento("Guardanapo  branco") === idDoSuprimento("guardanapo branco"),
+    "espaco extra nao cria item novo"
+  );
+  afirmar(
+    idDoSuprimento("Sacola Alça 40x50") === idDoSuprimento("sacola alca 40x50"),
+    "acento nao cria item novo"
+  );
+  afirmar(
+    !idDoSuprimento("Saco 1/2 kg").includes("/"),
+    "id nunca leva barra — o Firestore usaria como separador de caminho"
+  );
+  afirmar(
+    idDoSuprimento("Detergente") !== idDoSuprimento("Desinfetante"),
+    "itens diferentes continuam diferentes"
+  );
+
+  afirmar(
+    idDoPedidoSuprimentos("2026-08-28", "FILIAL_A") ===
+      idDoPedidoSuprimentos("2026-08-28", "FILIAL_A"),
+    "reenviar no mesmo dia sobrescreve o mesmo documento"
+  );
+  afirmar(
+    idDoPedidoSuprimentos("2026-08-28", "FILIAL_A") !==
+      idDoPedidoSuprimentos("2026-08-28", "FILIAL_B"),
+    "cada loja tem a lista dela"
+  );
+
+  const catalogo: Suprimento[] = [
+    { id: "SACO_KRAFT", nome: "Saco kraft", segmento: "EMBALAGENS", ativo: true },
+    { id: "GUARDANAPO", nome: "Guardanapo", segmento: "EMBALAGENS", ativo: true },
+    { id: "DETERGENTE", nome: "Detergente", segmento: "LIMPEZA", ativo: true },
+  ];
+  const grupos = agruparPorSegmento(
+    [
+      { suprimentoId: "DETERGENTE", quantidade: 4 },
+      { suprimentoId: "SACO_KRAFT", quantidade: 10 },
+      { suprimentoId: "GUARDANAPO", quantidade: 0 }, // zero nao entra
+      { suprimentoId: "ITEM_SUMIDO", quantidade: 2 }, // fora do catalogo
+    ],
+    catalogo
+  );
+  afirmar(
+    grupos[0].chave === "EMBALAGENS",
+    "embalagens vem antes de limpeza — a ordem da compra"
+  );
+  afirmar(
+    grupos[0].itens.length === 1 && grupos[0].itens[0].nome === "Saco kraft",
+    "quantidade zero nao entra na lista de compra"
+  );
+  const outros = grupos.find((g) => g.chave === "OUTROS");
+  afirmar(
+    outros !== undefined && outros.itens[0].nome === "ITEM_SUMIDO",
+    "item fora do catalogo NAO some da lista — cai em Outros"
+  );
+
+  afirmar(
+    variedadesDoPedidoSuprimentos({
+      id: "x",
+      lojaId: "FILIAL_A",
+      data: "2026-08-28",
+      itens: [
+        { suprimentoId: "A", quantidade: 3 },
+        { suprimentoId: "B", quantidade: 0 },
+      ],
+      status: "enviado",
+      criadoPor: "Ana",
+      criadoEm: "2026-08-28T10:00:00.000Z",
+    }) === 1,
+    "a contagem ignora item zerado"
+  );
+
+  // A aba nova precisa ser destino valido de push, senao o toque no aviso
+  // nao leva a lugar nenhum.
+  afirmar(abaDaUrl("/?aba=suprimentos") === "suprimentos", "push de suprimentos abre a aba certa");
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

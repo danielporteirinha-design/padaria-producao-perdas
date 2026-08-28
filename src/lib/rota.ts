@@ -17,7 +17,14 @@
  */
 
 /** As abas que um aviso pode endereçar. Nem toda aba é destino válido. */
-const ABAS_ENDERECAVEIS = ["fornada", "cronograma", "perdas", "pedido", "analises"] as const;
+const ABAS_ENDERECAVEIS = [
+  "fornada",
+  "cronograma",
+  "perdas",
+  "pedido",
+  "analises",
+  "suprimentos",
+] as const;
 
 export type AbaEnderecavel = (typeof ABAS_ENDERECAVEIS)[number];
 

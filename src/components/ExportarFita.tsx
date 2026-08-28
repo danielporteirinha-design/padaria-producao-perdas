@@ -34,7 +34,12 @@ import { IconeImpressora } from "./Icones";
 interface ExportarFitaProps {
   /** Blocos já prontos: rótulo do bloco + itens. Serve tanto para a fita
    *  de produção (por categoria) quanto para o romaneio de uma filial. */
-  blocos: { rotuloSessao: string; itens: ItemPlanoProducao[] }[];
+  blocos: {
+    rotuloSessao: string;
+    itens: ItemPlanoProducao[];
+    /** Para listas que não são de produto de padaria — ver BlocoSessaoImpressao. */
+    linhasProntas?: { nome: string; unidades: number }[];
+  }[];
   /** Ver DadosImpressaoFita.titulo — é o que distingue os dois documentos. */
   titulo: string;
   /** Texto acima do preview, explicando o que fazer com este papel. */

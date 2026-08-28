@@ -10,7 +10,7 @@ import { TelaLogin } from "./components/TelaLogin";
 import { ImportarDadosLocais } from "./components/ImportarDadosLocais";
 import { AvisoGlobal, type Aviso } from "./components/AvisoGlobal";
 import { ehFalhaTemporariaDeRede, mensagemDeFalhaAoSalvar } from "./lib/errosFirestore";
-import { dataDeHojeIso, diaDaSemanaDeData } from "./lib/data";
+import { dataDeHojeIso, diaDaSemanaDeData, formatarDataBr } from "./lib/data";
 import { incluirItemProduzido, planoDeHojeCom } from "./lib/producaoDeHoje";
 import { gerarId } from "./lib/id";
 import { TelaCronograma } from "./components/TelaCronograma";
@@ -30,9 +30,16 @@ import { base64DoDataUrl, resumoDaImpressao, type TrabalhoImpressao } from "./ty
 import { codigosComFornadaNoDia, idDaFornada, type FornadaPronta } from "./types/fornada";
 import { codigosEncerrados, idDoEncerramento, type AnuncioEncerrado } from "./types/anuncio";
 import {
+  agruparPorSegmento,
+  variedadesDoPedidoSuprimentos,
+  type PedidoSuprimentos,
+  type Suprimento,
+} from "./types/suprimento";
+import {
   avisarDesfechoReposicao,
   avisarFiliais,
   avisarListaAjustada,
+  avisarListaDeSuprimentos,
   avisarListaEnviada,
   avisarMatriz,
   ErroAviso,
@@ -43,12 +50,15 @@ import { AtivarAvisos } from "./components/AtivarAvisos";
 import { PainelFornoDeHoje } from "./components/PainelFornoDeHoje";
 import { PainelFornadasFilial } from "./components/PainelFornadasFilial";
 import { PainelPedidosFiliais } from "./components/PainelPedidosFiliais";
+import { PainelSuprimentos } from "./components/PainelSuprimentos";
+import { TelaSuprimentos } from "./components/TelaSuprimentos";
+import { ExportarFita } from "./components/ExportarFita";
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "./lib/fornadasVistas";
 import { abaDaUrl } from "./lib/rota";
 import { useDiaCorrente } from "./lib/useDiaCorrente";
 import { prepararSom, tocarAvisoSonoro } from "./lib/somDeAviso";
 
-type Aba = "cronograma" | "fornada" | "cadastro" | "perdas" | "analises" | "pedido";
+type Aba = "cronograma" | "fornada" | "cadastro" | "perdas" | "analises" | "pedido" | "suprimentos";
 
 interface DefinicaoAba {
   chave: Aba;
@@ -99,18 +109,35 @@ interface DefinicaoAba {
  * Na matriz "Reposição" fica logo depois de Cronograma; na filial, antes
  * de "Programação" — é o que é perecível.
  */
+/**
+ * A ORDEM É A DO DIA DE TRABALHO (ago/2026, decisão do dono do negócio).
+ *
+ * Reposição primeiro porque é a aba do expediente inteiro — abre de manhã
+ * e é usada até fechar. Perdas em seguida, que é o lançamento de todo
+ * dia. A lista de produção depois: ela é montada uma vez, no fim do
+ * expediente. Cadastro e Análises no fim, que são consulta e manutenção.
+ *
+ * "Cronograma" virou "Lista de Produção" nas duas contas: era o nome
+ * interno do documento vazando para a tela, e ninguém na padaria chamava
+ * aquilo de cronograma.
+ *
+ * AS CHAVES NÃO MUDAM. Elas aparecem nos links dos avisos
+ * (`/?aba=cronograma`, ver src/lib/rota.ts) e renomeá-las quebraria todo
+ * push já entregue que ainda esteja na bandeja de alguém.
+ */
 const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
   matriz: [
-    { chave: "cronograma", rotulo: "Cronograma" },
     { chave: "fornada", rotulo: "Reposição" },
-    { chave: "cadastro", rotulo: "Produtos" },
     { chave: "perdas", rotulo: "Perdas" },
+    { chave: "cronograma", rotulo: "Lista de Produção" },
+    { chave: "cadastro", rotulo: "Produtos" },
     { chave: "analises", rotulo: "Análises" },
   ],
   filial: [
     { chave: "fornada", rotulo: "Reposição" },
-    { chave: "pedido", rotulo: "Programação" },
+    { chave: "suprimentos", rotulo: "Suprimentos" },
     { chave: "perdas", rotulo: "Perdas" },
+    { chave: "pedido", rotulo: "Lista de Produção" },
     // Análises entrou para a filial em ago/2026, travada na própria loja:
     // quem decide o que pedir amanhã é quem está no balcão, e até aqui
     // ela pedia sem enxergar o próprio desperdício. Ver TelaAnalises.
@@ -252,6 +279,13 @@ export default function App() {
   const [nomeSugerido, setNomeSugerido] = useState("");
   const [aba, setAba] = useState<Aba>("cronograma");
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  /** Catálogo de embalagens e material de limpeza — ver types/suprimento.ts. */
+  const [suprimentos, setSuprimentos] = useState<Suprimento[]>([]);
+  const [pedidosSuprimentos, setPedidosSuprimentos] = useState<PedidoSuprimentos[]>([]);
+  /** Lista de suprimentos aberta para impressão, ou null. */
+  const [suprimentosParaImprimir, setSuprimentosParaImprimir] = useState<PedidoSuprimentos | null>(
+    null
+  );
   const [planos, setPlanos] = useState<PlanoDeProducaoDiario[]>([]);
   const [perdas, setPerdas] = useState<RegistroPerda[]>([]);
   const [pedidos, setPedidos] = useState<PedidoFilial[]>([]);
@@ -442,10 +476,20 @@ export default function App() {
       diaCorrente,
       setAnunciosEncerrados
     );
+    // Suprimentos entram na escuta pelo mesmo motivo dos pedidos: a lista
+    // chega da filial enquanto a matriz está com a tela aberta, e uma
+    // carga única na abertura faria a matriz descobrir só no dia seguinte.
+    const desligarSuprimentos = repositorio.observarSuprimentos(setSuprimentos);
+    const desligarPedidosSuprimentos = repositorio.observarPedidosSuprimentos(
+      loja.papel === "filial" ? loja.id : undefined,
+      setPedidosSuprimentos
+    );
     return () => {
       desligarPedidos();
       desligarFornadas();
       desligarAnuncios();
+      desligarSuprimentos();
+      desligarPedidosSuprimentos();
     };
   }, [repositorio, loja, carregando, diaCorrente]);
 
@@ -891,6 +935,43 @@ export default function App() {
   }
 
   /**
+   * Cadastra uma embalagem ou material que ainda não existia (ago/2026).
+   * O catálogo é compartilhado pelas três lojas — ver
+   * src/types/suprimento.ts sobre por que o id vem do nome normalizado.
+   */
+  async function handleCadastrarSuprimento(suprimento: Suprimento) {
+    await comRetorno(
+      () => repositorio!.salvarSuprimento(suprimento),
+      `"${suprimento.nome}" entrou na lista de suprimentos.`
+    );
+    setSuprimentos((atual) => [
+      ...atual.filter((s) => s.id !== suprimento.id),
+      suprimento,
+    ]);
+  }
+
+  /**
+   * A filial manda a lista de suprimentos para a matriz.
+   *
+   * O aviso é EFEITO, não a operação: se o push falhar, a lista já está
+   * gravada e a matriz a vê ao abrir a aba. Falhar em vermelho aqui faria
+   * a filial mandar de novo achando que não foi.
+   */
+  async function handleEnviarSuprimentos(pedido: PedidoSuprimentos) {
+    await comRetorno(
+      () => repositorio!.salvarPedidoSuprimentos(pedido),
+      "Lista de suprimentos enviada para a matriz."
+    );
+    setPedidosSuprimentos((atual) => [...atual.filter((p) => p.id !== pedido.id), pedido]);
+
+    try {
+      await avisarListaDeSuprimentos(variedadesDoPedidoSuprimentos(pedido));
+    } catch (erro) {
+      console.warn("Lista de suprimentos gravada, mas o aviso à matriz não saiu:", erro);
+    }
+  }
+
+  /**
    * A matriz confirma a lista de uma filial — possivelmente com outras
    * quantidades (ago/2026, decisão do dono do negócio).
    *
@@ -1283,6 +1364,64 @@ export default function App() {
       </nav>
 
       <main className="conteudo-app">
+        {/*
+          IMPRESSÃO DA LISTA DE SUPRIMENTOS (ago/2026)
+          ---------------------------------------------------------------
+          Cobre a aba inteira em vez de abrir outra tela: a matriz toca em
+          "Imprimir" no card da loja, vê o papel, manda para o caixa e
+          volta ao mesmo lugar. É uma parada de dez segundos no meio do
+          expediente, não uma mudança de assunto.
+
+          Formato contínuo — um cabeçalho, um rodapé, segmentos em blocos.
+          Este papel vai inteiro para quem faz a compra; picotá-lo por
+          segmento seria dar dois pedaços para a mesma ida ao mercado.
+        */}
+        {suprimentosParaImprimir && (
+          <div className="tela">
+            <h2>Suprimentos — {nomeDaLoja(suprimentosParaImprimir.lojaId)}</h2>
+            <ExportarFita
+              blocos={agruparPorSegmento(suprimentosParaImprimir.itens, suprimentos).map(
+                (grupo) => ({
+                  rotuloSessao: grupo.rotulo,
+                  itens: [],
+                  linhasProntas: grupo.itens.map((i) => ({
+                    nome: i.nome,
+                    unidades: i.quantidade,
+                  })),
+                })
+              )}
+              titulo={nomeDaLoja(suprimentosParaImprimir.lojaId)}
+              instrucao="Embalagens e material de limpeza pedidos por esta loja. Um papel só, do começo ao fim — leve para a compra."
+              dataFormatada={formatarDataBr(suprimentosParaImprimir.data)}
+              produtos={produtos}
+              montadoPor={operador}
+              formato="continuo"
+              nomeArquivoBase={`suprimentos-${suprimentosParaImprimir.lojaId.toLowerCase()}-${suprimentosParaImprimir.data}`}
+              onImprimirNoCaixa={(canvases, titulo) =>
+                handleImprimirNoCaixa(
+                  canvases,
+                  `Suprimentos — ${titulo}`,
+                  `suprimentos-${suprimentosParaImprimir.lojaId.toLowerCase()}-${suprimentosParaImprimir.data}`
+                )
+              }
+            />
+            <div className="acoes">
+              <button
+                type="button"
+                className="secundario"
+                onClick={() => setSuprimentosParaImprimir(null)}
+              >
+                Voltar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Com o papel na tela, o resto da aba sai do caminho: dois
+            assuntos empilhados na mesma rolagem seria a pior hora para
+            confundir uma lista com a outra. */}
+        {!suprimentosParaImprimir && (
+        <>
         {abaAtual === "cronograma" && (
           <TelaCronograma
             produtos={produtos}
@@ -1337,6 +1476,14 @@ export default function App() {
                 onMarcarFornada={handleMarcarFornada}
                 onCadastrarProduto={handleCadastroRelampago}
               />
+              {/* Suprimentos chegam aqui pelo mesmo motivo das reposições:
+                  é o que uma loja está pedindo à matriz e espera resposta.
+                  Ver PainelSuprimentos.tsx. */}
+              <PainelSuprimentos
+                pedidos={pedidosSuprimentos.filter((p) => p.data === diaCorrente)}
+                catalogo={suprimentos}
+                onImprimir={setSuprimentosParaImprimir}
+              />
             </>
           ) : (
             <PainelFornadasFilial
@@ -1349,6 +1496,18 @@ export default function App() {
               onSalvarPedido={handleSalvarPedido}
             />
           ))}
+
+        {abaAtual === "suprimentos" && (
+          <TelaSuprimentos
+            loja={loja}
+            catalogo={suprimentos}
+            pedidos={pedidosSuprimentos}
+            operador={operador}
+            hoje={diaCorrente}
+            onCadastrarSuprimento={handleCadastrarSuprimento}
+            onEnviarLista={handleEnviarSuprimentos}
+          />
+        )}
 
         {abaAtual === "pedido" && (
           <TelaPedidoFilial
@@ -1392,6 +1551,8 @@ export default function App() {
             ehMatriz={loja.papel === "matriz"}
             carregarFornadas={carregarFornadasDoPeriodo}
           />
+        )}
+        </>
         )}
       </main>
 

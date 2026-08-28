@@ -2084,6 +2084,24 @@ button.perigo:hover { background: #822525; }
    números de largura fixa: a matriz percorre a coluna de horas para saber
    o que chegou primeiro, e dígitos de larguras diferentes desalinham essa
    leitura vertical. */
+/* ---------------------------------------------------------------
+   Suprimentos (ago/2026)
+   O resumo do que vai ser enviado, fora das sanfonas: com os segmentos
+   fechados, é a única forma de conferir a lista inteira sem abrir um por
+   um antes de mandar.
+   --------------------------------------------------------------- */
+.resumo-suprimentos {
+  margin: 16px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+}
+.resumo-suprimentos .sessao-do-card:first-child h4 { margin-top: 0; }
+.cartao-suprimentos { display: block; }
+.titulo-suprimentos { display: block; margin-bottom: 10px; font-size: 16px; }
+.cartao-suprimentos .grupo-reposicao { margin-top: 8px; }
+
 .hora-pedido {
   margin-right: 8px;
   color: var(--cor-acento);

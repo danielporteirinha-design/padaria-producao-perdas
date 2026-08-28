@@ -175,6 +175,43 @@ service cloud.firestore {
     // a hora de cada uma, e continuam alimentando o relatório do forno.
     // Este documento diz "não ofereça mais hoje", não "isto nunca
     // aconteceu".
+    /**
+     * Catálogo de suprimentos — embalagens e material de limpeza
+     * (ago/2026).
+     *
+     * QUALQUER LOJA CADASTRA, e é de propósito: quem descobre que uma
+     * embalagem nova entrou em uso é quem está no balcão usando. Exigir
+     * que a matriz cadastre transformaria um cadastro de dois minutos
+     * numa espera de dois dias, e a filial acabaria pedindo por WhatsApp
+     * — que é exatamente o caminho que este app existe para substituir.
+     *
+     * O id vem do nome normalizado (ver idDoSuprimento), então cadastrar
+     * o mesmo item de novo atualiza em vez de encher o catálogo de
+     * quase-duplicatas.
+     *
+     * Não se apaga: item fora de uso vira `ativo: false` e continua
+     * legível nos pedidos antigos.
+     */
+    match /suprimentos/{suprimentoId} {
+      allow read: if lojaConhecida();
+      allow create, update: if lojaConhecida()
+                            && request.resource.data.nome is string
+                            && request.resource.data.segmento is string;
+      allow delete: if false;
+    }
+
+    /**
+     * Lista de suprimentos de uma loja. Mesma forma dos pedidos: a loja
+     * escreve a dela, a matriz lê todas.
+     */
+    match /pedidos_suprimentos/{pedidoId} {
+      allow read: if ehMatriz() || (lojaConhecida() && resource.data.lojaId == lojaDoUsuario());
+      allow create, update: if lojaConhecida()
+                            && request.resource.data.lojaId == lojaDoUsuario();
+      // Lista enviada não some: se a loja desistir, ela zera os itens.
+      allow delete: if false;
+    }
+
     match /anuncios_encerrados/{anuncioId} {
       allow read: if lojaConhecida();
       allow write: if ehMatriz();

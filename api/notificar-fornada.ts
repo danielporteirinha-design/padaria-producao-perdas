@@ -206,6 +206,8 @@ export default async function handler(req: any, res: any) {
       /** A matriz confirmou a lista da filial com mudanças (ago/2026). */
       listaAjustada?: boolean;
       itensAlterados?: number;
+      /** Lista de embalagens e material de limpeza (ago/2026). */
+      suprimentos?: boolean;
     } = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {});
     const {
       nomeProduto,
@@ -220,10 +222,17 @@ export default async function handler(req: any, res: any) {
       variedades,
       listaAjustada,
       itensAlterados,
+      suprimentos,
     } = corpoBruto;
     // O aviso de lista diária e o de teste não falam de um produto — os
     // outros, sim, e sem o nome o celular receberia um aviso em branco.
-    if (!teste && !listaDiaria && !listaAjustada && (!nomeProduto || typeof codigoPdv !== "number")) {
+    if (
+      !teste &&
+      !listaDiaria &&
+      !listaAjustada &&
+      !suprimentos &&
+      (!nomeProduto || typeof codigoPdv !== "number")
+    ) {
       throw new ErroNotificacao("Faltou o produto no pedido de aviso.", 400);
     }
 
@@ -317,6 +326,21 @@ export default async function handler(req: any, res: any) {
           : "A matriz confirmou sua lista com mudanças. Toque para ver.";
       etiqueta = `lista-ajustada-${destinoDirigido}`;
       destinoNoApp = "/?aba=pedido";
+    } else if (suprimentos) {
+      /**
+       * Lista de suprimentos enviada pela filial (ago/2026).
+       *
+       * Embalagem que acabou não espera: sem saco, o pão não sai da loja.
+       * Uma etiqueta por LOJA — reenviar a lista corrigida substitui o
+       * aviso em vez de empilhar dois.
+       */
+      titulo = `${quemChamou.nome} pediu suprimentos`;
+      corpo =
+        typeof variedades === "number" && variedades > 0
+          ? `${variedades} ${variedades === 1 ? "item" : "itens"} entre embalagens e limpeza. Toque para ver.`
+          : "Lista de suprimentos enviada. Toque para ver.";
+      etiqueta = `suprimentos-${quemChamou.id}`;
+      destinoNoApp = "/?aba=fornada";
     } else if (listaDiaria) {
       /**
        * Lista diária enviada pela filial (ago/2026). É planejamento, não

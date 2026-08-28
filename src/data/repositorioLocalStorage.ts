@@ -13,6 +13,7 @@ import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
 import type { PedidoFilial } from "../types/pedido";
+import type { PedidoSuprimentos, Suprimento } from "../types/suprimento";
 import type { FornadaPronta } from "../types/fornada";
 import type { AnuncioEncerrado } from "../types/anuncio";
 import type { EstadoTrabalhoImpressao } from "../types/impressao";
@@ -22,6 +23,8 @@ import type { Repositorio } from "./repositorio";
 const CHAVE_PRODUTOS = "padaria:produtos";
 const CHAVE_PLANOS = "padaria:planos";
 const CHAVE_PERDAS = "padaria:perdas";
+const CHAVE_SUPRIMENTOS = "padaria:suprimentos";
+const CHAVE_PEDIDOS_SUPRIMENTOS = "padaria:pedidos-suprimentos";
 
 function ler<T>(chave: string, valorInicial: T): T {
   const bruto = localStorage.getItem(chave);
@@ -135,6 +138,33 @@ export class RepositorioLocalStorage implements Repositorio {
   ): () => void {
     void this.listarPedidos(lojaId).then(aoMudar);
     return () => {};
+  }
+
+  // -------------------------------------------------------- suprimentos
+  observarSuprimentos(aoMudar: (suprimentos: Suprimento[]) => void): () => void {
+    aoMudar(ler<Suprimento[]>(CHAVE_SUPRIMENTOS, []));
+    return () => {};
+  }
+
+  async salvarSuprimento(suprimento: Suprimento): Promise<Suprimento> {
+    const todos = ler<Suprimento[]>(CHAVE_SUPRIMENTOS, []);
+    escrever(CHAVE_SUPRIMENTOS, [...todos.filter((s) => s.id !== suprimento.id), suprimento]);
+    return suprimento;
+  }
+
+  observarPedidosSuprimentos(
+    lojaId: string | undefined,
+    aoMudar: (pedidos: PedidoSuprimentos[]) => void
+  ): () => void {
+    const todos = ler<PedidoSuprimentos[]>(CHAVE_PEDIDOS_SUPRIMENTOS, []);
+    aoMudar(lojaId ? todos.filter((p) => p.lojaId === lojaId) : todos);
+    return () => {};
+  }
+
+  async salvarPedidoSuprimentos(pedido: PedidoSuprimentos): Promise<PedidoSuprimentos> {
+    const todos = ler<PedidoSuprimentos[]>(CHAVE_PEDIDOS_SUPRIMENTOS, []);
+    escrever(CHAVE_PEDIDOS_SUPRIMENTOS, [...todos.filter((p) => p.id !== pedido.id), pedido]);
+    return pedido;
   }
 
   async salvarPedido(pedido: PedidoFilial): Promise<PedidoFilial> {

@@ -119,6 +119,15 @@ export interface BlocoSessaoImpressao {
   rotuloSessao: string;
   itens: ItemPlanoProducao[];
   /**
+   * Linhas já resolvidas, para o que NÃO é produto de padaria.
+   *
+   * A lista de suprimentos (embalagens, material de limpeza) não tem
+   * `codigoPdv` — os itens vivem em outra coleção, com id de texto (ver
+   * src/types/suprimento.ts). Em vez de inventar códigos falsos só para
+   * caber neste formato, quem já sabe o nome entrega o nome pronto.
+   */
+  linhasProntas?: { nome: string; unidades: number }[];
+  /**
    * Marca o início do documento de OUTRO destino dentro da mesma bobina.
    * Quando as duas filiais são impressas de uma vez, a separação entre
    * elas precisa ser inconfundível — misturar o pedido de uma loja com o
@@ -184,7 +193,7 @@ export function computarBlocos(
 ): BlocoComputado[] {
   const alturaRodape = temAssinatura ? ALTURA_RODAPE_BLOCO_ASSINADO : ALTURA_RODAPE_BLOCO;
   return sessoes.map((sessao) => {
-    const linhas = linhasDoBloco(sessao.itens, produtos);
+    const linhas = sessao.linhasProntas ?? linhasDoBloco(sessao.itens, produtos);
     const alturaMarcador = sessao.inicioDeDestino ? ALTURA_MARCADOR_DESTINO : 0;
     const altura =
       alturaMarcador + ALTURA_CABECALHO_BLOCO + Math.max(linhas.length, 1) * ALTURA_LINHA + alturaRodape;
@@ -366,7 +375,7 @@ export function computarBlocosContinuos(
   produtos: Produto[]
 ): BlocoContinuo[] {
   return sessoes.map((sessao) => {
-    const linhas = linhasDoBloco(sessao.itens, produtos);
+    const linhas = sessao.linhasProntas ?? linhasDoBloco(sessao.itens, produtos);
     return {
       rotuloSessao: sessao.rotuloSessao,
       linhas,

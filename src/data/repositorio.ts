@@ -11,6 +11,7 @@ import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
 import type { PedidoFilial } from "../types/pedido";
+import type { PedidoSuprimentos, Suprimento } from "../types/suprimento";
 import type { EstadoTrabalhoImpressao, TrabalhoImpressao } from "../types/impressao";
 import type { FornadaPronta } from "../types/fornada";
 import type { AnuncioEncerrado } from "../types/anuncio";
@@ -55,6 +56,23 @@ export interface Repositorio {
    * dados que mudam durante o expediente como se fossem estáticos.
    */
   observarPedidos(lojaId: string | undefined, aoMudar: (pedidos: PedidoFilial[]) => void): () => void;
+
+  // ------------------------------------------------------- suprimentos
+  /**
+   * Embalagens e material de limpeza (ago/2026). Coleção própria, e não
+   * o catálogo de produtos — ver src/types/suprimento.ts sobre por quê.
+   *
+   * O catálogo é COMPARTILHADO pelas três lojas: o que uma filial
+   * cadastra passa a existir para a outra. Duas listas paralelas de saco
+   * de pão, uma por loja, é como se perde o histórico de compra.
+   */
+  observarSuprimentos(aoMudar: (suprimentos: Suprimento[]) => void): () => void;
+  salvarSuprimento(suprimento: Suprimento): Promise<Suprimento>;
+  observarPedidosSuprimentos(
+    lojaId: string | undefined,
+    aoMudar: (pedidos: PedidoSuprimentos[]) => void
+  ): () => void;
+  salvarPedidoSuprimentos(pedido: PedidoSuprimentos): Promise<PedidoSuprimentos>;
 
   /**
    * Enfileira imagens para a impressora térmica do caixa. Um documento

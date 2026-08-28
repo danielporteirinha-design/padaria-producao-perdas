@@ -46,6 +46,7 @@ import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { LancamentoPerdaInput, RegistroPerda } from "../types/perda";
 import type { PedidoFilial } from "../types/pedido";
+import type { PedidoSuprimentos, Suprimento } from "../types/suprimento";
 import type { EstadoTrabalhoImpressao, TrabalhoImpressao } from "../types/impressao";
 import type { FornadaPronta } from "../types/fornada";
 import type { AnuncioEncerrado } from "../types/anuncio";
@@ -58,6 +59,8 @@ const COL_PEDIDOS = "pedidos";
 const COL_IMPRESSAO = "fila_impressao";
 const COL_FORNADAS = "fornadas";
 const COL_ANUNCIOS = "anuncios_encerrados";
+const COL_SUPRIMENTOS = "suprimentos";
+const COL_PEDIDOS_SUPRIMENTOS = "pedidos_suprimentos";
 
 /** Erro de domínio — sempre com mensagem apresentável ao operador. */
 export class ErroRepositorio extends Error {}
@@ -232,6 +235,58 @@ export class RepositorioFirestore implements Repositorio {
 
   async salvarPedido(pedido: PedidoFilial): Promise<PedidoFilial> {
     await setDoc(doc(db, COL_PEDIDOS, pedido.id), limpar(pedido));
+    return pedido;
+  }
+
+  // -------------------------------------------------------- suprimentos
+
+  /**
+   * Catálogo compartilhado pelas três lojas. Sem filtro por loja de
+   * propósito: o saco de pão é o mesmo em qualquer balcão, e uma lista
+   * por loja faria a mesma embalagem existir três vezes com três
+   * grafias.
+   */
+  observarSuprimentos(aoMudar: (suprimentos: Suprimento[]) => void): () => void {
+    return onSnapshot(
+      collection(db, COL_SUPRIMENTOS),
+      (snap) =>
+        aoMudar(
+          snap.docs
+            .map((d) => d.data() as Suprimento)
+            .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+        ),
+      (erro) => console.warn("Escuta do catálogo de suprimentos interrompida:", erro)
+    );
+  }
+
+  async salvarSuprimento(suprimento: Suprimento): Promise<Suprimento> {
+    // O id vem do nome normalizado (ver idDoSuprimento): cadastrar o
+    // mesmo item de novo atualiza em vez de criar um quase-igual.
+    await setDoc(doc(db, COL_SUPRIMENTOS, suprimento.id), limpar(suprimento));
+    return suprimento;
+  }
+
+  observarPedidosSuprimentos(
+    lojaId: string | undefined,
+    aoMudar: (pedidos: PedidoSuprimentos[]) => void
+  ): () => void {
+    const consulta = lojaId
+      ? query(collection(db, COL_PEDIDOS_SUPRIMENTOS), where("lojaId", "==", lojaId))
+      : collection(db, COL_PEDIDOS_SUPRIMENTOS);
+    return onSnapshot(
+      consulta,
+      (snap) =>
+        aoMudar(
+          snap.docs
+            .map((d) => d.data() as PedidoSuprimentos)
+            .sort((a, b) => a.data.localeCompare(b.data))
+        ),
+      (erro) => console.warn("Escuta dos pedidos de suprimentos interrompida:", erro)
+    );
+  }
+
+  async salvarPedidoSuprimentos(pedido: PedidoSuprimentos): Promise<PedidoSuprimentos> {
+    await setDoc(doc(db, COL_PEDIDOS_SUPRIMENTOS, pedido.id), limpar(pedido));
     return pedido;
   }
 

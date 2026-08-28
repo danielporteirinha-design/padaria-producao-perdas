@@ -105,6 +105,15 @@ const CONFERENCIAS = [
   ["src/components/PainelFornadasFilial.tsx", "botao-fornada", "Filial: Pedir e Excluir do mesmo tamanho"],
   ["src/index.css", "chip-setor", "Estilo do cadastro relampago"],
 
+  // --- Suprimentos (embalagens e material de limpeza)
+  ["src/types/suprimento.ts", "idDoSuprimento", "Modelo de suprimentos"],
+  ["src/components/TelaSuprimentos.tsx", "cadastrarEUsar", "Filial: aba Suprimentos"],
+  ["src/components/PainelSuprimentos.tsx", "PainelSuprimentos", "Matriz: recebe e imprime suprimentos"],
+  ["src/data/repositorioFirestore.ts", "pedidos_suprimentos", "Firestore: colecao dos suprimentos"],
+  ["firestore.rules", "pedidos_suprimentos", "Regras dos suprimentos (COLAR NO CONSOLE!)"],
+  ["src/lib/avisarFiliais.ts", "avisarListaDeSuprimentos", "Aviso de suprimentos"],
+  ["src/App.tsx", "Lista de Produção", "Abas renomeadas e reordenadas"],
+
   // --- Cronograma: cards autônomos por loja
   ["src/types/pedido.ts", "ajustarPedidoPelaMatriz", "Matriz confirma a lista da filial"],
   ["src/components/TelaCronograma.tsx", "confirmarListaDaLoja", "Revisar/editar/confirmar por loja"],

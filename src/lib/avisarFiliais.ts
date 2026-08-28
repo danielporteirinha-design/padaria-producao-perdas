@@ -124,6 +124,18 @@ export async function avisarListaAjustada(
 }
 
 /**
+ * Avisa a MATRIZ que esta filial enviou a lista de suprimentos
+ * (ago/2026).
+ *
+ * Embalagem que acabou não espera: sem saco, o pão não sai da loja. O
+ * aviso existe para a lista não ficar parada num documento que só é
+ * descoberto quando alguém lembra de abrir a aba.
+ */
+export async function avisarListaDeSuprimentos(variedades: number): Promise<ResultadoAviso> {
+  return enviar({ suprimentos: true, variedades });
+}
+
+/**
  * Dispara um aviso de teste para os aparelhos das filiais, sem marcar
  * fornada nenhuma. Existe porque a alternativa para conferir se o push
  * funciona é marcar uma fornada de mentira — que entra no histórico do dia
