@@ -32,7 +32,8 @@
  * decidir. Um pedido com o produto errado custa uma entrega errada.
  */
 
-import { paraBusca } from "./texto";
+import { paraBusca, radicalDaFrase } from "./texto";
+import { trocarApelidos } from "./apelidosDeProdutos";
 import { entenderQuantidade } from "./vozRespostas";
 
 export interface ItemFalado {
@@ -81,7 +82,12 @@ const COMANDOS = [
 ];
 
 /** Palavras que sobram depois do número e não ajudam a achar o produto. */
-const RUIDO = ["UNIDADES", "UNIDADE", "UN", "PECAS", "PECA", "ITENS", "ITEM", "DE", "DO", "DA"];
+const RUIDO = [
+  "UNIDADES", "UNIDADE", "UN",
+  "PECAS", "PECA", "ITENS", "ITEM",
+  "DUZIA", "DUZIAS",
+  "DE", "DO", "DA", "DOS", "DAS",
+];
 
 /**
  * Quebra a frase em trechos, um por item.
@@ -176,8 +182,14 @@ function pareceMesmaPalavra(a: string, b: string): boolean {
   return distancia(ca, cb) <= folga;
 }
 
+/**
+ * `trecho` chega AQUI já em radical (ver `melhorProduto`); o nome do
+ * catálogo é reduzido do mesmo jeito. É essa simetria que faz "pães
+ * sovados" encontrar "PÃO SOVADO" sem afrouxar nada: as duas pontas
+ * viram "PAO SOVADO", e a comparação segue exigindo palavra inteira.
+ */
 function pontuar(nome: string, trecho: string): number {
-  const palavrasDoNome = paraBusca(nome)
+  const palavrasDoNome = radicalDaFrase(paraBusca(nome))
     .split(/\s+/)
     .filter((p) => p.length > 2);
   if (palavrasDoNome.length === 0) return 0;
@@ -231,13 +243,25 @@ function pontuar(nome: string, trecho: string): number {
  * palavras casadas), que é o que a pessoa disse por extenso.
  */
 function melhorProduto(trecho: string, nomes: string[]): string {
+  /**
+   * Duas reduções antes de comparar, nesta ordem:
+   *
+   * 1. RADICAL — singular e plural passam a ser a mesma palavra, dos
+   *    dois lados ("pães sovados" e "PÃO SOVADO" viram "PAO SOVADO").
+   * 2. APELIDO — o nome do balcão vira o nome do cadastro ("pão de sal"
+   *    vira "PAO FRANCES"). Depois do radical, para que o apelido valha
+   *    também no plural: "pães de sal".
+   */
+  const alvo = trocarApelidos(radicalDaFrase(trecho), nomes);
+  if (!alvo) return "";
+
   let melhor = "";
   let melhorNota = 0;
   let melhorTamanho = 0;
   for (const nome of nomes) {
-    const nota = pontuar(nome, trecho);
+    const nota = pontuar(nome, alvo);
     if (nota < 0.5) continue;
-    const tamanho = paraBusca(nome).split(/\s+/).filter((p) => p.length > 2).length;
+    const tamanho = radicalDaFrase(paraBusca(nome)).split(/\s+/).filter((p) => p.length > 2).length;
     if (nota > melhorNota || (nota === melhorNota && tamanho > melhorTamanho)) {
       melhor = nome;
       melhorNota = nota;

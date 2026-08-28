@@ -50,7 +50,13 @@ import {
 } from "../src/types/pedido";
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "../src/lib/fornadasVistas";
 import { comoLiberarNotificacao, plataformaAtual } from "../src/lib/plataforma";
-import { contemBusca, paraBusca } from "../src/lib/texto";
+import { contemBusca, paraBusca, radical } from "../src/lib/texto";
+import {
+  IDS_DAS_LOJAS,
+  assinarTokenPersonalizado,
+  lerUidsConfigurados,
+} from "../api/entrar-como-loja";
+import { LOJAS } from "../src/lib/lojas";
 import {
   fornadasPorFaixaDeHora,
   produtosPorNumeroDeFornadas,
@@ -1888,6 +1894,22 @@ const perdas: RegistroPerda[] = [
   // Não pode virar um filtro que aceita qualquer coisa.
   afirmar(!contemBusca("PÃO FRANCÊS", "bolo"), "termo que nao existe continua sem resultado");
   afirmar(contemBusca("PÃO FRANCÊS", ""), "termo vazio nao exclui nada");
+
+  // ----- SINGULAR E PLURAL SÃO A MESMA BUSCA -----
+  afirmar(radical("PAES") === radical("PAO"), "PAES e PAO tem o mesmo radical");
+  afirmar(radical("SOVADOS") === radical("SOVADO"), "SOVADOS e SOVADO");
+  afirmar(radical("FRANCESES") === radical("FRANCES"), "plural duplo: FRANCESES e FRANCES");
+  afirmar(radical("PASTEIS") === radical("PASTEL"), "PASTEIS e PASTEL");
+  afirmar(radical("PUDINS") === radical("PUDIM"), "PUDINS e PUDIM");
+  afirmar(radical("DOCES") === radical("DOCE"), "DOCES e DOCE (nao vira DOC)");
+  afirmar(radical("QUEIJOS") === radical("QUEIJO"), "QUEIJOS e QUEIJO");
+  afirmar(radical("REIS") !== radical("REL"), "REIS e plural de REI, nao de REL");
+  afirmar(radical("BOLO") !== radical("BROA"), "radical nao junta produtos diferentes");
+  afirmar(radical("PAO") === "PAO", "palavra no singular passa intacta");
+  afirmar(contemBusca("PÃO SOVADO", "pães sovados"), '"pães sovados" acha "PÃO SOVADO"');
+  afirmar(contemBusca("PÃO DE QUEIJO CONGELADO", "queijos"), '"queijos" acha o pao de queijo');
+  afirmar(contemBusca("PÃO FRANCÊS", "franc"), "busca por trecho continua funcionando");
+  afirmar(!contemBusca("PÃO FRANCÊS", "bolos"), "plural nao inventa resultado");
 }
 
 // ---------------------------------------------------------------
@@ -3283,11 +3305,166 @@ const perdas: RegistroPerda[] = [
     );
   }
 
+  /**
+   * QUEM PEDE FALA NO PLURAL (ago/2026, defeito relatado em produção).
+   *
+   * "pães sovados" não achava "PÃO SOVADO": a comparação exigia a
+   * palavra idêntica. Agora as duas pontas viram radical.
+   */
+  const COM_SOVADO = [...CATALOGO, "PAO SOVADO", "PAO DE MEL"];
+  for (const frase of [
+    "10 paes sovados",
+    "10 pao sovado",
+    "10 paes sovado",
+    "10 paes sovadas",
+  ]) {
+    const lido = interpretarFrase(frase, COM_SOVADO);
+    afirmar(
+      lido.itens.length === 1 && lido.itens[0].nome === "PAO SOVADO",
+      `"${frase}" acha PAO SOVADO (obtido: ${JSON.stringify(lido)})`
+    );
+  }
+
+  /** O plural duplo do produto mais vendido da casa. */
+  for (const frase of ["20 paes franceses", "20 pães francêses", "20 pao frances"]) {
+    const lido = interpretarFrase(frase, COM_SOVADO);
+    afirmar(
+      lido.itens.length === 1 && lido.itens[0].nome === "PAO FRANCES",
+      `"${frase}" acha PAO FRANCES (obtido: ${JSON.stringify(lido)})`
+    );
+  }
+
+  /** O plural não pode juntar produtos que são diferentes. */
+  afirmar(
+    interpretarFrase("10 broas de fuba", COM_SOVADO).itens[0]?.nome === "BROA DE FUBA",
+    "plural nao confunde BROA DE FUBA com BOLO DE FUBA"
+  );
+  afirmar(
+    interpretarFrase("10 bolos de fuba com goiabada", COM_SOVADO).itens[0]?.nome ===
+      "BOLO DE FUBA COM GOIABADA",
+    "plural mantem BOLO DE FUBA COM GOIABADA separado de BROA DE FUBA"
+  );
+
+  /**
+   * APELIDO DO BALCÃO. Em Minas ninguém pede "pão francês": pede pão de
+   * sal. O apelido vale no plural, e só quando o destino existe.
+   */
+  for (const frase of ["30 paes de sal", "30 pao de sal", "30 paozinho"]) {
+    const lido = interpretarFrase(frase, COM_SOVADO);
+    afirmar(
+      lido.itens.length === 1 &&
+        lido.itens[0].nome === "PAO FRANCES" &&
+        lido.itens[0].quantidade === 30,
+      `"${frase}" vira PAO FRANCES com 30 (obtido: ${JSON.stringify(lido)})`
+    );
+  }
+  afirmar(
+    interpretarFrase("30 pao de sal", ["BROA DE FUBA"]).itens.length === 0,
+    "apelido nao inventa produto: sem PAO FRANCES no catalogo, nao casa nada"
+  );
+  const cadastroGanha = interpretarFrase("30 pao de sal", [...COM_SOVADO, "PAO DE SAL"]);
+  afirmar(
+    cadastroGanha.itens.length === 1 && cadastroGanha.itens[0].nome === "PAO DE SAL",
+    `cadastro com o nome do apelido ganha do apelido (obtido: ${JSON.stringify(cadastroGanha)})`
+  );
+
+  /** Plural e apelido convivem com vários produtos na mesma frase. */
+  const frasePlural = interpretarFrase("20 paes de sal e 10 paes sovados", COM_SOVADO);
+  afirmar(
+    frasePlural.itens.length === 2 &&
+      frasePlural.itens[0].nome === "PAO FRANCES" &&
+      frasePlural.itens[0].quantidade === 20 &&
+      frasePlural.itens[1].nome === "PAO SOVADO" &&
+      frasePlural.itens[1].quantidade === 10,
+    `apelido e plural juntos na mesma frase (obtido: ${JSON.stringify(frasePlural)})`
+  );
+
+  /** A quantidade por extenso não pode ser destruída pelo radical. */
+  const extenso = interpretarFrase("duas duzias de paes sovados", COM_SOVADO);
+  afirmar(
+    extenso.itens.length === 1 && extenso.itens[0].quantidade === 24,
+    `"duas duzias" continua 24 (obtido: ${JSON.stringify(extenso)})`
+  );
+  const porExtenso = interpretarFrase("tres paes sovados", COM_SOVADO);
+  afirmar(
+    porExtenso.itens.length === 1 && porExtenso.itens[0].quantidade === 3,
+    `"tres" continua 3 (obtido: ${JSON.stringify(porExtenso)})`
+  );
+
   /** E a divisão por número não pode partir um nome que traz "de". */
   const queijo = interpretarFrase("10 pao de queijo", CATALOGO);
   afirmar(
     queijo.itens.length === 1 && queijo.itens[0].quantidade === 10,
     `"10 pao de queijo" continua um item so (obtido: ${JSON.stringify(queijo)})`
+  );
+}
+
+// ===================================================================
+// ENTRADA SEM SENHA (provisória) — api/entrar-como-loja.ts
+// ===================================================================
+{
+  console.log("\n--- Entrada sem senha: token personalizado e chave de desligar ---");
+
+  // Chave descartável, gerada aqui: o teste confere FORMATO e ASSINATURA
+  // sem rede e sem chegar perto da conta de serviço de verdade.
+  const { generateKeyPairSync, createVerify } = await import("node:crypto");
+  const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const conta = {
+    client_email: "teste@projeto.iam.gserviceaccount.com",
+    private_key: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+  };
+
+  const AGORA = 1_700_000_000;
+  const token = assinarTokenPersonalizado("uid-da-matriz", conta, AGORA);
+  const partes = token.split(".");
+  afirmar(partes.length === 3, "token personalizado tem tres partes");
+
+  const decodificar = (p: string) =>
+    JSON.parse(Buffer.from(p.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString());
+  const cabecalho = decodificar(partes[0]);
+  const corpo = decodificar(partes[1]);
+
+  afirmar(cabecalho.alg === "RS256", "assinatura RS256, que e o que o Firebase aceita");
+  afirmar(corpo.uid === "uid-da-matriz", "o token carrega o UID da loja");
+  afirmar(corpo.iss === conta.client_email && corpo.sub === conta.client_email, "iss e sub sao a conta de servico");
+  afirmar(
+    corpo.aud ===
+      "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit",
+    "publico-alvo e o Identity Toolkit"
+  );
+  afirmar(corpo.exp - corpo.iat === 3600, "validade de uma hora, que e o teto do Firebase");
+
+  const conferente = createVerify("RSA-SHA256");
+  conferente.update(`${partes[0]}.${partes[1]}`);
+  afirmar(
+    conferente.verify(publicKey, Buffer.from(partes[2].replace(/-/g, "+").replace(/_/g, "/"), "base64")),
+    "a assinatura confere com a chave publica"
+  );
+
+  /**
+   * A CHAVE DE DESLIGAR. Sem `UIDS_LOJAS`, o recurso está desligado e a
+   * tela de login volta a pedir senha sozinha — é assim que a volta atrás
+   * acontece sem publicar versão nova.
+   */
+  /** A lista repetida na função de API não pode divergir da do app. */
+  afirmar(
+    IDS_DAS_LOJAS.length === LOJAS.length &&
+      IDS_DAS_LOJAS.every((id, i) => id === LOJAS[i].id),
+    "as lojas da funcao de API sao as mesmas de src/lib/lojas.ts"
+  );
+
+  afirmar(lerUidsConfigurados(undefined) === null, "sem a variavel, o recurso fica desligado");
+  afirmar(lerUidsConfigurados("   ") === null, "variavel vazia tambem desliga");
+  afirmar(lerUidsConfigurados("{isso nao e json") === null, "JSON quebrado desliga, nao explode");
+  afirmar(lerUidsConfigurados('{"OUTRA_COISA":"x"}') === null, "UID de loja desconhecida nao vale");
+  afirmar(
+    lerUidsConfigurados('{"MATRIZ":"abc","FILIAL_ARTHUR_BERNARDES":"  "}')?.MATRIZ === "abc",
+    "UID em branco e descartado, o preenchido vale"
+  );
+  const so = lerUidsConfigurados('{"MATRIZ":"abc","FILIAL_ARTHUR_BERNARDES":"  "}');
+  afirmar(
+    so !== null && Object.keys(so).length === 1,
+    "loja sem UID configurado nao entra sem senha (cai na senha)"
   );
 }
 

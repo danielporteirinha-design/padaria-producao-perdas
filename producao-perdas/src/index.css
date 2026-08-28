@@ -1597,6 +1597,34 @@ button.perigo:hover { background: #822525; }
   background: #9b2c2c;
   animation: pulso-selo 1.2s ease-in-out infinite;
 }
+/* A escolha da loja na tela de entrada: três alvos grandes, um por
+   unidade. Substituiu a lista suspensa quando a entrada passou a ser de
+   um toque só — lista suspensa exige dois toques e uma leitura. */
+.escolha-de-loja {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin: 4px 0 12px;
+}
+.botao-loja {
+  width: 100%;
+  padding: 15px 12px;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  color: var(--cor-texto);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.botao-loja:disabled { opacity: 0.6; cursor: default; }
+.botao-loja.escolhida {
+  border-color: var(--cor-acento);
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+}
+
 .instrucao-assistente {
   margin: 8px 0 0;
   font-size: 14px;
