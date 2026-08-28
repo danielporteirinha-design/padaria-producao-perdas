@@ -1,0 +1,317 @@
+/**
+ * src/components/AssistenteDeVoz.tsx
+ * ---------------------------------------------------------------
+ * Uma frase, uma confirmação (ago/2026, pedido do dono do negócio).
+ *
+ * O QUE ISTO SUBSTITUIU
+ * ----------------------
+ * A versão anterior era um diálogo falado: o app perguntava o produto,
+ * ouvia, perguntava a quantidade, ouvia, perguntava se podia enviar,
+ * ouvia. Cinco aberturas de microfone e cinco falas do aparelho para um
+ * anúncio. O relato foi direto: ficou lento, e desligar o microfone deu
+ * trabalho — exatamente o custo que o modo por voz existia para tirar.
+ *
+ * Agora: toca, fala a frase inteira, confere e confirma com um toque.
+ * O app não fala mais nada; a leitura é feita nos bastidores e o
+ * resultado aparece escrito.
+ *
+ * DOIS PAPÉIS, UMA TELA
+ * ----------------------
+ * - A MATRIZ anuncia: "anunciar fornada de palito vegetariano".
+ * - A FILIAL pede: "20 pão francês e 10 broa de fubá".
+ *
+ * É o mesmo componente porque é a mesma mecânica — falar, ler o que foi
+ * entendido, confirmar. O que muda é o texto e o que a confirmação
+ * dispara.
+ *
+ * UM PEDIDO, UM AVISO. A filial que precisa de dez produtos diz os dez
+ * numa frase e a matriz recebe UMA notificação com a lista. Antes cada
+ * item era um pedido e um push: dez itens viravam dez avisos, e o
+ * décimo chegava quando o primeiro já tinha sido esquecido.
+ *
+ * A CONFIRMAÇÃO NÃO É DISPENSÁVEL. O reconhecimento erra, e o erro aqui
+ * não fica na tela de quem falou: vira mercadoria separada errada. Ler
+ * três linhas antes de tocar em "Confirmar" custa dois segundos.
+ */
+
+import { useEffect, useRef, useState } from "react";
+import type { Produto } from "../types/produto";
+import { afinarComIA, ErroDeVoz, ouvirUmaFrase, vozDisponivel } from "../lib/vozParaBusca";
+import { interpretarFrase, type ItemFalado } from "../lib/interpretarPedidoFalado";
+import { paraBusca } from "../lib/texto";
+import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
+import { IconeLixeira, IconeMicrofone } from "./Icones";
+
+export interface ItemDitado {
+  produto: Produto;
+  quantidade: number | null;
+}
+
+interface AssistenteDeVozProps {
+  produtos: Produto[];
+  /**
+   * `anunciar` (matriz) — a quantidade é opcional, e a frase costuma ter
+   * um produto só. `pedir` (filial) — a quantidade é obrigatória, e a
+   * frase costuma ter vários.
+   */
+  modo: "anunciar" | "pedir";
+  /**
+   * O que a confirmação faz de fato. `enviar` manda na hora (reposição,
+   * anúncio); `adicionar` só põe na lista que ainda vai ser conferida e
+   * enviada por um botão próprio (a Lista de Produção da filial).
+   *
+   * Existe porque o rótulo tem que dizer a verdade: "Enviar (3)" num
+   * botão que apenas acrescenta à montagem faria a pessoa achar que já
+   * mandou o pedido — e o pedido ficaria parado na tela dela.
+   */
+  acao?: "enviar" | "adicionar";
+  onConfirmar: (itens: ItemDitado[]) => Promise<void>;
+}
+
+export function AssistenteDeVoz({
+  produtos,
+  modo,
+  acao = "enviar",
+  onConfirmar,
+}: AssistenteDeVozProps) {
+  const [ouvindo, setOuvindo] = useState(false);
+  const [pensando, setPensando] = useState(false);
+  const [frase, setFrase] = useState("");
+  const [itens, setItens] = useState<ItemDitado[]>([]);
+  const [sobras, setSobras] = useState<string[]>([]);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const cancelarEscuta = useRef<(() => void) | null>(null);
+  const montado = useRef(true);
+  useEffect(() => {
+    montado.current = true;
+    return () => {
+      montado.current = false;
+      cancelarEscuta.current?.();
+    };
+  }, []);
+
+  const ativos = produtos.filter((p) => p.ativoNaProducao);
+  const pedindo = modo === "pedir";
+
+  function limpar() {
+    setItens([]);
+    setSobras([]);
+    setFrase("");
+    setErro("");
+  }
+
+  /**
+   * Um toque no botão: começa a ouvir; tocando de novo, PARA.
+   *
+   * O mesmo alvo para começar e para parar foi o pedido explícito —
+   * antes, encerrar o microfone dependia de achar outro caminho na tela.
+   */
+  async function ditar() {
+    if (ouvindo) {
+      cancelarEscuta.current?.();
+      return;
+    }
+    if (!vozDisponivel()) {
+      setErro(
+        "Este navegador não reconhece voz. No computador funciona no Chrome ou no Edge; " +
+          "no celular, no Chrome (Android) ou no Safari (iPhone)."
+      );
+      return;
+    }
+    limpar();
+    setOuvindo(true);
+    try {
+      const sessao = ouvirUmaFrase();
+      cancelarEscuta.current = sessao.cancelar;
+      const dito = await sessao.promessa;
+      if (!montado.current) return;
+      setOuvindo(false);
+      if (!dito) return;
+      setFrase(dito);
+      await interpretar(dito);
+    } catch (falha) {
+      if (!montado.current) return;
+      setErro(falha instanceof ErroDeVoz ? falha.message : "Não consegui usar o microfone agora.");
+    } finally {
+      if (montado.current) {
+        setOuvindo(false);
+        cancelarEscuta.current = null;
+      }
+    }
+  }
+
+  /**
+   * Lê a frase: primeiro por texto, aqui mesmo; depois, só para o que
+   * sobrou, com a IA. A ordem importa — o casamento local é instantâneo e
+   * resolve o caso comum, e chamar a rede antes dele acrescentaria espera
+   * a toda frase para ajudar em poucas.
+   */
+  async function interpretar(dito: string) {
+    const nomes = ativos.map((p) => p.nome);
+    const leitura = interpretarFrase(dito, nomes);
+    let encontrados = leitura.itens;
+    const sobrando: string[] = [];
+
+    if (leitura.naoReconhecidos.length > 0) {
+      setPensando(true);
+      for (const trecho of leitura.naoReconhecidos) {
+        const afinado = await afinarComIA(trecho, nomes);
+        if (!montado.current) return;
+        const produto = afinado
+          ? ativos.find((p) => paraBusca(p.nome) === paraBusca(afinado))
+          : undefined;
+        if (produto) {
+          // A quantidade sai do trecho original: a IA devolve só o nome.
+          const daFrase = interpretarFrase(`${trecho} ${produto.nome}`, [produto.nome]).itens[0];
+          encontrados = [...encontrados, { nome: produto.nome, quantidade: daFrase?.quantidade ?? null }];
+        } else {
+          sobrando.push(trecho);
+        }
+      }
+      setPensando(false);
+    }
+
+    setItens(paraItens(encontrados));
+    setSobras(sobrando);
+    if (encontrados.length === 0) {
+      setErro(`Não achei nenhum produto em "${dito}".`);
+    }
+  }
+
+  function paraItens(lidos: ItemFalado[]): ItemDitado[] {
+    return lidos
+      .map((lido) => {
+        const produto = ativos.find((p) => p.nome === lido.nome);
+        return produto ? { produto, quantidade: lido.quantidade } : null;
+      })
+      .filter((i): i is ItemDitado => i !== null);
+  }
+
+  const faltaQuantidade = pedindo && itens.some((i) => i.quantidade === null || i.quantidade <= 0);
+
+  async function confirmar() {
+    if (itens.length === 0 || faltaQuantidade || enviando) return;
+    setEnviando(true);
+    try {
+      await onConfirmar(itens);
+      limpar();
+    } catch {
+      /* o aviso global cuida da mensagem */
+    } finally {
+      if (montado.current) setEnviando(false);
+    }
+  }
+
+  const pergunta =
+    modo === "anunciar"
+      ? itens.length === 1
+        ? `Posso anunciar a fornada de ${itens[0].produto.nome}?`
+        : `Posso anunciar ${itens.length} fornadas?`
+      : acao === "adicionar"
+        ? "Confere antes de incluir na lista:"
+        : "Confere o pedido antes de enviar:";
+
+  return (
+    <div className="assistente-voz">
+      <button
+        type="button"
+        className={`botao-assistente ${ouvindo ? "ouvindo" : ""}`}
+        aria-label={ouvindo ? "Parar de ouvir" : "Falar"}
+        disabled={pensando || enviando}
+        onClick={() => void ditar()}
+      >
+        <IconeMicrofone tamanho={26} />
+        {ouvindo ? "Ouvindo... toque para parar" : pedindo ? "Pedir falando" : "Anunciar falando"}
+      </button>
+
+      {/* A instrução escrita e o exemplo saíram (ago/2026, decisão do
+          dono do negócio). O rótulo do botão já diz o que ele faz, e a
+          conferência logo abaixo mostra o que foi entendido — as duas
+          linhas de texto ocupavam a dobra da tela repetindo isso. */}
+
+      {pensando && <p className="nota-rodape">Entendendo o que você disse...</p>}
+      {erro && <p className="erro-conversao">{erro}</p>}
+
+      {itens.length > 0 && (
+        <div className="conferencia-voz">
+          <strong className="pergunta-conferencia">{pergunta}</strong>
+          {frase && <p className="frase-ouvida">"{frase}"</p>}
+
+          {itens.map((item, indice) => (
+            <div key={item.produto.codigoPdv} className="linha-conferencia">
+              <span className="nome-item-loja">{item.produto.nome}</span>
+
+              {pedindo ? (
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  pattern="[0-9]*"
+                  className="qtd-conferencia"
+                  aria-label={`Quantidade de ${item.produto.nome}`}
+                  placeholder="qtd"
+                  value={item.quantidade === null ? "" : String(item.quantidade)}
+                  onChange={(e) => {
+                    const bruto = sanitizarEntradaNumerica(e.target.value);
+                    setItens((atual) =>
+                      atual.map((i, n) =>
+                        n === indice
+                          ? { ...i, quantidade: ehNumeroValidoPositivo(bruto) ? paraNumero(bruto) : null }
+                          : i
+                      )
+                    );
+                  }}
+                />
+              ) : (
+                item.quantidade !== null && (
+                  <span className="qtd-item-loja">{item.quantidade} un</span>
+                )
+              )}
+
+              <button
+                type="button"
+                className="tirar-da-lista"
+                aria-label={`Tirar ${item.produto.nome} da lista`}
+                onClick={() => setItens((atual) => atual.filter((_, n) => n !== indice))}
+              >
+                <IconeLixeira tamanho={16} />
+              </button>
+            </div>
+          ))}
+
+          {/* O que não foi reconhecido aparece: sumir em silêncio faria a
+              pessoa achar que pediu dez itens quando pediu oito. */}
+          {sobras.length > 0 && (
+            <p className="nota-rodape">Não reconheci: {sobras.join(", ")}.</p>
+          )}
+          {faltaQuantidade && (
+            <p className="nota-rodape">Informe a quantidade dos itens em branco.</p>
+          )}
+
+          <div className="acoes">
+            <button type="button" className="link" onClick={limpar}>
+              cancelar
+            </button>
+            <button
+              type="button"
+              className="primario"
+              disabled={enviando || faltaQuantidade}
+              onClick={() => void confirmar()}
+            >
+              {enviando
+                ? acao === "adicionar"
+                  ? "Incluindo..."
+                  : "Enviando..."
+                : !pedindo
+                  ? "Confirmar"
+                  : acao === "adicionar"
+                    ? `Incluir (${itens.length})`
+                    : `Enviar (${itens.length})`}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

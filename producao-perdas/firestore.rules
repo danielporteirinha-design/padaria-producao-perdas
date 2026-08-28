@@ -1,0 +1,253 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------
+// Regras de acesso — Produção & Perdas, Padaria Pão de Mel (ago/2026)
+//
+// Este arquivo é a única coisa que protege os dados. A configuração do
+// Firebase (src/lib/firebase.ts) é pública por desenho e não protege
+// nada — quem decide o que cada loja pode ler e escrever é aqui.
+//
+// Modelo da operação: as filiais NÃO produzem, elas PEDEM. A matriz monta
+// o cronograma, mantém o catálogo e produz para todos. Por isso:
+//
+//   produtos  -> todos leem (a filial precisa dos nomes para pedir),
+//                só a matriz escreve
+//   planos    -> todos leem (a filial vê o que foi produzido),
+//                só a matriz escreve
+//   perdas    -> todos leem (a matriz precisa da visão consolidada),
+//                cada loja só escreve perda carimbada com o próprio id
+//
+// Como aplicar: console do Firebase -> Firestore -> aba Regras -> colar
+// este conteúdo -> Publicar.
+// ---------------------------------------------------------------
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Sem conta autenticada, nada acontece. Vale para todas as regras
+    // abaixo — nenhuma delas concede acesso a visitante anônimo.
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function email() {
+      return request.auth.token.email.lower();
+    }
+
+    // Mapeamento conta -> loja. Precisa espelhar src/lib/lojas.ts: se um
+    // dia entrar uma quarta loja, os dois arquivos mudam juntos.
+    function lojaDoUsuario() {
+      return email() == 'matriz@paodemel.local' ? 'MATRIZ'
+           : email() == 'arthur@paodemel.local' ? 'FILIAL_ARTHUR_BERNARDES'
+           : email() == 'benjamin@paodemel.local' ? 'FILIAL_BENJAMIN_CONSTANT'
+           : 'DESCONHECIDA';
+    }
+
+    // Conta autenticada que não é nenhuma das três não recebe nada —
+    // criar um usuário no console por engano não vira acesso ao banco.
+    function lojaConhecida() {
+      return autenticado() && lojaDoUsuario() != 'DESCONHECIDA';
+    }
+
+    function ehMatriz() {
+      return lojaConhecida() && lojaDoUsuario() == 'MATRIZ';
+    }
+
+    // Catálogo compartilhado: a filial precisa ler para montar o pedido,
+    // mas quem cadastra, corrige e exclui produto é a matriz.
+    match /produtos/{codigoPdv} {
+      allow read: if lojaConhecida();
+      allow write: if ehMatriz();
+    }
+
+    // Cronograma de produção — só a matriz produz.
+    match /planos/{planoId} {
+      allow read: if lojaConhecida();
+      allow write: if ehMatriz();
+    }
+
+    // Perdas: cada loja lança as próprias. A verificação é sobre o
+    // conteúdo do documento, não sobre o id — assim uma filial não
+    // consegue gravar uma perda dizendo que aconteceu em outra loja.
+    match /perdas/{perdaId} {
+      allow read: if lojaConhecida();
+      allow create: if lojaConhecida()
+                    && request.resource.data.lojaId == lojaDoUsuario();
+      // Só a matriz corrige, e SÓ pelos campos de anulação. A lista de
+      // chaves permitidas é o que impede uma correção legítima virar
+      // porta para reescrever o peso, o motivo ou a data do lançamento —
+      // o número original fica intacto e auditável.
+      allow update: if ehMatriz()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['cancelada', 'canceladaPor', 'canceladaEm', 'motivoCancelamento'])
+                    && request.resource.data.cancelada == true;
+
+      // Apagar continua proibido para todos, inclusive a matriz: um erro
+      // de lançamento vira registro ANULADO, nunca um buraco no histórico.
+      allow delete: if false;
+    }
+
+    // Pedidos das filiais (Parte B, ago/2026). A filial escreve só o
+    // próprio pedido; a matriz lê todos para consolidar a produção, mas
+    // NÃO escreve — o número tem que ser o que a filial mandou, não o que
+    // a matriz achou que ela queria.
+    match /pedidos/{pedidoId} {
+      allow read: if ehMatriz() || (lojaConhecida() && resource.data.lojaId == lojaDoUsuario());
+      allow create, update: if lojaConhecida()
+                            && request.resource.data.lojaId == lojaDoUsuario();
+      // A matriz responde à reposição.
+      allow update: if ehMatriz()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['atendimento'])
+                    && request.resource.data.atendimento.desfecho in ['confirmado', 'cancelado']
+                    // Cancelar sem motivo deixaria a filial no escuro, que
+                    // é exatamente o problema que este campo resolve.
+                    && (request.resource.data.atendimento.desfecho == 'confirmado'
+                        || request.resource.data.atendimento.motivo is string);
+
+      // A matriz confirma a lista da filial, podendo mudar as quantidades
+      // (ago/2026, decisão do dono do negócio).
+      //
+      // Esta regra INVERTE uma decisão anterior. Antes o número era
+      // intocável, com o argumento de que tinha que continuar sendo o que
+      // a loja mandou. O uso mostrou o outro lado: a matriz nem sempre
+      // consegue produzir o que foi pedido, e sem poder ajustar ela
+      // produzia um número e entregava outro, sem registro nenhum.
+      //
+      // O que substitui a antiga proteção é `ajusteDaMatriz`: o pedido
+      // original não é apagado, é guardado dentro do documento, e a
+      // filial vê a diferença na tela dela. Por isso só estas duas chaves
+      // entram juntas — mudar `itens` sem carimbar o ajuste continua
+      // proibido, e é o que impede a edição silenciosa.
+      allow update: if ehMatriz()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['itens', 'ajusteDaMatriz'])
+                    && request.resource.data.itens is list
+                    && (
+                      // Desfazer o ajuste também é legítimo: some a marca,
+                      // e os itens voltam a ser os da loja.
+                      !('ajusteDaMatriz' in request.resource.data)
+                      || (request.resource.data.ajusteDaMatriz.por is string
+                          && request.resource.data.ajusteDaMatriz.em is string
+                          && request.resource.data.ajusteDaMatriz.itensOriginais is list)
+                    );
+      // Pedido enviado não some: se a filial desistir, ela zera os itens.
+      // Assim a matriz nunca fica sem saber se a filial já respondeu.
+      allow delete: if false;
+    }
+
+    // Aparelhos registrados para receber aviso de fornada pronta
+    // (ago/2026). O id do documento é o próprio token do aparelho.
+    //
+    // Quem LÊ esta coleção é o servidor (api/notificar-fornada.ts), com
+    // chave de serviço, que ignora estas regras. Por isso aqui a leitura
+    // fica fechada para todo mundo: nenhum app precisa listar os
+    // aparelhos das outras lojas.
+    match /dispositivos/{token} {
+      allow read: if false;
+      allow create, update: if lojaConhecida()
+                            && request.resource.data.lojaId == lojaDoUsuario();
+      // A loja pode desligar o aviso removendo o próprio registro.
+      allow delete: if lojaConhecida() && resource.data.lojaId == lojaDoUsuario();
+    }
+
+    // Fornadas prontas (ago/2026). Só a matriz marca — é ela que produz.
+    // As filiais LEEM para saber que o item saiu do forno e pedir
+    // reposição enquanto ainda dá tempo de entregar hoje.
+    match /fornadas/{fornadaId} {
+      allow read: if lojaConhecida();
+      allow create: if ehMatriz();
+      // Marcação errada se apaga (foi só um toque), mas não se reescreve:
+      // mudar a hora depois falsearia quando o produto ficou pronto.
+      allow update: if false;
+      allow delete: if ehMatriz();
+    }
+
+    // Anúncios encerrados (ago/2026). A matriz retira um produto da
+    // vitrine do dia: acabou, ou o toque foi sem querer.
+    //
+    // Só a MATRIZ escreve, porque disponibilidade é decisão de quem
+    // produz. Todas leem, porque é justamente a filial que precisa parar
+    // de oferecer — e parar no mesmo instante, não no próximo
+    // recarregamento.
+    //
+    // NÃO substitui apagar fornada: as marcações continuam gravadas, com
+    // a hora de cada uma, e continuam alimentando o relatório do forno.
+    // Este documento diz "não ofereça mais hoje", não "isto nunca
+    // aconteceu".
+    /**
+     * Catálogo de suprimentos — embalagens e material de limpeza
+     * (ago/2026).
+     *
+     * QUALQUER LOJA CADASTRA, e é de propósito: quem descobre que uma
+     * embalagem nova entrou em uso é quem está no balcão usando. Exigir
+     * que a matriz cadastre transformaria um cadastro de dois minutos
+     * numa espera de dois dias, e a filial acabaria pedindo por WhatsApp
+     * — que é exatamente o caminho que este app existe para substituir.
+     *
+     * O id vem do nome normalizado (ver idDoSuprimento), então cadastrar
+     * o mesmo item de novo atualiza em vez de encher o catálogo de
+     * quase-duplicatas.
+     *
+     * Não se apaga: item fora de uso vira `ativo: false` e continua
+     * legível nos pedidos antigos.
+     */
+    match /suprimentos/{suprimentoId} {
+      allow read: if lojaConhecida();
+      allow create, update: if lojaConhecida()
+                            && request.resource.data.nome is string
+                            && request.resource.data.segmento is string;
+      allow delete: if false;
+    }
+
+    /**
+     * Lista de suprimentos de uma loja. Mesma forma dos pedidos: a loja
+     * escreve a dela, a matriz lê todas.
+     */
+    match /pedidos_suprimentos/{pedidoId} {
+      allow read: if ehMatriz() || (lojaConhecida() && resource.data.lojaId == lojaDoUsuario());
+      allow create, update: if lojaConhecida()
+                            && request.resource.data.lojaId == lojaDoUsuario();
+      // Lista enviada não some: se a loja desistir, ela zera os itens.
+      allow delete: if false;
+    }
+
+    match /anuncios_encerrados/{anuncioId} {
+      allow read: if lojaConhecida();
+      allow write: if ehMatriz();
+    }
+
+    // Fila de impressão no caixa (ago/2026). O celular grava o trabalho
+    // aqui e o agente que roda no PC do caixa busca, imprime e marca.
+    //
+    // O agente entra com uma conta PRÓPRIA (impressora@paodemel.local) em
+    // vez de uma chave de serviço: chave de serviço ignora estas regras e
+    // daria ao PC do caixa acesso total ao banco. Assim ele só enxerga a
+    // fila, e só pode mudar o status do que já existe.
+    function ehImpressora() {
+      return request.auth != null && email() == 'impressora@paodemel.local';
+    }
+
+    match /fila_impressao/{trabalhoId} {
+      allow read: if lojaConhecida() || ehImpressora();
+      allow create: if lojaConhecida()
+                    && request.resource.data.lojaId == lojaDoUsuario()
+                    && request.resource.data.status == 'pendente';
+      // O agente só mexe no resultado da impressão — nunca na imagem, no
+      // documento nem em quem mandou imprimir.
+      allow update: if ehImpressora()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'impressoEm', 'erro']);
+      // Trabalho já impresso pode ser removido para a coleção não crescer
+      // sem limite — pela matriz ou pelo próprio agente.
+      allow delete: if ehMatriz() || ehImpressora();
+    }
+
+    // Qualquer coleção não listada acima fica fechada. Deixar o padrão
+    // fechado é o que impede uma coleção nova nascer aberta por
+    // esquecimento — a regra dela tem que ser escrita de propósito.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
