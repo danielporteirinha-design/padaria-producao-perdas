@@ -295,6 +295,8 @@ export default function App() {
   const [suprimentosParaImprimir, setSuprimentosParaImprimir] = useState<PedidoSuprimentos | null>(
     null
   );
+  /** Reposição de vários itens aberta para impressão, ou null. */
+  const [reposicaoParaImprimir, setReposicaoParaImprimir] = useState<PedidoFilial | null>(null);
   const [planos, setPlanos] = useState<PlanoDeProducaoDiario[]>([]);
   const [perdas, setPerdas] = useState<RegistroPerda[]>([]);
   const [pedidos, setPedidos] = useState<PedidoFilial[]>([]);
@@ -935,10 +937,27 @@ export default function App() {
   async function avisarMatrizDoPedido(pedido: PedidoFilial) {
     try {
       if (ehReposicao(pedido)) {
+        /**
+         * UM PEDIDO, UM AVISO (ago/2026, pedido do dono do negócio).
+         *
+         * A reposição passou a poder levar VÁRIOS itens — a filial fala a
+         * lista inteira de uma vez. Antes cada item era um pedido e um
+         * push: dez itens viravam dez avisos, e o décimo chegava quando o
+         * primeiro já tinha rolado para fora da bandeja.
+         *
+         * Com mais de um item o aviso não cabe no formato "produto +
+         * quantidade": manda o primeiro nome e o tamanho da lista, que é
+         * o que a matriz precisa saber para decidir se abre agora.
+         */
         const item = pedido.itens[0];
         if (item) {
           const nome = produtos.find((p) => p.codigoPdv === item.codigoPdv)?.nome ?? "Produto";
-          await avisarMatriz(nome, item.codigoPdv, item.quantidadeUnidades);
+          await avisarMatriz(
+            nome,
+            item.codigoPdv,
+            item.quantidadeUnidades,
+            pedido.itens.length
+          );
         }
       } else if (pedido.status === "enviado") {
         await avisarListaEnviada(pedido.itens.length);
@@ -1445,10 +1464,50 @@ export default function App() {
           </div>
         )}
 
+        {/* A lista de uma reposição com vários itens, em papel: separar
+            oito produtos lendo do celular com as mãos ocupadas é o que o
+            papel resolve. Mesmo formato contínuo da lista de suprimentos. */}
+        {reposicaoParaImprimir && (
+          <div className="tela">
+            <h2>Reposição — {nomeDaLoja(reposicaoParaImprimir.lojaId)}</h2>
+            <ExportarFita
+              blocos={[
+                {
+                  rotuloSessao: "Reposição",
+                  itens: reposicaoParaImprimir.itens,
+                },
+              ]}
+              titulo={nomeDaLoja(reposicaoParaImprimir.lojaId)}
+              instrucao="O que esta loja pediu agora. Separe e mande na próxima entrega."
+              dataFormatada={formatarDataBr(reposicaoParaImprimir.data)}
+              produtos={produtos}
+              montadoPor={operador}
+              formato="continuo"
+              nomeArquivoBase={`reposicao-${reposicaoParaImprimir.lojaId.toLowerCase()}-${reposicaoParaImprimir.data}`}
+              onImprimirNoCaixa={(canvases, titulo) =>
+                handleImprimirNoCaixa(
+                  canvases,
+                  `Reposição — ${titulo}`,
+                  `reposicao-${reposicaoParaImprimir.lojaId.toLowerCase()}-${reposicaoParaImprimir.data}`
+                )
+              }
+            />
+            <div className="acoes">
+              <button
+                type="button"
+                className="secundario"
+                onClick={() => setReposicaoParaImprimir(null)}
+              >
+                Voltar
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Com o papel na tela, o resto da aba sai do caminho: dois
             assuntos empilhados na mesma rolagem seria a pior hora para
             confundir uma lista com a outra. */}
-        {!suprimentosParaImprimir && (
+        {!suprimentosParaImprimir && !reposicaoParaImprimir && (
         <>
         {abaAtual === "cronograma" && (
           <TelaCronograma
@@ -1482,6 +1541,7 @@ export default function App() {
                   (p) => p.data === diaCorrente && p.tipo === "reposicao"
                 )}
                 onDecidirReposicao={handleDecidirReposicao}
+                onImprimirReposicao={setReposicaoParaImprimir}
                 nomeDoProduto={(codigo) =>
                   produtos.find((p) => p.codigoPdv === codigo)?.nome ?? `#${codigo}`
                 }

@@ -30,6 +30,7 @@ import { contemBusca } from "../lib/texto";
 import { IconeChama, IconeConfere, IconeLixeira } from "./Icones";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
+import { AssistenteDeVoz } from "./AssistenteDeVoz";
 import {
   dispensarFornada,
   fornadasDispensadas,
@@ -186,6 +187,34 @@ export function PainelFornadasFilial({
   }
 
   /**
+   * Um pedido de reposição com VÁRIOS itens de uma vez (ago/2026, pedido
+   * do dono do negócio).
+   *
+   * O DEFEITO QUE ISTO CORRIGE: cada item virava um pedido e um push
+   * próprios. A loja que precisava de dez produtos disparava dez
+   * notificações para a matriz — e o décimo chegava quando o primeiro já
+   * tinha rolado para fora da bandeja. Uma frase, um pedido, um aviso.
+   */
+  async function enviarReposicaoDeVarios(
+    itens: { codigoPdv: number; quantidadeUnidades: number }[]
+  ) {
+    if (itens.length === 0) return;
+    const agora = new Date().toISOString();
+    await onSalvarPedido({
+      id: idDaReposicao(hoje, loja.id, agora),
+      lojaId: loja.id,
+      data: hoje,
+      itens,
+      status: "enviado",
+      tipo: "reposicao",
+      criadoPor: operador,
+      criadoEm: agora,
+      enviadoEm: agora,
+    });
+    setBusca("");
+  }
+
+  /**
    * A linha de um produto, igual na lista do forno e na busca.
    *
    * Um jeito só de pedir: a filial que aprendeu a pedir o que saiu do
@@ -335,6 +364,22 @@ export function PainelFornadasFilial({
         {/* A busca vem ANTES da lista: quem chegou aqui pelo aviso já vê
             o item no topo da lista; quem veio porque falta alguma coisa
             no balcão vem justamente digitar o nome dela. */}
+        {/* O ASSISTENTE VEM PRIMEIRO (ago/2026, pedido do dono do
+            negócio): pedir é o que traz a filial a esta aba, e falar a
+            lista inteira de uma vez é o caminho mais curto que existe
+            para isso. A busca continua abaixo para um item só. */}
+        <AssistenteDeVoz
+          produtos={produtos}
+          modo="pedir"
+          onConfirmar={(itens) =>
+            enviarReposicaoDeVarios(
+              itens
+                .filter((i) => i.quantidade && i.quantidade > 0)
+                .map((i) => ({ codigoPdv: i.produto.codigoPdv, quantidadeUnidades: i.quantidade! }))
+            )
+          }
+        />
+
         <CampoDeBusca
           className="busca-forno"
           valor={busca}

@@ -43,6 +43,7 @@ import {
   ErroSugestaoProducao,
   montarHistoricoDaFilial,
 } from "../lib/sugestaoProducao";
+import { AssistenteDeVoz } from "./AssistenteDeVoz";
 import { IconeCalendario, IconeConfere, IconeLixeira, IconeSeta } from "./Icones";
 
 interface TelaPedidoFilialProps {
@@ -216,6 +217,36 @@ export function TelaPedidoFilial({
     setValorEditando("");
   }
 
+  /**
+   * A LISTA INTEIRA DITADA DE UMA VEZ (ago/2026, pedido do dono do
+   * negócio: a filial monta o pedido "usando somente o comando de voz").
+   *
+   * Cai na MESMA lista que o toque monta — não é um pedido paralelo. A
+   * pessoa fala "20 pão francês, 10 broa e 5 sonho", confere as três
+   * linhas e elas entram na montagem; enviar continua sendo o passo
+   * explícito lá embaixo, como sempre foi. Ditar não pode mandar sozinho
+   * um pedido que ainda vai ser revisado.
+   *
+   * Produto já na lista tem a quantidade SUBSTITUÍDA, não somada: quem
+   * repete um item falando está corrigindo o número, não pedindo mais.
+   */
+  function adicionarPorVoz(ditados: { produto: Produto; quantidade: number | null }[]) {
+    setItens((atual) => {
+      const novo = [...atual];
+      for (const { produto, quantidade } of ditados) {
+        if (!quantidade || quantidade <= 0) continue;
+        const onde = novo.findIndex((i) => i.codigoPdv === produto.codigoPdv);
+        if (onde >= 0) novo[onde] = { ...novo[onde], quantidadeUnidades: quantidade };
+        else novo.push({ codigoPdv: produto.codigoPdv, quantidadeUnidades: quantidade });
+        // Abre a categoria do item ditado: sem isso ele entra na lista e
+        // fica invisível atrás de uma sanfona fechada, e a pessoa fica
+        // sem saber se o app entendeu.
+        setExpandido((a) => ({ ...a, [produto.categoria]: true }));
+      }
+      return novo;
+    });
+  }
+
   function removerItem(codigoPdv: number) {
     setItens((atual) => atual.filter((i) => i.codigoPdv !== codigoPdv));
   }
@@ -381,6 +412,17 @@ export function TelaPedidoFilial({
           </div>
         )}
       </div>
+
+      {/* MONTAR FALANDO (ago/2026, pedido do dono do negócio). Vem antes
+          das sanfonas porque é o caminho mais curto para montar a lista
+          inteira: uma frase com todos os itens e quantidades. As
+          sanfonas continuam abaixo para ajustar item a item. */}
+      <AssistenteDeVoz
+        produtos={produtos}
+        modo="pedir"
+        acao="adicionar"
+        onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
+      />
 
       {/* O QUE NÃO VEM (ago/2026). Item cortado pela matriz sai de
           `itens` e, sem este bloco, sumiria da tela sem deixar rastro —

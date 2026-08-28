@@ -71,9 +71,11 @@ export async function avisarFiliais(
 export async function avisarMatriz(
   nomeProduto: string,
   codigoPdv: number,
-  quantidade: number
+  quantidade: number,
+  /** Quantos itens a reposição tem ao todo — 1 no pedido de um item só. */
+  itensNoPedido = 1
 ): Promise<ResultadoAviso> {
-  return enviar({ nomeProduto, codigoPdv, quantidade });
+  return enviar({ nomeProduto, codigoPdv, quantidade, itensNoPedido });
 }
 
 /**

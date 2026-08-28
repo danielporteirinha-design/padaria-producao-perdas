@@ -106,10 +106,14 @@ const CONFERENCIAS = [
   ["src/index.css", "chip-setor", "Estilo do cadastro relampago"],
 
   // --- Anúncio de fornada de mãos livres
-  ["src/components/AnuncioPorVoz.tsx", "pedirEnvio", "Anunciar fornada falando"],
-  ["src/lib/vozRespostas.ts", "entenderQuantidade", "Entender numero e sim/nao por voz"],
-  ["src/lib/falar.ts", "falar", "O app fala as perguntas"],
+  ["src/components/AssistenteDeVoz.tsx", "AssistenteDeVoz", "Assistente: uma frase, uma confirmacao"],
+  ["src/components/PainelFornadasFilial.tsx", "AssistenteDeVoz", "Filial: pedir reposicao falando"],
+  ["src/components/TelaPedidoFilial.tsx", "adicionarPorVoz", "Filial: montar a lista de producao falando"],
+  ["src/components/PainelFornoDeHoje.tsx", "AssistenteDeVoz", "Matriz: anunciar falando"],
+  ["src/lib/interpretarPedidoFalado.ts", "interpretarFrase", "Frase inteira vira lista de itens"],
+  ["src/lib/vozRespostas.ts", "entenderQuantidade", "Entender a quantidade dita"],
   ["src/types/fornada.ts", "quantidade?", "Quantidade no anuncio"],
+  ["src/components/PainelPedidosFiliais.tsx", "onImprimirReposicao", "Matriz imprime a lista de reposicao"],
 
   // --- Suprimentos (embalagens e material de limpeza)
   ["src/types/suprimento.ts", "idDoSuprimento", "Modelo de suprimentos"],
@@ -151,8 +155,33 @@ const CONFERENCIAS = [
   ["src/lib/producaoDeHoje.ts", "incluirItemProduzido", "Reposição entra na produção do dia"],
 ];
 
+/**
+ * Arquivos que foram APAGADOS numa entrega e não podem continuar no
+ * disco.
+ *
+ * POR QUE ISTO EXISTE (ago/2026)
+ * -------------------------------
+ * O projeto é atualizado aplicando um pacote POR CIMA da pasta: ele
+ * sobrescreve e acrescenta, mas nunca remove. Quando uma entrega apaga um
+ * arquivo, o antigo fica lá — e, se ele importa algo que deixou de
+ * existir, o `npm run build` quebra com um erro que não tem nada a ver
+ * com o que foi entregue:
+ *
+ *   AnuncioPorVoz.tsx:45 - has no exported member 'entenderSimOuNao'
+ *
+ * Aconteceu de verdade. O aviso na mensagem de entrega não basta: quem
+ * aplica o pacote no fim do expediente não vai reler a conversa. Aqui a
+ * conferência responde sozinha, com o comando de remoção pronto.
+ */
+const DEVEM_TER_SIDO_APAGADOS = [
+  ["src/components/AnuncioPorVoz.tsx", "diálogo de voz antigo — virou AssistenteDeVoz.tsx"],
+  ["src/lib/falar.ts", "síntese de voz — o app não fala mais"],
+  ["src/components/PainelSuprimentos.tsx", "card de suprimentos — virou linha na sanfona da loja"],
+];
+
 let faltando = 0;
 let desatualizados = 0;
+let sobrando = 0;
 
 console.log("\nConferindo os arquivos do projeto em:", RAIZ, "\n");
 
@@ -180,14 +209,31 @@ for (const [arquivo, marca, descricao] of CONFERENCIAS) {
   console.log(`OK            - ${descricao}`);
 }
 
-const problemas = faltando + desatualizados;
+/* Arquivos que ficaram para trás quebram o build sem dizer por quê. */
+const paraRemover = [];
+for (const [arquivo, motivo] of DEVEM_TER_SIDO_APAGADOS) {
+  if (fs.existsSync(path.join(RAIZ, arquivo))) {
+    console.log(`SOBRANDO      - ${arquivo}  (${motivo})`);
+    paraRemover.push(arquivo);
+    sobrando++;
+  }
+}
+
+const problemas = faltando + desatualizados + sobrando;
 console.log("");
 if (problemas === 0) {
   console.log(`TODOS OS ${CONFERENCIAS.length} ARQUIVOS CONFERIDOS ESTÃO ATUALIZADOS`);
 } else {
   console.log(
-    `${problemas} PROBLEMA(S): ${faltando} arquivo(s) faltando, ${desatualizados} desatualizado(s).`
+    `${problemas} PROBLEMA(S): ${faltando} faltando, ${desatualizados} desatualizado(s), ${sobrando} sobrando.`
   );
-  console.log("Aplique o pacote mais recente por cima da pasta, sobrescrevendo, e rode de novo.");
+  if (faltando + desatualizados > 0) {
+    console.log("Aplique o pacote mais recente por cima da pasta, sobrescrevendo, e rode de novo.");
+  }
+  if (paraRemover.length > 0) {
+    console.log("");
+    console.log("O pacote sobrescreve, mas nunca APAGA. Remova o que sobrou com:");
+    console.log(`  rm -f ${paraRemover.join(" ")}`);
+  }
 }
 process.exit(problemas === 0 ? 0 : 1);

@@ -84,6 +84,12 @@ interface PainelPedidosFiliaisProps {
     desfecho: "confirmado" | "cancelado",
     motivo?: string
   ) => Promise<void>;
+  /**
+   * Imprime a lista de uma reposição. Existe para o pedido com vários
+   * itens (ago/2026): separar oito produtos lendo do celular, com as mãos
+   * ocupadas, é o tipo de coisa que se faz com papel.
+   */
+  onImprimirReposicao?: (pedido: PedidoFilial) => void;
 }
 
 export function PainelPedidosFiliais({
@@ -93,6 +99,7 @@ export function PainelPedidosFiliais({
   nomeDoProduto,
   saiuDoForno,
   onDecidirReposicao,
+  onImprimirReposicao,
   somenteReposicoes = false,
   pedidosSuprimentos = [],
   catalogoSuprimentos = [],
@@ -374,6 +381,18 @@ export function PainelPedidosFiliais({
                   <span className="marca-precisa-assar">
                     <IconeAtencao tamanho={13} /> ainda não saiu do forno hoje
                   </span>
+                )}
+
+                {/* Imprimir só faz sentido na lista: um item se separa
+                    de cabeça, oito não. */}
+                {onImprimirReposicao && pedido.itens.length > 1 && (
+                  <button
+                    type="button"
+                    className="secundario imprimir-reposicao"
+                    onClick={() => onImprimirReposicao(pedido)}
+                  >
+                    <IconeImpressora tamanho={16} /> Imprimir
+                  </button>
                 )}
 
                 {desfecho === "confirmado" && (

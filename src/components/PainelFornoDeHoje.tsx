@@ -31,7 +31,7 @@ import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
-import { AnuncioPorVoz } from "./AnuncioPorVoz";
+import { AssistenteDeVoz } from "./AssistenteDeVoz";
 import { IconeLixeira } from "./Icones";
 
 /**
@@ -270,11 +270,21 @@ export function PainelFornoDeHoje({
             tela é o caminho principal. A busca continua logo abaixo para
             quem prefere digitar, ou para o dia em que a padaria estiver
             barulhenta demais. */}
-        <AnuncioPorVoz
+        <AssistenteDeVoz
           produtos={produtos}
-          onAnunciar={(produto, quantidade) =>
-            onMarcarFornada(produto.codigoPdv, produto.nome, quantidade)
-          }
+          modo="anunciar"
+          onConfirmar={async (itens) => {
+            // Um por vez, em fila: cada anúncio é uma gravação e um push
+            // próprios, e disparar tudo junto tiraria da matriz a chance
+            // de ver qual falhou.
+            for (const item of itens) {
+              await onMarcarFornada(
+                item.produto.codigoPdv,
+                item.produto.nome,
+                item.quantidade ?? undefined
+              );
+            }
+          }}
         />
 
         <CampoDeBusca

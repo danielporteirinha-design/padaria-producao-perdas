@@ -213,6 +213,8 @@ export default async function handler(req: any, res: any) {
       itensAlterados?: number;
       /** Lista de embalagens e material de limpeza (ago/2026). */
       suprimentos?: boolean;
+      /** Quantos itens a reposição tem ao todo (ago/2026). */
+      itensNoPedido?: number;
     } = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {});
     const {
       nomeProduto,
@@ -228,6 +230,7 @@ export default async function handler(req: any, res: any) {
       listaAjustada,
       itensAlterados,
       suprimentos,
+      itensNoPedido,
     } = corpoBruto;
     // O aviso de lista diária e o de teste não falam de um produto — os
     // outros, sim, e sem o nome o celular receberia um aviso em branco.
@@ -393,12 +396,30 @@ export default async function handler(req: any, res: any) {
       // O nome da loja vai no TÍTULO: é a primeira coisa que a matriz
       // precisa saber para decidir o que separar e para onde mandar.
       titulo = `${quemChamou.nome} pediu reposição`;
-      corpo = quantidade
-        ? `${nomeProduto} · ${quantidade} un`
-        : `${nomeProduto}`;
+      /**
+       * PEDIDO COM VÁRIOS ITENS CABE NUM AVISO SÓ (ago/2026).
+       *
+       * A filial passou a falar a lista inteira de uma vez, e antes cada
+       * item virava um push: dez itens, dez avisos, e o décimo chegava
+       * quando o primeiro já tinha rolado para fora da bandeja. Com mais
+       * de um item o corpo diz o primeiro nome e quantos vêm junto — o
+       * suficiente para a matriz decidir se abre agora; a lista está a um
+       * toque.
+       */
+      const outros = typeof itensNoPedido === "number" ? itensNoPedido - 1 : 0;
+      const base = quantidade ? `${nomeProduto} · ${quantidade} un` : `${nomeProduto}`;
+      corpo =
+        outros > 0
+          ? `${base} e mais ${outros} ${outros === 1 ? "item" : "itens"}. Toque para ver a lista.`
+          : base;
       // Uma etiqueta por loja E produto: pedido repetido do mesmo item
       // substitui o anterior, mas produtos diferentes continuam somando.
-      etiqueta = `reposicao-${quemChamou.id}-${codigoPdv}`;
+      // No pedido com vários itens a etiqueta leva o tamanho da lista,
+      // para uma lista nova não apagar a anterior ainda não atendida.
+      etiqueta =
+        outros > 0
+          ? `reposicao-${quemChamou.id}-${codigoPdv}-${itensNoPedido}`
+          : `reposicao-${quemChamou.id}-${codigoPdv}`;
     }
 
     /**

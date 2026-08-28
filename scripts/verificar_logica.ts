@@ -60,11 +60,8 @@ import {
 import { somarDias } from "../src/lib/data";
 import { incluirItemProduzido, planoContemItem, planoDeHojeCom } from "../src/lib/producaoDeHoje";
 import { abaDaUrl, urlDaAba } from "../src/lib/rota";
-import {
-  entenderEnvioOuDescarte,
-  entenderQuantidade,
-  entenderSimOuNao,
-} from "../src/lib/vozRespostas";
+import { entenderQuantidade } from "../src/lib/vozRespostas";
+import { interpretarFrase } from "../src/lib/interpretarPedidoFalado";
 import {
   agruparPorSegmento,
   idDoPedidoSuprimentos,
@@ -3129,27 +3126,9 @@ const perdas: RegistroPerda[] = [
 }
 
 // ---------------------------------------------------------------
-// Anuncio por voz: entender a resposta do jeito que se fala
-// (ver src/lib/vozRespostas.ts)
+// Voz: entender a quantidade dita (ver src/lib/vozRespostas.ts)
 // ---------------------------------------------------------------
 {
-  // --- sim / nao
-  for (const sim of ["sim", "Isso", "isso mesmo", "confirma", "pode", "certo", "uhum", "ok"]) {
-    afirmar(entenderSimOuNao(sim) === true, `"${sim}" e' confirmacao`);
-  }
-  for (const nao of ["não", "nao", "errado", "não é esse", "outro", "negativo"]) {
-    afirmar(entenderSimOuNao(nao) === false, `"${nao}" e' negacao`);
-  }
-  // O CASO QUE JUSTIFICA A FUNCAO: "nao e' esse" contem "e' esse". Uma
-  // busca ingenua por conteudo leria a negacao como confirmacao e trocaria
-  // o produto anunciado para as tres lojas.
-  afirmar(
-    entenderSimOuNao("não é esse mesmo") === false,
-    "negacao que contem palavra de confirmacao continua sendo negacao"
-  );
-  afirmar(entenderSimOuNao("") === null, "silencio nao e' resposta");
-  afirmar(entenderSimOuNao("o forno está quente") === null, "frase sem resposta devolve null");
-
   // --- quantidade
   const casos: [string, number | null][] = [
     ["40", 40],
@@ -3175,20 +3154,79 @@ const perdas: RegistroPerda[] = [
     afirmar(obtido === esperado, `"${dito}" -> ${esperado} (obtido: ${obtido})`);
   }
 
-  // --- enviar / descartar
-  afirmar(entenderEnvioOuDescarte("enviar") === "enviar", "enviar envia");
-  afirmar(entenderEnvioOuDescarte("pode enviar") === "enviar", "pode enviar envia");
-  afirmar(entenderEnvioOuDescarte("manda") === "enviar", "manda envia");
-  afirmar(entenderEnvioOuDescarte("descartar") === "descartar", "descartar descarta");
-  afirmar(entenderEnvioOuDescarte("cancela") === "descartar", "cancela descarta");
-  afirmar(entenderEnvioOuDescarte("não") === "descartar", "nao descarta");
-  // A ULTIMA PERGUNTA E' MAIS EXIGENTE: aqui a resposta dispara um aviso
-  // para tres lojas, e uma palavra ambigua nao pode disparar nada.
+}
+
+// ---------------------------------------------------------------
+// Uma frase inteira vira lista de itens
+// (ver src/lib/interpretarPedidoFalado.ts)
+// ---------------------------------------------------------------
+{
+  const CATALOGO = [
+    "PAO FRANCES",
+    "PAO DE QUEIJO CONGELADO GRANDE",
+    "BROA DE FUBA",
+    "PALITO VEGETARIANO",
+    "SONHO DE CREME",
+    "BOLO DE FUBA COM GOIABADA",
+  ];
+
+  // O caso da matriz: a frase inteira, com o comando na frente.
+  const anuncio = interpretarFrase("anunciar fornada de palito vegetariano", CATALOGO);
   afirmar(
-    entenderEnvioOuDescarte("acho que sim, né") === null,
-    "resposta vaga na pergunta do envio nao envia nada"
+    anuncio.itens.length === 1 && anuncio.itens[0].nome === "PALITO VEGETARIANO",
+    "a frase de anuncio vira um item, sem o comando virar produto"
   );
-  afirmar(entenderEnvioOuDescarte("") === null, "silencio nao envia");
+  afirmar(anuncio.itens[0].quantidade === null, "anuncio sem numero nao inventa quantidade");
+
+  // O caso da filial: varios itens numa frase so'.
+  const pedido = interpretarFrase("quero 20 pão francês e 10 broa de fubá", CATALOGO);
+  afirmar(pedido.itens.length === 2, `dois itens na mesma frase (obtidos: ${pedido.itens.length})`);
+  afirmar(
+    pedido.itens[0].nome === "PAO FRANCES" && pedido.itens[0].quantidade === 20,
+    "primeiro item com a quantidade certa"
+  );
+  afirmar(
+    pedido.itens[1].nome === "BROA DE FUBA" && pedido.itens[1].quantidade === 10,
+    "segundo item com a quantidade certa"
+  );
+
+  // Virgulas tambem separam, e o numero pode vir por extenso.
+  const tres = interpretarFrase("manda 12 sonho de creme, cinco broa de fubá", CATALOGO);
+  afirmar(tres.itens.length === 2, "virgula separa itens");
+  afirmar(
+    tres.itens.find((i) => i.nome === "BROA DE FUBA")?.quantidade === 5,
+    "numero por extenso vira numero"
+  );
+
+  // O " E " que separa NAO pode partir um nome que contem "DE".
+  const comDe = interpretarFrase("15 pão de queijo congelado grande", CATALOGO);
+  afirmar(
+    comDe.itens.length === 1 && comDe.itens[0].nome === "PAO DE QUEIJO CONGELADO GRANDE",
+    "nome com 'DE' nao e' partido"
+  );
+
+  // O mesmo produto dito duas vezes SOMA em vez de virar duas linhas.
+  const somado = interpretarFrase("10 pão francês e mais 5 pão francês", CATALOGO);
+  afirmar(
+    somado.itens.length === 1 && somado.itens[0].quantidade === 15,
+    `produto repetido soma (obtido: ${JSON.stringify(somado.itens)})`
+  );
+
+  // NAO INVENTA: o que nao casa volta como nao reconhecido, e a tela
+  // mostra. Um pedido com o produto errado custa uma entrega errada.
+  const desconhecido = interpretarFrase("20 rocambole de nutella", CATALOGO);
+  afirmar(desconhecido.itens.length === 0, "produto fora do catalogo nao vira item");
+  afirmar(
+    desconhecido.naoReconhecidos.length === 1,
+    "o trecho nao reconhecido volta para a tela mostrar"
+  );
+
+  // "PAO" sozinho casaria com dois produtos — abaixo do limite, nao casa
+  // com nenhum, porque escolher o pao errado e' pior que perguntar.
+  const vago = interpretarFrase("10 pão", CATALOGO);
+  afirmar(vago.itens.length === 0, "termo vago demais nao escolhe produto no chute");
+
+  afirmar(interpretarFrase("", CATALOGO).itens.length === 0, "frase vazia nao produz item");
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);
