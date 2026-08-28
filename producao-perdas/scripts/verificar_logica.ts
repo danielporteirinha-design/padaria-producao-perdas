@@ -45,6 +45,7 @@ import {
   idDoPedido,
   itensIguais,
   reposicaoEstaPendente,
+  reposicoesDeHojePorProduto,
   totalDoPedido,
   type PedidoFilial,
 } from "../src/types/pedido";
@@ -3465,6 +3466,105 @@ const perdas: RegistroPerda[] = [
   afirmar(
     so !== null && Object.keys(so).length === 1,
     "loja sem UID configurado nao entra sem senha (cai na senha)"
+  );
+}
+
+// ===================================================================
+// COMPROVANTE DA REPOSIÇÃO: "o que já pedi hoje"
+// ===================================================================
+{
+  console.log("\n--- Reposicao: o que a filial ja pediu hoje ---");
+
+  const HOJE = "2026-08-28";
+  const rep = (
+    id: string,
+    quando: string,
+    itens: { codigoPdv: number; quantidadeUnidades: number }[],
+    extra: Partial<PedidoFilial> = {}
+  ): PedidoFilial =>
+    ({
+      id,
+      lojaId: "FILIAL_ARTHUR_BERNARDES",
+      data: HOJE,
+      itens,
+      status: "enviado",
+      tipo: "reposicao",
+      criadoPor: "Teste",
+      criadoEm: quando,
+      enviadoEm: quando,
+      ...extra,
+    }) as PedidoFilial;
+
+  const doisLotes = [
+    rep("a", `${HOJE}T09:00:00.000Z`, [
+      { codigoPdv: 1, quantidadeUnidades: 20 },
+      { codigoPdv: 2, quantidadeUnidades: 10 },
+      { codigoPdv: 3, quantidadeUnidades: 6 },
+    ]),
+    rep("b", `${HOJE}T11:00:00.000Z`, [
+      { codigoPdv: 4, quantidadeUnidades: 15 },
+      { codigoPdv: 1, quantidadeUnidades: 5 },
+    ]),
+  ];
+
+  const resumo = reposicoesDeHojePorProduto(doisLotes, HOJE, "FILIAL_ARTHUR_BERNARDES");
+  afirmar(resumo.length === 4, `os dois lotes convivem: 4 produtos (obtido: ${resumo.length})`);
+  afirmar(
+    resumo.find((r) => r.codigoPdv === 2)?.unidades === 10,
+    "o item do PRIMEIRO lote continua na lista depois do segundo"
+  );
+  afirmar(
+    resumo.find((r) => r.codigoPdv === 1)?.unidades === 25,
+    "o mesmo produto pedido em dois lotes SOMA (20 + 5 = 25)"
+  );
+  afirmar(
+    resumo.find((r) => r.codigoPdv === 1)?.vezes === 2,
+    "e a tela sabe dizer que foram dois pedidos"
+  );
+  afirmar(resumo[0].codigoPdv === 1 || resumo[0].codigoPdv === 4, "o mais recente vem primeiro");
+  afirmar(
+    resumo[resumo.length - 1].ultimoEm <= resumo[0].ultimoEm,
+    "a ordem e do mais recente para o mais antigo"
+  );
+
+  // Não mistura loja, dia nem o pedido diário.
+  const outraLoja = rep("c", `${HOJE}T12:00:00.000Z`, [{ codigoPdv: 9, quantidadeUnidades: 1 }], {
+    lojaId: "FILIAL_BENJAMIN_CONSTANT",
+  });
+  const ontem = rep("d", `2026-08-27T12:00:00.000Z`, [{ codigoPdv: 8, quantidadeUnidades: 1 }], {
+    data: "2026-08-27",
+  });
+  const diario = rep("e", `${HOJE}T12:00:00.000Z`, [{ codigoPdv: 7, quantidadeUnidades: 1 }], {
+    tipo: undefined,
+  });
+  const filtrado = reposicoesDeHojePorProduto(
+    [...doisLotes, outraLoja, ontem, diario],
+    HOJE,
+    "FILIAL_ARTHUR_BERNARDES"
+  );
+  afirmar(filtrado.length === 4, "outra loja, outro dia e o pedido diario ficam de fora");
+
+  // O desfecho da matriz acompanha o produto.
+  const decidido = [
+    rep("f", `${HOJE}T09:00:00.000Z`, [{ codigoPdv: 5, quantidadeUnidades: 4 }], {
+      atendimento: { desfecho: "cancelado", motivo: "acabou a farinha", decididoPor: "Matriz", decididoEm: `${HOJE}T09:30:00.000Z` },
+    } as Partial<PedidoFilial>),
+    rep("g", `${HOJE}T10:00:00.000Z`, [{ codigoPdv: 6, quantidadeUnidades: 4 }], {
+      atendimento: { desfecho: "confirmado", decididoPor: "Matriz", decididoEm: `${HOJE}T10:30:00.000Z` },
+    } as Partial<PedidoFilial>),
+  ];
+  const comDesfecho = reposicoesDeHojePorProduto(decidido, HOJE, "FILIAL_ARTHUR_BERNARDES");
+  afirmar(
+    comDesfecho.find((r) => r.codigoPdv === 5)?.cancelado === "acabou a farinha",
+    "o motivo do cancelamento chega na linha"
+  );
+  afirmar(
+    comDesfecho.find((r) => r.codigoPdv === 6)?.confirmado === true,
+    "o produto separado aparece como separado"
+  );
+  afirmar(
+    reposicoesDeHojePorProduto([], HOJE, "FILIAL_ARTHUR_BERNARDES").length === 0,
+    "sem pedido nenhum, o comprovante nao aparece"
   );
 }
 

@@ -22,7 +22,12 @@ import type { Produto } from "../types/produto";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
-import { desfechoDaReposicao, ehReposicao, idDaReposicao } from "../types/pedido";
+import {
+  desfechoDaReposicao,
+  ehReposicao,
+  idDaReposicao,
+  reposicoesDeHojePorProduto,
+} from "../types/pedido";
 import type { Loja } from "../lib/lojas";
 import { dataDeHojeIso } from "../lib/data";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
@@ -134,6 +139,28 @@ export function PainelFornadasFilial({
     }
     return mapa;
   }, [pedidos, hoje, loja.id]);
+
+  /**
+   * O COMPROVANTE DO QUE JÁ FOI PEDIDO HOJE (ago/2026).
+   *
+   * Defeito relatado em produção: a filial ditava cinco itens, o pedido
+   * saía para a matriz, e os itens sumiam da tela. O dado nunca se
+   * perdeu — o que faltava era onde vê-lo: a lista desta aba só desenha
+   * o que saiu do forno hoje, e a busca é limpa depois do envio. Quem
+   * pediu um produto que ainda não teve fornada ficava sem nenhum sinal
+   * de que o pedido existiu, e a leitura natural é "o app apagou".
+   *
+   * Sem isso a pessoa pede de novo, e chega o dobro.
+   */
+  const jaPedidosHoje = useMemo(
+    () => reposicoesDeHojePorProduto(pedidos, hoje, loja.id),
+    [pedidos, hoje, loja.id]
+  );
+
+  const nomePorCodigo = useMemo(
+    () => new Map(produtos.map((p) => [p.codigoPdv, p.nome])),
+    [produtos]
+  );
 
   /**
    * Busca no catálogo INTEIRO (ago/2026, pedido do dono do negócio).
@@ -379,6 +406,31 @@ export function PainelFornadasFilial({
             )
           }
         />
+
+        {/* O comprovante fica LOGO ABAixo do microfone: é ali que o
+            pedido nasce, e é ali que a confirmação tem de aparecer. */}
+        {jaPedidosHoje.length > 0 && (
+          <div className="ja-pedi-hoje">
+            <strong className="titulo-ja-pedi">Você já pediu hoje</strong>
+            {jaPedidosHoje.map((linha) => (
+              <div key={linha.codigoPdv} className="linha-ja-pedi">
+                <span className="nome-ja-pedi">
+                  {nomePorCodigo.get(linha.codigoPdv) ?? `Produto ${linha.codigoPdv}`}
+                  {linha.vezes > 1 && <em className="vezes-ja-pedi"> ({linha.vezes} pedidos)</em>}
+                  {linha.confirmado && (
+                    <span className="reposicao-confirmada">
+                      <IconeConfere tamanho={14} /> Separado — vem na próxima entrega.
+                    </span>
+                  )}
+                  {linha.cancelado && (
+                    <span className="reposicao-negada">Não vem: {linha.cancelado}</span>
+                  )}
+                </span>
+                <span className="qtd-ja-pedi">{linha.unidades} un</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         <CampoDeBusca
           className="busca-forno"
