@@ -19,13 +19,11 @@ import type { RegistroPerda } from "../types/perda";
 import type { PlanoDeProducaoDiario } from "../types/producao";
 import { TelaRegistroPerda } from "./TelaRegistroPerda";
 import { calcularCandidatosPerda, type ProdutoComOrigens } from "../lib/janelaValidade";
-import { perdaEstaValida } from "../types/perda";
 import { CATEGORIAS_PRODUCAO } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
 import { IconeSeta } from "./Icones";
 import { CampoDeBusca } from "./CampoDeBusca";
-import { LOJA_MATRIZ, nomeDaLoja, type Loja } from "../lib/lojas";
-import { IconeLixeira } from "./Icones";
+import { LOJA_MATRIZ, type Loja } from "../lib/lojas";
 import { diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 
 interface TelaPerdasProps {
@@ -84,14 +82,6 @@ function BotaoProdutoPerda({
   );
 }
 
-/**
- * Número no formato brasileiro, com vírgula decimal. "3.1 kg" no meio de
- * uma tela em português é ruído de idioma — e num app de balanço de peso
- * a leitura precisa ser automática.
- */
-function formatarNumero(valor: number): string {
-  return valor.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
-}
 
 export function TelaPerdas({
   produtos,
@@ -105,19 +95,6 @@ export function TelaPerdas({
   onRegistrarPerda,
 }: TelaPerdasProps) {
   const [buscaProduto, setBuscaProduto] = useState("");
-  /**
-   * Como o histórico do dia é lido: por LANÇAMENTO ou por PRODUTO.
-   *
-   * Começa por lançamento porque é a ordem em que as coisas aconteceram,
-   * e é onde se anula um erro de digitação — a razão nº 1 de alguém
-   * olhar essa tabela no mesmo dia.
-   *
-   * "Mais perdidos" responde outra pergunta, que aparece no fim do
-   * expediente: o que está saindo caro hoje. Quinze lançamentos de 2 kg
-   * do mesmo pão somam mais que um lançamento único de 8 kg, e na lista
-   * cronológica isso fica invisível.
-   */
-  const [ordemHistorico, setOrdemHistorico] = useState<"lancamento" | "produto">("lancamento");
   const [categoriasAbertas, setCategoriasAbertas] = useState<Record<string, boolean>>({});
   const [perdaAAnular, setPerdaAAnular] = useState<RegistroPerda | null>(null);
   const [motivoAnulacao, setMotivoAnulacao] = useState("");
@@ -197,27 +174,14 @@ export function TelaPerdas({
   );
 
   /**
-   * Perdas do dia somadas por produto, da maior para a menor.
-   *
-   * Só lançamentos VÁLIDOS: um registro anulado não é perda, é erro de
-   * digitação corrigido. Somá-lo aqui poria no topo da lista exatamente
-   * o número que a matriz acabou de invalidar.
+   * O último lançamento válido do dia — o único que ainda dá para anular
+   * a partir desta tela desde que a tabela saiu. É onde o erro é
+   * percebido: quem digitou 20 kg no lugar de 2 vê o número na hora.
    */
-  const totaisPorProduto = useMemo(() => {
-    const soma = new Map<number, { unidades: number; quilos: number; lancamentos: number }>();
-    for (const perda of perdasDeHoje) {
-      if (!perdaEstaValida(perda)) continue;
-      const atual = soma.get(perda.codigoPdv) ?? { unidades: 0, quilos: 0, lancamentos: 0 };
-      soma.set(perda.codigoPdv, {
-        unidades: atual.unidades + perda.quantidadeUnidadesEstimada,
-        quilos: atual.quilos + perda.quantidadeQuilos,
-        lancamentos: atual.lancamentos + 1,
-      });
-    }
-    return [...soma.entries()]
-      .map(([codigoPdv, valores]) => ({ codigoPdv, ...valores }))
-      .sort((a, b) => b.unidades - a.unidades);
-  }, [perdasDeHoje]);
+  const ultimoLancamento = useMemo(
+    () => [...perdasDeHoje].reverse().find((p) => !p.cancelada),
+    [perdasDeHoje]
+  );
 
   const candidatoSelecionado = candidatos.find((c) => c.produto.codigoPdv === codigoSelecionado);
 
@@ -328,126 +292,39 @@ export function TelaPerdas({
         </div>
       )}
 
-      <div className="cabecalho-historico">
-        <h3>{ehMatriz ? "Perdas lançadas hoje — todas as lojas" : "Perdas lançadas hoje"}</h3>
-        {/* Duas leituras da MESMA informação, não dois relatórios. Por
-            isso alterna aqui em cima, e não vira outra tela. */}
-        <div className="grupo-ordem">
-          <button
-            type="button"
-            className={ordemHistorico === "lancamento" ? "ativa" : ""}
-            onClick={() => setOrdemHistorico("lancamento")}
-          >
-            Por lançamento
-          </button>
-          <button
-            type="button"
-            className={ordemHistorico === "produto" ? "ativa" : ""}
-            onClick={() => setOrdemHistorico("produto")}
-          >
-            Mais perdidos
-          </button>
-        </div>
-      </div>
+      {/*
+        A TABELA DE "PERDAS LANÇADAS HOJE" SAIU DAQUI (ago/2026, decisão
+        do dono do negócio).
+        ---------------------------------------------------------------
+        Ela ocupava o pé da tela todo dia — com o alternador "por
+        lançamento / por produto" — para responder uma pergunta que quem
+        acabou de lançar já sabe. Quem quer LER a perda vai a Análises,
+        que é a tela feita para isso e cruza com a produção; quem vem
+        aqui vem LANÇAR.
 
-      {ordemHistorico === "produto" ? (
-        <div className="tabela-scroll">
-          <table className="tabela-simples tabela-compacta">
-            <thead>
-              <tr>
-                <th>Produto</th>
-                {/* "Un" e "Peso": cabeçalho por extenso reservava mais
-                    largura que os próprios números e empurrava a tabela
-                    para fora dos 390px do celular. */}
-                <th>Un</th>
-                <th>Peso</th>
-              </tr>
-            </thead>
-            <tbody>
-              {totaisPorProduto.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="vazio">
-                    Nenhuma perda válida registrada hoje.
-                  </td>
-                </tr>
-              )}
-              {totaisPorProduto.map((linha) => (
-                <tr key={linha.codigoPdv}>
-                  <td>
-                    {produtos.find((pr) => pr.codigoPdv === linha.codigoPdv)?.nome ?? linha.codigoPdv}
-                    {/* A contagem de lançamentos entra AQUI, e não numa
-                        quarta coluna: com ela a tabela passava de 390px e
-                        obrigava a rolar de lado para ver o peso. E é ela
-                        que explica o total — quatro lançamentos de 2 kg
-                        somam mais que um de 5. */}
-                    {linha.lancamentos > 1 && (
-                      <span className="nota-linha">{linha.lancamentos} lançamentos</span>
-                    )}
-                  </td>
-                  <td className="coluna-numero">{formatarNumero(linha.unidades)}</td>
-                  <td className="coluna-numero">{formatarNumero(linha.quilos)} kg</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="nota-rodape">
-            Somado por produto, do que mais saiu para o que menos saiu. Lançamentos anulados ficam
-            de fora. Para anular um erro, volte em <strong>Por lançamento</strong>.
-          </p>
+        O que não podia sair junto era a anulação: erro de digitação se
+        percebe na hora, e sem caminho para desfazer o número errado fica
+        contaminando a taxa de perda para sempre. Ficou o último
+        lançamento do dia, numa linha — que é onde o erro é notado.
+      */}
+      {ehMatriz && ultimoLancamento && (
+        <div className="ultimo-lancamento">
+          <span className="texto-ultimo">
+            Último: {produtos.find((pr) => pr.codigoPdv === ultimoLancamento.codigoPdv)?.nome ??
+              ultimoLancamento.codigoPdv}{" "}
+            · {ultimoLancamento.quantidadeQuilos} kg
+          </span>
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              setPerdaAAnular(ultimoLancamento);
+              setMotivoAnulacao("");
+            }}
+          >
+            anular
+          </button>
         </div>
-      ) : (
-      <div className="tabela-scroll">
-        <table className="tabela-simples">
-          <thead>
-            <tr>
-              <th>Produto</th>
-              <th>Peso perdido</th>
-              <th>Peso unitário usado</th>
-              <th>Unidades (est.)</th>
-              {ehMatriz && <th>Loja</th>}
-              <th>Motivo</th>
-              {ehMatriz && <th aria-label="Anular" />}
-            </tr>
-          </thead>
-          <tbody>
-            {perdasDeHoje.length === 0 && (
-              <tr>
-                <td colSpan={ehMatriz ? 7 : 5} className="vazio">
-                  Nenhuma perda registrada ainda hoje.
-                </td>
-              </tr>
-            )}
-            {perdasDeHoje.map((p) => (
-              <tr key={p.id} className={p.cancelada ? "linha-anulada" : ""}>
-                <td>{produtos.find((pr) => pr.codigoPdv === p.codigoPdv)?.nome ?? p.codigoPdv}</td>
-                <td>{p.quantidadeQuilos} kg</td>
-                <td>{p.pesoUnitarioGramasInformado} g</td>
-                <td>{p.quantidadeUnidadesEstimada}</td>
-                {ehMatriz && <td>{nomeDaLoja(p.lojaId ?? LOJA_MATRIZ.id)}</td>}
-                <td>{p.cancelada ? "anulada" : p.motivo}</td>
-                {ehMatriz && (
-                  <td>
-                    {!p.cancelada && (
-                      <button
-                        type="button"
-                        className="botao-limpar-sessao"
-                        title="Anular este lançamento"
-                        aria-label="Anular este lançamento"
-                        onClick={() => {
-                          setPerdaAAnular(p);
-                          setMotivoAnulacao("");
-                        }}
-                      >
-                        <IconeLixeira tamanho={16} />
-                      </button>
-                    )}
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
       )}
 
       {/* Anular NÃO apaga o registro: marca. Ver o comentário em

@@ -43,32 +43,71 @@ button, input, select, textarea { font: inherit; }
   background: var(--cor-superficie);
 }
 .cabecalho-app strong { display: block; font-size: 16px; }
-.subtitulo-app { font-size: 13px; color: var(--cor-texto-suave); }
+/* O NOME DA LOJA EM DESTAQUE (ago/2026, pedido do dono do negócio).
+   Era cinza de 13px, e a única coisa na tela que diz em qual conta o
+   aparelho está. Num app que a mesma pessoa usa como matriz e como
+   filial, essa linha é o que evita lançar a perda na loja errada — não é
+   legenda do título de cima, é estado. */
+.subtitulo-app {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cor-acento);
+}
 .operador-atual { font-size: 14px; display: flex; align-items: center; gap: 8px; }
 
+/* ---------------------------------------------------------------
+   ABAS DE LARGURA IGUAL, TEXTO CENTRADO (ago/2026, pedido do dono do
+   negócio: "o nome das abas não está centralizado").
+
+   Eram duas coisas erradas ao mesmo tempo. A barra ROLAVA na horizontal
+   porque `white-space: nowrap` proibia a quebra: "Lista de Produção" numa
+   linha só empurrava as outras abas para fora da tela, e cada aba ficava
+   com uma largura diferente. E o conteúdo de cada botão era `inline-flex`
+   sem `justify-content`, então o rótulo encostava na ESQUERDA do botão em
+   vez de ficar no meio dele.
+
+   Agora o rótulo quebra em duas linhas quando precisa, as cinco abas
+   dividem a largura em partes iguais (`flex: 1 1 0` com `min-width: 0`) e
+   nada rola. A simetria deixou de depender do comprimento das palavras.
+   --------------------------------------------------------------- */
 .abas-principais {
   display: flex;
-  gap: 4px;
-  padding: 8px 12px;
+  gap: 2px;
+  padding: 8px 6px;
   background: var(--cor-superficie);
   border-bottom: 1px solid var(--cor-borda);
-  overflow-x: auto;
 }
-/* 8px de folga lateral, e não 12 (ago/2026). As cinco abas da matriz não
-   cabem em 390px de qualquer jeito — a barra rola, e isso é normal —, mas
-   com "Nova fornada" o excesso era de 55px e agora, com "Hoje", é de 31.
-   Quanto menos sobra, menos "Análises" parece cortada por defeito. Abaixo
-   disso o alvo de toque começa a sofrer, e aí a conta se inverte. */
 .abas-principais button {
-  flex: 1;
-  padding: 10px 8px;
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 48px;
+  /* Folga lateral de 1px, e não 3: medido no navegador, "Reposição" tem
+     69px a 12px e a aba tem 74. Cada pixel de padding tirava a palavra
+     inteira da linha e a partia no meio. Só "Suprimentos" (87px) não cabe
+     em uma linha, e essa quebra é resolvida pela hifenização abaixo. */
+  padding: 14px 1px 8px;
   border: none;
   background: transparent;
   border-radius: var(--raio);
   color: var(--cor-texto-suave);
+  /* 12px, e não 13: "Suprimentos" é a palavra mais longa da barra e a
+     13px ela não cabe em um quinto de 390px — quebrava no meio
+     ("Suprimen/tos"), que é pior que uma fonte um ponto menor. */
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
   cursor: pointer;
-  white-space: nowrap;
+  /* `break-word`, e não `anywhere`: a quebra acontece entre PALAVRAS
+     ("Lista de" / "Produção") e só parte uma palavra se ela sozinha não
+     couber na linha. */
+  overflow-wrap: break-word;
+  /* Parte "Suprimentos" numa separação silábica de verdade, com hífen,
+     em vez de cortar onde calhar. Depende do dicionário de português do
+     navegador — onde não houver, o `break-word` acima continua impedindo
+     que a palavra vaze para a aba vizinha. */
+  hyphens: auto;
 }
 .abas-principais button.ativa { background: var(--cor-acento); color: var(--cor-acento-texto); }
 
@@ -521,7 +560,7 @@ button.link {
   .linha-campos { flex-direction: column; align-items: stretch; }
   .dia-semana-badge { align-self: flex-start; }
   .cabecalho-app { flex-wrap: wrap; gap: 8px; }
-  .abas-principais button { font-size: 13px; padding: 10px 8px; }
+  .abas-principais { padding: 8px 6px; }
   .editor-quantidade { flex-wrap: wrap; }
   .editor-quantidade button { flex: 1; }
 }
@@ -1452,7 +1491,21 @@ button.perigo:hover { background: #822525; }
    o próprio botão da aba — e o número precisa ser visto de longe, sem o
    painel estar aberto. Por isso pastilha sólida, e não texto colorido.
    --------------------------------------------------------------- */
-.abas-principais button { display: inline-flex; align-items: center; gap: 7px; }
+/* O selo de fornadas novas fica ao lado do rótulo, e o conjunto no meio
+   do botão. Sem o `justify-content`, o flex alinhava tudo à esquerda —
+   era essa a origem do "não está centralizado". */
+/* BLOCO, E NÃO FLEX (ago/2026). Dentro de um flex, o texto vira um item
+   anônimo com `min-width: auto` e se recusa a encolher abaixo do próprio
+   min-content: "Suprimentos" transbordava a aba e invadia a vizinha, sem
+   quebrar. Como bloco, o texto simplesmente respeita a largura da aba. */
+.abas-principais button { display: block; }
+/* O selo sai do fluxo e vai para o canto: dentro da linha ele disputava
+   espaço com o rótulo e forçava a quebra do texto. */
+.abas-principais .selo-aba {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+}
 .selo-aba {
   min-width: 20px;
   height: 20px;
@@ -2101,6 +2154,23 @@ button.perigo:hover { background: #822525; }
 .cartao-suprimentos { display: block; }
 .titulo-suprimentos { display: block; margin-bottom: 10px; font-size: 16px; }
 .cartao-suprimentos .grupo-reposicao { margin-top: 8px; }
+
+/* A linha que sobrou no lugar da tabela de perdas do dia: o último
+   lançamento e o caminho para anulá-lo. Discreta de propósito — só
+   importa quando alguém acabou de errar. */
+.ultimo-lancamento {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cor-borda);
+  font-size: 14px;
+  color: var(--cor-texto-suave);
+}
+.texto-ultimo { overflow-wrap: anywhere; }
 
 .hora-pedido {
   margin-right: 8px;

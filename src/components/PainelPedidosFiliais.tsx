@@ -162,7 +162,23 @@ export function PainelPedidosFiliais({
           <strong>Reposições pedidas hoje</strong>
 
           {FILIAIS.map((filial) => {
-            const daFilial = reposicoesDeHoje.filter((p) => p.lojaId === filial.id);
+            /**
+             * DO MAIS RECENTE PARA O MAIS ANTIGO (ago/2026, pedido do
+             * dono do negócio).
+             *
+             * Vinham na ordem de chegada, e o que acabou de ser pedido —
+             * o que ainda dá tempo de atender — ficava no fim da lista,
+             * embaixo do que já foi respondido. Quem abre este card abre
+             * para resolver o que chegou agora.
+             *
+             * `enviadoEm` é o instante do pedido; `criadoEm` cobre os
+             * registros antigos que não o têm.
+             */
+            const daFilial = reposicoesDeHoje
+              .filter((p) => p.lojaId === filial.id)
+              .sort((a, b) =>
+                (b.enviadoEm ?? b.criadoEm).localeCompare(a.enviadoEm ?? a.criadoEm)
+              );
             if (daFilial.length === 0) return null;
 
             const pendentes = daFilial.filter((p) => desfechoDaReposicao(p) === "pendente").length;

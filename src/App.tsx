@@ -135,7 +135,16 @@ const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
   ],
   filial: [
     { chave: "fornada", rotulo: "Reposição" },
-    { chave: "suprimentos", rotulo: "Suprimentos" },
+    /**
+     * O `\u00AD` é um HÍFEN CONDICIONAL, invisível quando a palavra cabe.
+     *
+     * "Suprimentos" tem 87px a 12px e a aba tem 72px úteis num celular de
+     * 390px: em barra de cinco abas de largura igual, essa palavra não
+     * cabe em uma linha em tamanho legível — o navegador ia quebrá-la de
+     * qualquer jeito, e quebrava onde calhasse ("Supriment/os"). Aqui a
+     * separação é dita: "Supri-/mentos", com hífen, como se escreve.
+     */
+    { chave: "suprimentos", rotulo: "Supri\u00ADmentos" },
     { chave: "perdas", rotulo: "Perdas" },
     { chave: "pedido", rotulo: "Lista de Produção" },
     // Análises entrou para a filial em ago/2026, travada na própria loja:
