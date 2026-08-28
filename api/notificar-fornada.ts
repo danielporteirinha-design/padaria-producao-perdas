@@ -195,6 +195,11 @@ export default async function handler(req: any, res: any) {
       nomeProduto?: string;
       codigoPdv?: number;
       vezesHoje?: number;
+      /**
+       * Duas coisas diferentes usam este campo, e o contexto separa:
+       * na REPOSIÇÃO é quanto a filial está pedindo; no ANÚNCIO da
+       * matriz é quanto saiu do forno (informado no anúncio por voz).
+       */
       quantidade?: number;
       paraLojaId?: string;
       motivo?: string;
@@ -371,10 +376,18 @@ export default async function handler(req: any, res: any) {
       // convida a filial a fazer nada. Ela precisa saber que dá para
       // pedir, e que é agora.
       titulo = nomeProduto!;
+      /**
+       * A QUANTIDADE ENTRA QUANDO EXISTE (ago/2026, com o anúncio por
+       * voz). "40 unidades" muda a decisão da filial: com o número, ela
+       * pede o que cabe; sem ele, pede no escuro e a matriz responde
+       * "não tem tudo isso".
+       */
+      const quantas =
+        typeof quantidade === "number" && quantidade > 0 ? `${quantidade} un — ` : "";
       corpo =
         vezesHoje && vezesHoje > 1
-          ? `${vezesHoje}ª fornada de hoje — disponível para pedidos. Toque para pedir.`
-          : "Acabou de sair do forno e está disponível para pedidos. Toque para pedir.";
+          ? `${quantas}${vezesHoje}ª fornada de hoje, disponível para pedidos. Toque para pedir.`
+          : `${quantas}acabou de sair do forno e está disponível para pedidos. Toque para pedir.`;
       etiqueta = `fornada-${codigoPdv}`;
     } else {
       // O nome da loja vai no TÍTULO: é a primeira coisa que a matriz

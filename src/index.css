@@ -1565,6 +1565,59 @@ button.perigo:hover { background: #822525; }
 .busca-forno .link { flex-shrink: 0; }
 
 /* ---------------------------------------------------------------
+   Anúncio de mãos livres (AnuncioPorVoz.tsx, ago/2026)
+   O botão ocupa a largura toda e vem antes da busca: é o caminho
+   principal de quem está com as mãos na massa. Durante o diálogo, o
+   bloco troca de forma — pergunta grande, microfone pulsando — para ser
+   entendido de relance, a um metro de distância.
+   --------------------------------------------------------------- */
+.anunciar-por-voz {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+.dialogo-voz {
+  margin-bottom: 12px;
+  padding: 16px;
+  border: 2px solid var(--cor-acento);
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  text-align: center;
+}
+.pergunta-voz {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  line-height: 1.25;
+}
+.pulso-microfone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--cor-alerta-fundo);
+  color: var(--cor-acento);
+}
+/* Pulsa só ENQUANTO escuta: é o sinal de "pode falar agora", e um pulso
+   permanente deixaria de significar isso. */
+.pulso-microfone.ouvindo {
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+  animation: pulso-selo 1.1s ease-in-out infinite;
+}
+.dialogo-voz .nota-rodape,
+.dialogo-voz .erro-conversao { margin: 10px 0 0; }
+.dialogo-voz .link { margin-top: 8px; }
+
+/* ---------------------------------------------------------------
    Cadastro relâmpago na Reposição (PainelFornoDeHoje.tsx, ago/2026)
    Aparece no lugar do "não achei". O bloco é discreto — fundo do app,
    traço pontilhado — porque é uma saída de exceção: na maioria das

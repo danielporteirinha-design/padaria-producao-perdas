@@ -61,6 +61,11 @@ import { somarDias } from "../src/lib/data";
 import { incluirItemProduzido, planoContemItem, planoDeHojeCom } from "../src/lib/producaoDeHoje";
 import { abaDaUrl, urlDaAba } from "../src/lib/rota";
 import {
+  entenderEnvioOuDescarte,
+  entenderQuantidade,
+  entenderSimOuNao,
+} from "../src/lib/vozRespostas";
+import {
   agruparPorSegmento,
   idDoPedidoSuprimentos,
   idDoSuprimento,
@@ -3121,6 +3126,69 @@ const perdas: RegistroPerda[] = [
   // A aba nova precisa ser destino valido de push, senao o toque no aviso
   // nao leva a lugar nenhum.
   afirmar(abaDaUrl("/?aba=suprimentos") === "suprimentos", "push de suprimentos abre a aba certa");
+}
+
+// ---------------------------------------------------------------
+// Anuncio por voz: entender a resposta do jeito que se fala
+// (ver src/lib/vozRespostas.ts)
+// ---------------------------------------------------------------
+{
+  // --- sim / nao
+  for (const sim of ["sim", "Isso", "isso mesmo", "confirma", "pode", "certo", "uhum", "ok"]) {
+    afirmar(entenderSimOuNao(sim) === true, `"${sim}" e' confirmacao`);
+  }
+  for (const nao of ["não", "nao", "errado", "não é esse", "outro", "negativo"]) {
+    afirmar(entenderSimOuNao(nao) === false, `"${nao}" e' negacao`);
+  }
+  // O CASO QUE JUSTIFICA A FUNCAO: "nao e' esse" contem "e' esse". Uma
+  // busca ingenua por conteudo leria a negacao como confirmacao e trocaria
+  // o produto anunciado para as tres lojas.
+  afirmar(
+    entenderSimOuNao("não é esse mesmo") === false,
+    "negacao que contem palavra de confirmacao continua sendo negacao"
+  );
+  afirmar(entenderSimOuNao("") === null, "silencio nao e' resposta");
+  afirmar(entenderSimOuNao("o forno está quente") === null, "frase sem resposta devolve null");
+
+  // --- quantidade
+  const casos: [string, number | null][] = [
+    ["40", 40],
+    ["quarenta", 40],
+    ["quarenta unidades", 40],
+    ["são quarenta", 40],
+    ["quarenta e dois", 42],
+    ["cento e vinte", 120],
+    ["cem", 100],
+    ["duzentos e cinquenta", 250],
+    ["uma dúzia", 12],
+    ["meia dúzia", 6],
+    ["duas dúzias", 24],
+    ["três dúzias", 36],
+    ["dúzia", 12],
+    ["12 pães", 12],
+    ["não sei", null],
+    ["", null],
+    ["zero", null],
+  ];
+  for (const [dito, esperado] of casos) {
+    const obtido = entenderQuantidade(dito);
+    afirmar(obtido === esperado, `"${dito}" -> ${esperado} (obtido: ${obtido})`);
+  }
+
+  // --- enviar / descartar
+  afirmar(entenderEnvioOuDescarte("enviar") === "enviar", "enviar envia");
+  afirmar(entenderEnvioOuDescarte("pode enviar") === "enviar", "pode enviar envia");
+  afirmar(entenderEnvioOuDescarte("manda") === "enviar", "manda envia");
+  afirmar(entenderEnvioOuDescarte("descartar") === "descartar", "descartar descarta");
+  afirmar(entenderEnvioOuDescarte("cancela") === "descartar", "cancela descarta");
+  afirmar(entenderEnvioOuDescarte("não") === "descartar", "nao descarta");
+  // A ULTIMA PERGUNTA E' MAIS EXIGENTE: aqui a resposta dispara um aviso
+  // para tres lojas, e uma palavra ambigua nao pode disparar nada.
+  afirmar(
+    entenderEnvioOuDescarte("acho que sim, né") === null,
+    "resposta vaga na pergunta do envio nao envia nada"
+  );
+  afirmar(entenderEnvioOuDescarte("") === null, "silencio nao envia");
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

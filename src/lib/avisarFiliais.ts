@@ -56,9 +56,11 @@ export function explicarFalhaDeEnvio(codigo: string): string {
 export async function avisarFiliais(
   nomeProduto: string,
   codigoPdv: number,
-  vezesHoje: number
+  vezesHoje: number,
+  /** Quantas peças saíram, quando informado (anúncio por voz). */
+  quantidade?: number
 ): Promise<ResultadoAviso> {
-  return enviar({ nomeProduto, codigoPdv, vezesHoje });
+  return enviar({ nomeProduto, codigoPdv, vezesHoje, quantidade });
 }
 
 /**

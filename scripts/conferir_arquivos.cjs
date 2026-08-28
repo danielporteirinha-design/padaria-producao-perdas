@@ -105,6 +105,12 @@ const CONFERENCIAS = [
   ["src/components/PainelFornadasFilial.tsx", "botao-fornada", "Filial: Pedir e Excluir do mesmo tamanho"],
   ["src/index.css", "chip-setor", "Estilo do cadastro relampago"],
 
+  // --- Anúncio de fornada de mãos livres
+  ["src/components/AnuncioPorVoz.tsx", "pedirEnvio", "Anunciar fornada falando"],
+  ["src/lib/vozRespostas.ts", "entenderQuantidade", "Entender numero e sim/nao por voz"],
+  ["src/lib/falar.ts", "falar", "O app fala as perguntas"],
+  ["src/types/fornada.ts", "quantidade?", "Quantidade no anuncio"],
+
   // --- Suprimentos (embalagens e material de limpeza)
   ["src/types/suprimento.ts", "idDoSuprimento", "Modelo de suprimentos"],
   ["src/components/TelaSuprimentos.tsx", "onEnviarLista", "Filial: aba Suprimentos"],

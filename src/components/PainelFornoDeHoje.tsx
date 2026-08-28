@@ -31,6 +31,7 @@ import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
+import { AnuncioPorVoz } from "./AnuncioPorVoz";
 import { IconeLixeira } from "./Icones";
 
 /**
@@ -62,7 +63,11 @@ interface PainelFornoDeHojeProps {
   onEncerrarAnuncio: (codigoPdv: number) => Promise<void>;
   /** Devolve TODOS à vitrine de uma vez — o "mostrar de novo". */
   onReabrirTudo: () => Promise<void>;
-  onMarcarFornada: (codigoPdv: number, nomeConhecido?: string) => Promise<void>;
+  onMarcarFornada: (
+    codigoPdv: number,
+    nomeConhecido?: string,
+    quantidade?: number
+  ) => Promise<void>;
   /**
    * Cadastro relâmpago do produto que não está no catálogo. Devolve o
    * produto criado — o código novo é o que permite anunciar a fornada na
@@ -221,7 +226,9 @@ export function PainelFornoDeHoje({
             {marcando === codigoPdv
               ? "..."
               : saiu
-                ? `${doDia.length}× · ${horaDaUltimaFornada(fornadas, dataHoje, codigoPdv)}`
+                ? `${doDia.length}× · ${horaDaUltimaFornada(fornadas, dataHoje, codigoPdv)}${
+                    doDia[0]?.quantidade ? ` · ${doDia[0].quantidade} un` : ""
+                  }`
                 : "anunciar"}
           </span>
         </button>
@@ -257,6 +264,19 @@ export function PainelFornoDeHoje({
             que acabou de sair. O progresso do dia se lê no card de
             confirmação, no Cronograma, que é onde ele decide alguma
             coisa. */}
+        {/* O DIÁLOGO DE MÃOS LIVRES VEM ANTES DA BUSCA (ago/2026, pedido
+            do dono do negócio). Anunciar é o que traz alguém a esta aba, e
+            é feito com as mãos ocupadas — o caminho que não exige tocar na
+            tela é o caminho principal. A busca continua logo abaixo para
+            quem prefere digitar, ou para o dia em que a padaria estiver
+            barulhenta demais. */}
+        <AnuncioPorVoz
+          produtos={produtos}
+          onAnunciar={(produto, quantidade) =>
+            onMarcarFornada(produto.codigoPdv, produto.nome, quantidade)
+          }
+        />
+
         <CampoDeBusca
           className="busca-forno"
           valor={busca}

@@ -24,6 +24,22 @@ export interface FornadaPronta {
   codigoPdv: number;
   marcadaPor: string;
   marcadaEm: string; // ISO 8601 datetime — a HORA é o dado que interessa
+
+  /**
+   * Quantas peças saíram, quando quem anunciou informou (ago/2026).
+   *
+   * OPCIONAL, E CONTINUA OPCIONAL. O anúncio por TOQUE segue sem
+   * quantidade, pelo motivo do cabeçalho deste arquivo: um item que sai
+   * seis vezes por dia viraria seis digitações, e ninguém faria. O que
+   * mudou foi o anúncio por VOZ, em que dizer "quarenta" não custa mais
+   * do que dizer o nome — e aí a filial passa a saber não só que saiu,
+   * mas quanto dá para pedir.
+   *
+   * Ausente significa "não informado", nunca zero. Quem lê precisa poder
+   * distinguir as duas coisas: um anúncio sem quantidade é um convite a
+   * perguntar; um anúncio de zero seria um convite a não pedir.
+   */
+  quantidade?: number;
 }
 
 /** Id único por marcação: o mesmo produto sai várias vezes no mesmo dia. */

@@ -801,7 +801,11 @@ export default function App() {
    * para as três filiais diria "Produto saiu do forno", que é justamente
    * a informação que elas precisam para decidir se pedem.
    */
-  async function handleMarcarFornada(codigoPdv: number, nomeConhecido?: string) {
+  async function handleMarcarFornada(
+    codigoPdv: number,
+    nomeConhecido?: string,
+    quantidade?: number
+  ) {
     const agora = new Date().toISOString();
     const hoje = dataDeHojeIso();
     const fornada: FornadaPronta = {
@@ -810,6 +814,9 @@ export default function App() {
       codigoPdv,
       marcadaPor: operador,
       marcadaEm: agora,
+      // Só entra quando foi informada — ver o comentário em FornadaPronta
+      // sobre por que ausente e zero são coisas diferentes.
+      ...(quantidade && quantidade > 0 ? { quantidade } : {}),
     };
     const nome = nomeConhecido ?? produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? "Produto";
     await comRetorno(() => repositorio!.marcarFornada(fornada), `${nome} saiu do forno.`);
@@ -837,7 +844,7 @@ export default function App() {
      */
     try {
       const vezesHoje = fornadas.filter((f) => f.data === hoje && f.codigoPdv === codigoPdv).length + 1;
-      const resultado = await avisarFiliais(nome, codigoPdv, vezesHoje);
+      const resultado = await avisarFiliais(nome, codigoPdv, vezesHoje, quantidade);
       /**
        * Só fala quando ALGO impediu o aviso de chegar. Envio normal segue
        * calado: confirmar "3 aparelhos avisados" a cada fornada seria seis
