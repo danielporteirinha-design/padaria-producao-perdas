@@ -47,8 +47,9 @@ const CONFERENCIAS = [
   ["src/components/PainelFornoDeHoje.tsx", "onEncerrarAnuncio", "Matriz: tirar item da lista"],
   ["src/components/PainelFornadasFilial.tsx", "encerrados.has", "Filial: respeita o que a matriz tirou"],
 
-  // --- Lista da matriz sem agrupamento por sessão
-  ["src/components/PainelFornoDeHoje.tsx", "itensDoDia.map", "Matriz: lista sem sessões"],
+  // --- Matriz: a lista pronta do cronograma saiu; ficou voz + busca + sanfonas
+  ["src/components/PainelFornoDeHoje.tsx", "montarLinhasDaMatriz", "Matriz: anunciar por voz ou busca"],
+  ["src/lib/reposicaoDoDia.ts", "montarLinhasDaMatriz", "Matriz: as duas sanfonas"],
   ["src/index.css", "tirar-da-lista", "Estilo do botão de tirar da lista"],
 
   // --- Filial: esconder aviso da própria tela

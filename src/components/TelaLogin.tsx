@@ -76,8 +76,12 @@ async function entrarSemSenha(lojaId: string): Promise<{ ok: boolean; motivo: st
       return { ok: false, motivo: "a função de entrada não subiu no deploy" };
     }
     if (!resposta.ok) {
-      const dados = (await resposta.json().catch(() => ({}))) as { motivo?: string };
-      return { ok: false, motivo: MOTIVOS[dados.motivo ?? ""] ?? `recusado (${resposta.status})` };
+      const dados = (await resposta.json().catch(() => ({}))) as {
+        motivo?: string;
+        detalhe?: string;
+      };
+      const base = MOTIVOS[dados.motivo ?? ""] ?? `recusado (${resposta.status})`;
+      return { ok: false, motivo: dados.detalhe ? `${base} — ${dados.detalhe}` : base };
     }
     const dados = (await resposta.json()) as { token?: string };
     if (!dados.token) return { ok: false, motivo: "o servidor não devolveu credencial" };
@@ -95,10 +99,9 @@ async function entrarSemSenha(lojaId: string): Promise<{ ok: boolean; motivo: st
 
 /** Tradução dos códigos que api/entrar-como-loja.ts devolve. */
 const MOTIVOS: Record<string, string> = {
-  "sem-uids": "falta a variável UIDS_LOJAS na Vercel",
-  "loja-sem-uid": "esta loja não está em UIDS_LOJAS",
   "sem-credencial": "falta FIREBASE_SERVICE_ACCOUNT na Vercel",
-  "falha-ao-assinar": "a chave de serviço não pôde assinar (confira o JSON)",
+  "loja-desconhecida": "loja não reconhecida pelo servidor",
+  "falha-ao-assinar": "o servidor não conseguiu preparar a entrada",
 };
 
 export function TelaLogin() {

@@ -143,3 +143,88 @@ export function montarLinhasDoDia({
 export function estaPendente(linha: LinhaDoDia): boolean {
   return linha.situacao === "pendente";
 }
+
+
+/**
+ * O MESMO DIA, VISTO DA MATRIZ (ago/2026, decisão do dono do negócio: a
+ * aba dela "é para ficar no mesmo estilo da aba das filiais").
+ *
+ * A matriz também tem duas listas, e a pergunta é a mesma: quem ainda
+ * deve resposta?
+ *
+ *   SEM RESPOSTA — anunciei e nenhuma loja pediu ainda
+ *   CONCLUÍDOS   — alguma loja pediu, ou eu tirei o produto da vitrine
+ *
+ * Isto substituiu a lista pronta do cronograma e a pastilha de "mostrar
+ * escondidos". A lista pronta oferecia dezenas de itens que ainda não
+ * saíram do forno, e anunciar é sobre o que ACABOU de sair; a pastilha
+ * escondia o que já tinha sido tirado atrás de um ícone que ninguém
+ * associava a "ver de novo". Nas duas sanfonas, cada estado tem lugar
+ * próprio e nome escrito.
+ */
+export interface LinhaDaMatriz {
+  chave: string;
+  codigoPdv: number;
+  /** Instante da fornada mais recente do produto hoje. */
+  quando: string;
+  vezes: number;
+  /** Unidades anunciadas na fornada mais recente, quando informadas. */
+  unidades?: number;
+  situacao: "pendente" | "pedido" | "encerrado";
+  /** Quantas lojas já pediram este produto hoje. */
+  lojasQuePediram: number;
+}
+
+export interface EntradaDaMatriz {
+  fornadas: FornadaPronta[];
+  pedidos: PedidoFilial[];
+  hoje: string;
+  encerrados: Set<number>;
+}
+
+export function montarLinhasDaMatriz({
+  fornadas,
+  pedidos,
+  hoje,
+  encerrados,
+}: EntradaDaMatriz): LinhaDaMatriz[] {
+  /** Quantas lojas diferentes pediram cada produto hoje. */
+  const lojasPorProduto = new Map<number, Set<string>>();
+  for (const pedido of pedidos) {
+    if (pedido.data !== hoje || !ehReposicao(pedido)) continue;
+    for (const item of pedido.itens) {
+      const lojas = lojasPorProduto.get(item.codigoPdv) ?? new Set<string>();
+      lojas.add(pedido.lojaId);
+      lojasPorProduto.set(item.codigoPdv, lojas);
+    }
+  }
+
+  const porProduto = new Map<number, FornadaPronta[]>();
+  for (const fornada of fornadas) {
+    if (fornada.data !== hoje) continue;
+    porProduto.set(fornada.codigoPdv, [...(porProduto.get(fornada.codigoPdv) ?? []), fornada]);
+  }
+
+  const linhas: LinhaDaMatriz[] = [];
+  for (const [codigoPdv, doDia] of porProduto) {
+    const ordenadas = [...doDia].sort((a, b) => b.marcadaEm.localeCompare(a.marcadaEm));
+    const pediram = lojasPorProduto.get(codigoPdv)?.size ?? 0;
+    linhas.push({
+      chave: `m-${codigoPdv}`,
+      codigoPdv,
+      quando: ordenadas[0].marcadaEm,
+      vezes: ordenadas.length,
+      unidades: ordenadas[0].quantidade,
+      lojasQuePediram: pediram,
+      // ENCERRADO GANHA DE PEDIDO: tirar da vitrine é a decisão mais
+      // recente da matriz, e é ela que a tela precisa mostrar.
+      situacao: encerrados.has(codigoPdv) ? "encerrado" : pediram > 0 ? "pedido" : "pendente",
+    });
+  }
+
+  return linhas.sort((a, b) => b.quando.localeCompare(a.quando));
+}
+
+export function anuncioPendente(linha: LinhaDaMatriz): boolean {
+  return linha.situacao === "pendente";
+}

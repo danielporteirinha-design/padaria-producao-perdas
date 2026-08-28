@@ -51,10 +51,17 @@ import {
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "../src/lib/fornadasVistas";
 import { comoLiberarNotificacao, plataformaAtual } from "../src/lib/plataforma";
 import { contemBusca, paraBusca, radical } from "../src/lib/texto";
-import { estaPendente, montarLinhasDoDia } from "../src/lib/reposicaoDoDia";
 import {
+  anuncioPendente,
+  estaPendente,
+  montarLinhasDaMatriz,
+  montarLinhasDoDia,
+} from "../src/lib/reposicaoDoDia";
+import {
+  CONTAS_DAS_LOJAS,
   IDS_DAS_LOJAS,
   assinarTokenPersonalizado,
+  lerContaDeServico,
   lerUidsConfigurados,
 } from "../api/entrar-como-loja";
 import { LOJAS } from "../src/lib/lojas";
@@ -3453,6 +3460,33 @@ const perdas: RegistroPerda[] = [
       IDS_DAS_LOJAS.every((id, i) => id === LOJAS[i].id),
     "as lojas da funcao de API sao as mesmas de src/lib/lojas.ts"
   );
+  afirmar(
+    CONTAS_DAS_LOJAS.every((c, i) => c.email === LOJAS[i].email),
+    "os e-mails da funcao de API sao os mesmos de src/lib/lojas.ts"
+  );
+
+  /**
+   * A CONTA DE SERVIÇO É A ÚNICA CONFIGURAÇÃO. Se ela não for lida, a
+   * entrada sem senha não liga — e o diagnóstico tem de dizer isso, e
+   * não cair em silêncio.
+   */
+  afirmar(lerContaDeServico(undefined) === null, "sem a variavel, nao ha conta de servico");
+  afirmar(lerContaDeServico("nao e json") === null, "JSON quebrado nao explode, devolve null");
+  afirmar(
+    lerContaDeServico(JSON.stringify({ client_email: "a@b.c", project_id: "p" })) === null,
+    "conta sem chave privada e recusada"
+  );
+  afirmar(
+    lerContaDeServico(JSON.stringify({ client_email: "a@b.c", private_key: "k" })) === null,
+    "conta sem project_id e recusada — a consulta de UID precisa dele"
+  );
+  const comQuebras = lerContaDeServico(
+    JSON.stringify({ client_email: "a@b.c", project_id: "p", private_key: "linha1\\nlinha2" })
+  );
+  afirmar(
+    comQuebras?.private_key === "linha1\nlinha2",
+    "o \\n literal da variavel de ambiente vira quebra de linha de verdade"
+  );
 
   afirmar(lerUidsConfigurados(undefined) === null, "sem a variavel, o recurso fica desligado");
   afirmar(lerUidsConfigurados("   ") === null, "variavel vazia tambem desliga");
@@ -3598,6 +3632,66 @@ const perdas: RegistroPerda[] = [
   ];
   afirmar(montar({ pedidos: ruido }).length === 5, "outra loja, outro dia e o pedido diario ficam de fora");
   afirmar(montar({}).length === 0, "sem nada, as duas sanfonas ficam vazias");
+
+  // ---------- as duas sanfonas da MATRIZ ----------
+  console.log("\n--- Reposicao: as duas sanfonas da matriz ---");
+
+  const daMatriz = (extra: Partial<Parameters<typeof montarLinhasDaMatriz>[0]> = {}) =>
+    montarLinhasDaMatriz({
+      fornadas: avisos, pedidos: [], hoje: HOJE, encerrados: vazio, ...extra,
+    });
+
+  const anunciados = daMatriz();
+  afirmar(anunciados.length === 2, `duas fornadas do mesmo produto viram UMA linha (obtido: ${anunciados.length})`);
+  afirmar(anunciados.every(anuncioPendente), "anuncio que ninguem pediu fica sem resposta");
+  afirmar(anunciados.find((l) => l.codigoPdv === 7)?.vezes === 2, "a linha diz quantas fornadas sairam");
+  afirmar(
+    anunciados[0].quando >= anunciados[1].quando,
+    "do mais recente para o mais antigo, como no resto do app"
+  );
+
+  const comPedido = daMatriz({
+    pedidos: [
+      rep("m1", `${HOJE}T11:00:00.000Z`, [{ codigoPdv: 7, quantidadeUnidades: 10 }]),
+      rep("m2", `${HOJE}T11:10:00.000Z`, [{ codigoPdv: 7, quantidadeUnidades: 4 }], {
+        lojaId: "FILIAL_BENJAMIN_CONSTANT",
+      }),
+    ],
+  });
+  const pedido7 = comPedido.find((l) => l.codigoPdv === 7);
+  afirmar(pedido7?.situacao === "pedido", "loja pediu: o anuncio sai de 'sem resposta'");
+  afirmar(pedido7?.lojasQuePediram === 2, `duas lojas contam duas (obtido: ${pedido7?.lojasQuePediram})`);
+  afirmar(comPedido.filter(anuncioPendente).length === 1, "sobra o anuncio que ninguem pediu");
+
+  const encerradoNaMatriz = daMatriz({ encerrados: new Set([7]) });
+  afirmar(
+    encerradoNaMatriz.find((l) => l.codigoPdv === 7)?.situacao === "encerrado",
+    "tirado da vitrine vira 'encerrado' — e continua visivel para a matriz"
+  );
+  afirmar(
+    encerradoNaMatriz.length === 2,
+    "encerrar NAO some da tela da matriz: vai para os concluidos"
+  );
+  const encerradoEPedido = daMatriz({
+    encerrados: new Set([7]),
+    pedidos: [rep("m3", `${HOJE}T11:00:00.000Z`, [{ codigoPdv: 7, quantidadeUnidades: 10 }])],
+  });
+  afirmar(
+    encerradoEPedido.find((l) => l.codigoPdv === 7)?.situacao === "encerrado",
+    "encerrar e a decisao mais recente e ganha de 'pedido'"
+  );
+
+  afirmar(
+    montarLinhasDaMatriz({ fornadas: [], pedidos: [], hoje: HOJE, encerrados: vazio }).length === 0,
+    "sem fornada nenhuma, a matriz ve as duas sanfonas vazias"
+  );
+  afirmar(
+    montarLinhasDaMatriz({
+      fornadas: [forno(7, "2026-08-27T08:00:00.000Z")].map((f) => ({ ...f, data: "2026-08-27" })),
+      pedidos: [], hoje: HOJE, encerrados: vazio,
+    }).length === 0,
+    "fornada de ontem nao entra na lista de hoje"
+  );
 }
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);

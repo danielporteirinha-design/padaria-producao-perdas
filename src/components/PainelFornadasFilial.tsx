@@ -38,7 +38,7 @@ import type { LinhaDoDia } from "../lib/reposicaoDoDia";
 import { estaPendente, montarLinhasDoDia } from "../lib/reposicaoDoDia";
 import { dispensarFornada, fornadasDispensadas } from "../lib/fornadasDispensadas";
 import type { Loja } from "../lib/lojas";
-import { dataDeHojeIso } from "../lib/data";
+import { dataDeHojeIso, horaDoInstante } from "../lib/data";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { contemBusca } from "../lib/texto";
 import { IconeConfere, IconeLixeira, IconeSeta } from "./Icones";
@@ -275,6 +275,12 @@ export function PainelFornadasFilial({
               {daMatriz ? "Saiu do forno" : "Eu pedi"}
             </em>
             <strong>{nomeDoProduto(linha.codigoPdv)}</strong>
+            {/* A HORA DE CADA OCORRÊNCIA (ago/2026, pedido do dono do
+                negócio). Sem ela, duas linhas do mesmo produto no mesmo
+                dia são indistinguíveis — e é justamente a hora que diz
+                se o pedido das 9h já foi atendido pela entrega ou se
+                ainda está esperando. */}
+            <em className="hora-reposicao">{horaDoInstante(linha.quando)}</em>
           </span>
 
           {linha.situacao === "pendente" && (

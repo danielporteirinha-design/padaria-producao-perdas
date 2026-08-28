@@ -1336,11 +1336,6 @@ export default function App() {
   // disponível em vez de renderizar tela em branco.
   const abaAtual = abasVisiveis.some((a) => a.chave === aba) ? aba : abasVisiveis[0].chave;
 
-  /** Cronograma confirmado de HOJE — é dele que sai a lista do forno. */
-  const planoDeHojeParaFornada = planos.find(
-    (p) => p.data === diaCorrente && p.status === "confirmado"
-  );
-
   return (
     <div className="app">
       {/*
@@ -1564,9 +1559,9 @@ export default function App() {
                   montado deixou de ser motivo para esconder a tela. O
                   próprio painel explica o que fazer quando não há lista. */}
               <PainelFornoDeHoje
-                plano={planoDeHojeParaFornada}
                 produtos={produtos}
                 fornadas={fornadas}
+                pedidos={pedidos}
                 dataHoje={diaCorrente}
                 encerrados={codigosEncerrados(anunciosEncerrados, diaCorrente)}
                 onEncerrarAnuncio={handleEncerrarAnuncio}

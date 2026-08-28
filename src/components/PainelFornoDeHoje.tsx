@@ -23,16 +23,18 @@
 
 import { useMemo, useState } from "react";
 import type { NovoProdutoInput, Produto } from "../types/produto";
-import type { PlanoDeProducaoDiario } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
-import { ordenarPorAnuncioRecente } from "../lib/ordemDaReposicao";
+import type { PedidoFilial } from "../types/pedido";
+import type { LinhaDaMatriz } from "../lib/reposicaoDoDia";
+import { anuncioPendente, montarLinhasDaMatriz } from "../lib/reposicaoDoDia";
+import { horaDoInstante } from "../lib/data";
 import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
 import { AssistenteDeVoz } from "./AssistenteDeVoz";
-import { IconeLixeira } from "./Icones";
+import { IconeConfere, IconeLixeira, IconeSeta } from "./Icones";
 
 /**
  * Quantos resultados a busca mostra. O catálogo tem centenas de itens; a
@@ -42,15 +44,13 @@ import { IconeLixeira } from "./Icones";
 const MAXIMO_RESULTADOS = 12;
 
 interface PainelFornoDeHojeProps {
-  /**
-   * Plano confirmado de HOJE, quando existe. Opcional desde ago/2026: a
-   * busca anuncia qualquer produto do catálogo, e um dia sem cronograma
-   * montado (feriado, movimento imprevisto) não pode impedir a matriz de
-   * avisar as filiais do que acabou de sair.
-   */
-  plano?: PlanoDeProducaoDiario;
   produtos: Produto[];
   fornadas: FornadaPronta[];
+  /**
+   * Pedidos do dia — é por eles que a matriz sabe se um anúncio foi
+   * respondido por alguma loja.
+   */
+  pedidos: PedidoFilial[];
   dataHoje: string;
   /**
    * Produtos que a matriz tirou da vitrine de hoje. Vem de fora porque
@@ -77,9 +77,9 @@ interface PainelFornoDeHojeProps {
 }
 
 export function PainelFornoDeHoje({
-  plano,
   produtos,
   fornadas,
+  pedidos,
   dataHoje,
   encerrados,
   onEncerrarAnuncio,
@@ -97,6 +97,7 @@ export function PainelFornoDeHoje({
   const [cadastrando, setCadastrando] = useState(false);
   const [categoriaNova, setCategoriaNova] = useState("");
   const [salvandoNovo, setSalvandoNovo] = useState(false);
+  const [aberta, setAberta] = useState<Record<string, boolean>>({ semResposta: true });
 
   const nomeDoProduto = (codigo: number) =>
     produtos.find((p) => p.codigoPdv === codigo)?.nome ?? `#${codigo}`;
@@ -125,26 +126,25 @@ export function PainelFornoDeHoje({
   const buscando = busca.trim().length > 0;
 
   /**
-   * A lista do dia achatada, do anúncio mais recente para o mais antigo.
+   * O DIA DA MATRIZ EM DUAS SANFONAS (ago/2026, decisão do dono do
+   * negócio: esta aba "é para ficar no mesmo estilo da aba das filiais").
    *
-   * Sem repetir o produto que aparece em duas sessões e sem os que foram
-   * tirados da lista. A ordem do cronograma (a ordem em que a padaria
-   * produz) sobrevive só entre os itens que ainda não saíram, no fim da
-   * lista — o porquê está em src/lib/ordemDaReposicao.ts.
+   * O que saiu daqui: a LISTA PRONTA vinda do cronograma e a PASTILHA de
+   * "mostrar escondidos". A lista pronta oferecia dezenas de produtos que
+   * ainda não tinham ido ao forno, e anunciar é sobre o que ACABOU de
+   * sair — o item certo ficava perdido no meio do que não estava em jogo.
+   * A pastilha guardava o que já tinha sido tirado atrás de um ícone de
+   * lixeira, que ninguém lê como "ver de novo".
+   *
+   * No lugar: fala ou busca para anunciar, e o histórico do dia separado
+   * por quem ainda deve resposta.
    */
-  const itensDoDia = useMemo(() => {
-    if (!plano) return [];
-    const vistos = new Set<number>();
-    const lista: number[] = [];
-    for (const sessao of plano.sessoes) {
-      for (const item of sessao.itens) {
-        if (vistos.has(item.codigoPdv) || encerrados.has(item.codigoPdv)) continue;
-        vistos.add(item.codigoPdv);
-        lista.push(item.codigoPdv);
-      }
-    }
-    return ordenarPorAnuncioRecente(lista, fornadas, dataHoje);
-  }, [plano, encerrados, fornadas, dataHoje]);
+  const linhas = useMemo(
+    () => montarLinhasDaMatriz({ fornadas, pedidos, hoje: dataHoje, encerrados }),
+    [fornadas, pedidos, dataHoje, encerrados]
+  );
+  const semResposta = useMemo(() => linhas.filter(anuncioPendente), [linhas]);
+  const concluidos = useMemo(() => linhas.filter((l) => !anuncioPendente(l)), [linhas]);
 
   /**
    * Cadastra e anuncia numa ação só.
@@ -192,7 +192,7 @@ export function PainelFornoDeHoje({
   }
 
   /** A linha é a mesma na busca e na lista do dia — um jeito só de marcar. */
-  function linhaDoProduto(codigoPdv: number, podeTirarDaLista = false) {
+  function linhaDoProduto(codigoPdv: number) {
     const doDia = fornadasDoProduto(fornadas, dataHoje, codigoPdv);
     const saiu = doDia.length > 0;
     return (
@@ -227,24 +227,95 @@ export function PainelFornoDeHoje({
           </span>
         </button>
 
-        {/* Tirar da VITRINE, não do histórico (ago/2026). As fornadas já
-            marcadas continuam gravadas e continuam alimentando o
-            relatório do forno em Análises; o que muda é que as FILIAIS
-            param de ver o produto como disponível hoje.
+      </div>
+    );
+  }
 
-            Antes isto era só uma lista local deste aparelho, e o efeito
-            ficava pela metade: a matriz parava de ver, a filial continuava
-            pedindo mercadoria que tinha acabado. */}
-        {podeTirarDaLista && (
+  /** Uma sanfona, igual às duas da tela da filial. */
+  function sanfona(chave: string, titulo: string, lista: LinhaDaMatriz[]) {
+    const abertaAgora = !!aberta[chave];
+    return (
+      <div className={`acordeao-sessao ${abertaAgora ? "aberta" : ""}`}>
+        <div className="cabecalho-sessao">
           <button
             type="button"
-            className="tirar-da-lista"
-            aria-label={`Tirar ${nomeDoProduto(codigoPdv)} da lista de hoje e das filiais`}
-            title="Tirar da lista — as filiais param de ver hoje"
-            onClick={() => void onEncerrarAnuncio(codigoPdv)}
+            className="abrir-sessao"
+            aria-expanded={abertaAgora}
+            onClick={() => setAberta((a) => ({ ...a, [chave]: !a[chave] }))}
           >
-            <IconeLixeira tamanho={16} />
+            <span className="nome-sessao">{titulo}</span>
+            <span className="contagem-itens">
+              {lista.length > 0 ? `${lista.length} ${lista.length === 1 ? "item" : "itens"}` : ""}
+            </span>
+            <IconeSeta className="seta-sessao" />
           </button>
+        </div>
+        {abertaAgora && (
+          <div className="corpo-sessao">
+            {lista.length === 0 ? (
+              <p className="nota-rodape">Nada aqui hoje.</p>
+            ) : (
+              lista.map((linha) => linhaAnunciada(linha))
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /** Uma linha do histórico do dia da matriz. */
+  function linhaAnunciada(linha: LinhaDaMatriz) {
+    return (
+      <div key={linha.chave} className="linha-reposicao">
+        <span className="nome-reposicao">
+          <span className="topo-reposicao">
+            <em className="etiqueta-origem matriz">Anunciei</em>
+            <strong>{nomeDoProduto(linha.codigoPdv)}</strong>
+            {/* A hora de cada ocorrência — sem ela, duas fornadas do
+                mesmo produto no mesmo dia são indistinguíveis. */}
+            <em className="hora-reposicao">{horaDoInstante(linha.quando)}</em>
+          </span>
+
+          {linha.situacao === "pendente" && (
+            <span className="reposicao-aguardando">
+              {linha.vezes > 1 ? `${linha.vezes} fornadas · ` : ""}nenhuma loja pediu ainda
+            </span>
+          )}
+          {linha.situacao === "pedido" && (
+            <span className="reposicao-confirmada">
+              <IconeConfere tamanho={14} />{" "}
+              {linha.lojasQuePediram === 1 ? "1 loja pediu" : `${linha.lojasQuePediram} lojas pediram`}
+            </span>
+          )}
+          {linha.situacao === "encerrado" && (
+            <span className="reposicao-negada">Tirado da vitrine — as filiais não veem mais.</span>
+          )}
+
+          <span className="acoes-fornada">
+            {linha.situacao === "encerrado" ? (
+              <button
+                type="button"
+                className="botao-fornada pedir"
+                onClick={() => void onReabrirTudo()}
+              >
+                Devolver à vitrine
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="botao-fornada excluir"
+                title="Tirar da vitrine — as filiais param de ver hoje"
+                aria-label={`Tirar ${nomeDoProduto(linha.codigoPdv)} da vitrine`}
+                onClick={() => void onEncerrarAnuncio(linha.codigoPdv)}
+              >
+                <IconeLixeira tamanho={15} />
+              </button>
+            )}
+          </span>
+        </span>
+
+        {linha.unidades !== undefined && (
+          <span className="qtd-reposicao">{linha.unidades} un</span>
         )}
       </div>
     );
@@ -363,52 +434,10 @@ export function PainelFornoDeHoje({
               <div className="grupo-forno">{resultados.map((p) => linhaDoProduto(p.codigoPdv))}</div>
             )}
           </>
-        ) : (
-          <>
-            {/* Lista CORRIDA, sem separar por sessão (ago/2026, decisão do
-                dono do negócio). Aqui não se planeja nada: só se anuncia o
-                que acabou de sair, e o cabeçalho de categoria só empurrava
-                a lista para baixo sem ajudar a achar. A ordem é a do
-                cronograma, que é a ordem em que a padaria produz. */}
-            {!plano ? (
-              <p className="nota-rodape">Sem cronograma hoje. Use a busca acima.</p>
-            ) : itensDoDia.length === 0 ? (
-              <p className="nota-rodape">Lista vazia.</p>
-            ) : (
-              <div className="grupo-forno">
-                {itensDoDia.map((codigoPdv) => linhaDoProduto(codigoPdv, true))}
-              </div>
-            )}
+        ) : null}
 
-            {/* O caminho de volta. Fica fora da lista de propósito: quando
-                alguém tira o último item, é justamente aqui que ele
-                precisa estar. */}
-            {/* Uma linha só, como na tela da filial (ago/2026, decisão do
-                dono do negócio). A lista nomeada, com um "devolver" por
-                item, ocupava a tela com o que NÃO está em jogo — e a
-                pessoa que abre esta aba veio anunciar, não administrar o
-                que já tirou. Devolver tudo de uma vez é o caso comum:
-                acabou o dia, começa outro. */}
-            {/* Uma PASTILHA, não um parágrafo (ago/2026, pedido do dono do
-                negócio: a frase longa virava ruído justamente depois de
-                uma ação de limpeza). A lixeira riscada e o número dizem o
-                estado sem exigir leitura; o toque desfaz. O que a frase
-                explicava — que as filiais deixam de ver — já é o efeito
-                que a pessoa acabou de provocar de propósito. */}
-            {encerrados.size > 0 && (
-              <button
-                type="button"
-                className="pastilha-escondidos"
-                aria-label={`Mostrar de novo ${encerrados.size} item(ns) escondido(s)`}
-                onClick={() => void onReabrirTudo()}
-              >
-                <IconeLixeira tamanho={15} />
-                {encerrados.size}
-                <span className="acao-pastilha">mostrar</span>
-              </button>
-            )}
-          </>
-        )}
+        {sanfona("semResposta", "Anúncios sem resposta", semResposta)}
+        {sanfona("concluidos", "Anúncios concluídos", concluidos)}
 
         {/* Diagnóstico, não operação: fica no rodapé, discreto, e só
             aparece o resultado quando alguém pergunta. */}

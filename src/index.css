@@ -1645,6 +1645,13 @@ button.perigo:hover { background: #822525; }
   background: var(--cor-alerta-fundo);
   color: var(--cor-alerta);
 }
+.hora-reposicao {
+  flex: 0 0 auto;
+  font-style: normal;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--cor-texto-suave);
+}
 .etiqueta-origem.matriz {
   background: var(--cor-sucesso-fundo);
   color: var(--cor-sucesso);
