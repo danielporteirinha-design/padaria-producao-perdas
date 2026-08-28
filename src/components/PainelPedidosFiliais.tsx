@@ -123,6 +123,51 @@ export function PainelPedidosFiliais({
     (p) => p.status === "enviado" && variedadesDoPedidoSuprimentos(p) > 0
   );
 
+  /**
+   * Uma entrada da linha do tempo: a lista de suprimentos que a loja
+   * mandou. Tem a mesma forma das linhas de reposição — hora em destaque,
+   * conteúdo abaixo — porque as duas são a mesma coisa para quem lê: uma
+   * mensagem da loja, com hora, esperando providência.
+   */
+  function linhaDeSuprimentos(pedido: PedidoSuprimentos) {
+    return (
+      <div key={pedido.id} className="linha-reposicao suprimentos">
+        <span className="status-filial">
+          {horaDoInstante(pedido.enviadoEm ?? pedido.criadoEm) && (
+            <strong className="hora-pedido">
+              {horaDoInstante(pedido.enviadoEm ?? pedido.criadoEm)}
+            </strong>
+          )}
+          Suprimentos · {variedadesDoPedidoSuprimentos(pedido)} itens
+        </span>
+
+        {agruparPorSegmento(pedido.itens, catalogoSuprimentos).map((grupo) => (
+          <div key={grupo.chave} className="sessao-do-card">
+            <h4>{grupo.rotulo}</h4>
+            {grupo.itens.map((item) => (
+              <div key={item.nome} className="item-da-loja">
+                <span className="nome-item-loja">{item.nome}</span>
+                <span className="qtd-item-loja">{item.quantidade}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+
+        {onImprimirSuprimentos && (
+          <div className="acoes acoes-do-card">
+            <button
+              type="button"
+              className="secundario"
+              onClick={() => onImprimirSuprimentos(pedido)}
+            >
+              <IconeImpressora tamanho={17} /> Imprimir
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   async function decidir(
     pedido: PedidoFilial,
     desfecho: "confirmado" | "cancelado",
@@ -209,6 +254,39 @@ export function PainelPedidosFiliais({
             const suprimentosDaFilial = suprimentosEnviados.find((p) => p.lojaId === filial.id);
             if (daFilial.length === 0 && !suprimentosDaFilial) return null;
 
+            /**
+             * UMA LINHA DO TEMPO SÓ (ago/2026, pedido do dono do negócio:
+             * "os suprimentos devem aparecer na mesma lista que aparecem
+             * os produtos na lista de reposição").
+             *
+             * Esta sanfona é o canal de comunicação da loja com a matriz,
+             * e um canal tem uma ordem só: o que chegou por último em
+             * cima. Suprimento num bloco fixo no pé quebrava isso — a
+             * lista de embalagens das 8h ficava abaixo da reposição das
+             * 16h, dando a impressão de ser a mensagem mais nova.
+             */
+            const envios: {
+              chave: string;
+              em: string;
+              reposicao?: PedidoFilial;
+              suprimentos?: PedidoSuprimentos;
+            }[] = [
+              ...daFilial.map((pedido) => ({
+                chave: pedido.id,
+                em: pedido.enviadoEm ?? pedido.criadoEm,
+                reposicao: pedido,
+              })),
+              ...(suprimentosDaFilial
+                ? [
+                    {
+                      chave: suprimentosDaFilial.id,
+                      em: suprimentosDaFilial.enviadoEm ?? suprimentosDaFilial.criadoEm,
+                      suprimentos: suprimentosDaFilial,
+                    },
+                  ]
+                : []),
+            ].sort((a, b) => b.em.localeCompare(a.em));
+
             const pendentes = daFilial.filter((p) => desfechoDaReposicao(p) === "pendente").length;
             /**
              * PENDENTE NASCE ABERTA (ago/2026).
@@ -259,7 +337,9 @@ export function PainelPedidosFiliais({
 
                 {aberta && (
                   <div className="corpo-reposicao">
-                    {daFilial.map((pedido) => {
+                    {envios.map((envio) => {
+            if (envio.suprimentos) return linhaDeSuprimentos(envio.suprimentos);
+            const pedido = envio.reposicao!;
             const desfecho = desfechoDaReposicao(pedido);
             const ocupado = salvando === pedido.id;
             return (
@@ -365,49 +445,6 @@ export function PainelPedidosFiliais({
             );
           })}
 
-                    {/*
-                      SUPRIMENTOS DENTRO DA SANFONA DA LOJA (ago/2026,
-                      decisão do dono do negócio; o card separado foi
-                      descartado).
-
-                      Vem depois das reposições porque tem outra urgência:
-                      reposição é para HOJE, e embalagem entra na próxima
-                      compra. A ordem da tela é a ordem de quem atende.
-                    */}
-                    {suprimentosDaFilial && (
-                      <div className="bloco-suprimentos">
-                        <div className="titulo-bloco-suprimentos">
-                          <strong>Suprimentos</strong>
-                          <span className="status-filial">
-                            {horaDoInstante(suprimentosDaFilial.enviadoEm)}
-                          </span>
-                        </div>
-                        {agruparPorSegmento(suprimentosDaFilial.itens, catalogoSuprimentos).map(
-                          (grupo) => (
-                            <div key={grupo.chave} className="sessao-do-card">
-                              <h4>{grupo.rotulo}</h4>
-                              {grupo.itens.map((item) => (
-                                <div key={item.nome} className="item-da-loja">
-                                  <span className="nome-item-loja">{item.nome}</span>
-                                  <span className="qtd-item-loja">{item.quantidade}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )
-                        )}
-                        {onImprimirSuprimentos && (
-                          <div className="acoes acoes-do-card">
-                            <button
-                              type="button"
-                              className="secundario"
-                              onClick={() => onImprimirSuprimentos(suprimentosDaFilial)}
-                            >
-                              <IconeImpressora tamanho={17} /> Imprimir
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 )}
               </div>

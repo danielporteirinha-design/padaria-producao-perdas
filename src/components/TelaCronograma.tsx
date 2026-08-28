@@ -893,40 +893,6 @@ export function TelaCronograma({
       </div>
 
       {/*
-        O BOTÃO DA LISTA DA COZINHA, NO LUGAR DO CARD "PROGRAMAÇÃO GERAL"
-        (ago/2026, pedido do dono do negócio)
-        ---------------------------------------------------------------
-        O card mostrava, na tela, a soma das três lojas por segmento. Só
-        que ninguém decide nada olhando esse número na tela: ele existe
-        para virar PAPEL e ficar pregado na cozinha da matriz, ao lado do
-        forno, onde o celular não vai.
-
-        Um card que só se lê para depois imprimir é um card que podia ser
-        o botão de imprimir. O que sobrou na tela são os cards das lojas,
-        que é onde se revisa e se decide.
-      */}
-      <button
-        type="button"
-        className="primario largura-cheia botao-lista-producao"
-        disabled={variedadesGerais === 0}
-        onClick={() => {
-          setImpressaoDeLoja(null);
-          setDocumentoAtivo("producao");
-          setFase("exportar");
-        }}
-      >
-        <IconeImpressora tamanho={19} />
-        <span className="texto-botao-producao">
-          Imprimir lista da produção
-          <span className="detalhe-botao">
-            {variedadesGerais > 0
-              ? `${contagemDeItens(variedadesGerais)} · ${arred(totalUnidadesGerais).toLocaleString("pt-BR")} un · separados por segmento`
-              : "nada lançado para esta data ainda"}
-          </span>
-        </span>
-      </button>
-
-      {/*
         CARDS DAS FILIAIS — PRIMEIRO NA PÁGINA (ago/2026, pedido do dono
         do negócio)
         ---------------------------------------------------------------
@@ -1310,6 +1276,46 @@ export function TelaCronograma({
           />
         </CardCronograma>
       )}
+
+      {/*
+        O BOTÃO DA LISTA DA COZINHA — NO FIM DA PÁGINA (ago/2026, pedido
+        do dono do negócio)
+        ---------------------------------------------------------------
+        Ele nasceu no topo, no lugar do antigo card "Programação geral", e
+        desceu para cá: imprimir é a ÚLTIMA coisa que se faz. Primeiro se
+        revisa cada loja, depois se confirma o que saiu hoje, e só então o
+        papel vai para a cozinha. Um botão de imprimir no alto convida a
+        gerar papel antes de conferir o que ele traz.
+
+        O card mostrava, na tela, a soma das três lojas por segmento. Só
+        que ninguém decide nada olhando esse número na tela: ele existe
+        para virar PAPEL e ficar pregado na cozinha da matriz, ao lado do
+        forno, onde o celular não vai.
+
+        Um card que só se lê para depois imprimir é um card que podia ser
+        o botão de imprimir. O que sobrou na tela são os cards das lojas,
+        que é onde se revisa e se decide.
+      */}
+      <button
+        type="button"
+        className="primario largura-cheia botao-lista-producao"
+        disabled={variedadesGerais === 0}
+        onClick={() => {
+          setImpressaoDeLoja(null);
+          setDocumentoAtivo("producao");
+          setFase("exportar");
+        }}
+      >
+        <IconeImpressora tamanho={19} />
+        <span className="texto-botao-producao">
+          Imprimir lista da produção
+          <span className="detalhe-botao">
+            {variedadesGerais > 0
+              ? `${contagemDeItens(variedadesGerais)} · ${arred(totalUnidadesGerais).toLocaleString("pt-BR")} un · separados por segmento`
+              : "nada lançado para esta data ainda"}
+          </span>
+        </span>
+      </button>
     </div>
   );
 }

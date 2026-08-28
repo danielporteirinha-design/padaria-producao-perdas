@@ -108,13 +108,13 @@ const CONFERENCIAS = [
   // --- Suprimentos (embalagens e material de limpeza)
   ["src/types/suprimento.ts", "idDoSuprimento", "Modelo de suprimentos"],
   ["src/components/TelaSuprimentos.tsx", "onEnviarLista", "Filial: aba Suprimentos"],
-  ["src/components/PainelPedidosFiliais.tsx", "bloco-suprimentos", "Matriz: suprimentos na sanfona da loja"],
+  ["src/components/PainelPedidosFiliais.tsx", "linhaDeSuprimentos", "Matriz: suprimentos na linha do tempo da loja"],
   ["src/components/TelaSuprimentos.tsx", "incluir em", "Cadastro de suprimento sem escolher segmento"],
   ["src/types/suprimento.ts", "PRODUTOS", "Segmento Produtos nos suprimentos"],
   ["src/data/repositorioFirestore.ts", "pedidos_suprimentos", "Firestore: colecao dos suprimentos"],
   ["firestore.rules", "pedidos_suprimentos", "Regras dos suprimentos (COLAR NO CONSOLE!)"],
   ["src/lib/avisarFiliais.ts", "avisarListaDeSuprimentos", "Aviso de suprimentos"],
-  ["src/App.tsx", "Lista de Produção", "Abas renomeadas e reordenadas"],
+  ["src/App.tsx", "loja-atual", "Cabecalho sem titulo duplicado"],
 
   // --- Cronograma: cards autônomos por loja
   ["src/types/pedido.ts", "ajustarPedidoPelaMatriz", "Matriz confirma a lista da filial"],

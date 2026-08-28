@@ -42,14 +42,16 @@ button, input, select, textarea { font: inherit; }
   border-bottom: 1px solid var(--cor-borda);
   background: var(--cor-superficie);
 }
-.cabecalho-app strong { display: block; font-size: 16px; }
-/* O NOME DA LOJA EM DESTAQUE (ago/2026, pedido do dono do negócio).
-   Era cinza de 13px, e a única coisa na tela que diz em qual conta o
-   aparelho está. Num app que a mesma pessoa usa como matriz e como
-   filial, essa linha é o que evita lançar a perda na loja errada — não é
-   legenda do título de cima, é estado. */
-.subtitulo-app {
-  font-size: 14px;
+/* O NOME DA LOJA É O TÍTULO DO CABEÇALHO (ago/2026, pedido do dono do
+   negócio). A linha "Padaria Pão de Mel" saiu: a janela do app já se
+   chama isso, e repetir logo abaixo era o título duplicado.
+
+   Fica em destaque porque é a única informação daquela faixa que decide
+   alguma coisa — num app que a mesma pessoa usa como matriz e como
+   filial, é ela que impede lançar a perda na conta errada. */
+.cabecalho-app strong.loja-atual {
+  display: block;
+  font-size: 17px;
   font-weight: 700;
   color: var(--cor-acento);
 }
@@ -2093,12 +2095,14 @@ button.perigo:hover { background: #822525; }
 
 /* O botão que leva a lista da produção ao papel. Ocupa a largura toda
    por ser a única ação da página que não pertence a nenhuma loja. */
+/* No fim da página agora: a margem foi de baixo para cima, para separar
+   do card de confirmação que passou a vir antes dele. */
 .botao-lista-producao {
   display: flex;
   align-items: center;
   gap: 12px;
   text-align: left;
-  margin-bottom: 16px;
+  margin-top: 20px;
   padding: 14px 16px;
 }
 .texto-botao-producao { display: flex; flex-direction: column; gap: 2px; }
@@ -2151,20 +2155,22 @@ button.perigo:hover { background: #822525; }
   background: var(--cor-superficie);
 }
 .resumo-suprimentos .sessao-do-card:first-child h4 { margin-top: 0; }
-/* Suprimentos dentro da sanfona da loja, na Reposição (ago/2026). Um
-   filete acima separa do que veio antes — reposição é de hoje, compra é
-   da próxima ida ao fornecedor. */
-.bloco-suprimentos {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 2px solid var(--cor-borda);
+/* A lista de suprimentos é uma entrada da mesma linha do tempo das
+   reposições (ago/2026). Tem a mesma forma das outras linhas; o filete
+   lateral é o que diz, sem texto, que aquele trecho é de outra natureza —
+   compra, e não mercadoria para hoje. */
+/* BLOCO, e não linha: a linha de reposição é `flex-direction: row` para
+   pôr a ação à direita do produto, e nessa disposição os setores e o
+   botão de imprimir da lista de suprimentos se espalhavam lado a lado —
+   "Imprimir" aparecia ao lado de "Detergente". Aqui o conteúdo é uma
+   lista, e lista se lê de cima para baixo. */
+.linha-reposicao.suprimentos {
+  display: block;
+  border-left: 3px solid var(--cor-acento);
+  padding-left: 12px;
 }
-.titulo-bloco-suprimentos {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
+.linha-reposicao.suprimentos .sessao-do-card h4 { margin-top: 12px; }
+.linha-reposicao.suprimentos .acoes-do-card { justify-content: flex-end; }
 
 /* Incluir item sem sair de onde se está: o campo nasce no fim da lista
    do segmento, e é o próprio segmento que responde "onde isto mora". */

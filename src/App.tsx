@@ -134,13 +134,8 @@ const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
   ],
   filial: [
     { chave: "fornada", rotulo: "Reposição" },
-    { chave: "perdas", rotulo: "Perdas" },
-    { chave: "pedido", rotulo: "Lista de Produção" },
     /**
-     * Suprimentos depois da lista de produção (ago/2026, decisão do dono
-     * do negócio): as três primeiras abas são o expediente — o que sai do
-     * forno, o que se perdeu, o que se pede para amanhã. A compra de
-     * embalagem tem outro ritmo.
+     * Suprimentos em segundo (ago/2026, decisão do dono do negócio).
      *
      * O `\u00AD` é um HÍFEN CONDICIONAL, invisível quando a palavra cabe.
      * "Suprimentos" tem 87px a 12px e a aba tem 72px úteis num celular de
@@ -150,6 +145,8 @@ const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
      * separação é dita: "Supri-/mentos", com hífen, como se escreve.
      */
     { chave: "suprimentos", rotulo: "Supri\u00ADmentos" },
+    { chave: "perdas", rotulo: "Perdas" },
+    { chave: "pedido", rotulo: "Lista de Produção" },
     // Análises entrou para a filial em ago/2026, travada na própria loja:
     // quem decide o que pedir amanhã é quem está no balcão, e até aqui
     // ela pedia sem enxergar o próprio desperdício. Ver TelaAnalises.
@@ -1316,10 +1313,22 @@ export default function App() {
 
   return (
     <div className="app">
+      {/*
+        UM TÍTULO SÓ (ago/2026, pedido do dono do negócio: "o cabeçalho da
+        janela do app está com o título duplicado").
+        ---------------------------------------------------------------
+        A janela do app já se chama "Padaria Pão de Mel — Produção e
+        Perdas" (ver <title> em index.html), e o cabeçalho repetia
+        "Padaria Pão de Mel" logo abaixo. Ninguém precisa ser informado
+        duas vezes, na mesma tela, de onde trabalha.
+
+        Ficou o que MUDA: a loja em que o aparelho está logado. É a única
+        informação daquela faixa que decide alguma coisa — é ela que
+        impede lançar a perda na conta errada.
+      */}
       <header className="cabecalho-app">
         <div>
-          <strong>Padaria Pão de Mel</strong>
-          <span className="subtitulo-app">{loja.nome}</span>
+          <strong className="loja-atual">{loja.nome}</strong>
         </div>
         <div className="operador-atual">
           {operador}
