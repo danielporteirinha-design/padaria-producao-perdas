@@ -2151,9 +2151,32 @@ button.perigo:hover { background: #822525; }
   background: var(--cor-superficie);
 }
 .resumo-suprimentos .sessao-do-card:first-child h4 { margin-top: 0; }
-.cartao-suprimentos { display: block; }
-.titulo-suprimentos { display: block; margin-bottom: 10px; font-size: 16px; }
-.cartao-suprimentos .grupo-reposicao { margin-top: 8px; }
+/* Suprimentos dentro da sanfona da loja, na Reposição (ago/2026). Um
+   filete acima separa do que veio antes — reposição é de hoje, compra é
+   da próxima ida ao fornecedor. */
+.bloco-suprimentos {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 2px solid var(--cor-borda);
+}
+.titulo-bloco-suprimentos {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Incluir item sem sair de onde se está: o campo nasce no fim da lista
+   do segmento, e é o próprio segmento que responde "onde isto mora". */
+.incluir-abrir { display: block; margin-top: 8px; padding: 8px 0; font-size: 14px; }
+.incluir-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.incluir-item input { flex: 1 1 150px; }
 
 /* A linha que sobrou no lugar da tabela de perdas do dia: o último
    lançamento e o caminho para anulá-lo. Discreta de propósito — só

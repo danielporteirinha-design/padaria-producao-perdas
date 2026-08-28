@@ -22,6 +22,12 @@
 
 import { useState } from "react";
 import { desfechoDaReposicao, type PedidoFilial } from "../types/pedido";
+import {
+  agruparPorSegmento,
+  variedadesDoPedidoSuprimentos,
+  type PedidoSuprimentos,
+  type Suprimento,
+} from "../types/suprimento";
 
 /**
  * Quantas VARIEDADES o pedido tem, não quantas unidades (ago/2026): "195
@@ -33,7 +39,7 @@ function variedadesDoPedido(pedido: PedidoFilial | undefined): number {
 }
 import { FILIAIS } from "../lib/lojas";
 import { horaDoInstante } from "../lib/data";
-import { IconeAtencao, IconeConfere, IconeSeta } from "./Icones";
+import { IconeAtencao, IconeConfere, IconeImpressora, IconeSeta } from "./Icones";
 
 interface PainelPedidosFiliaisProps {
   pedidos: PedidoFilial[];
@@ -59,6 +65,19 @@ interface PainelPedidosFiliaisProps {
    * coisa em telas de altura contada.
    */
   somenteReposicoes?: boolean;
+  /**
+   * A lista de suprimentos de HOJE de cada filial (ago/2026, decisão do
+   * dono do negócio: ela passou a morar DENTRO da sanfona da loja, e não
+   * num card à parte).
+   *
+   * O card separado partia a mesma pergunta em dois lugares. Quem abre
+   * "Arthur Bernardes" quer ver tudo que Arthur Bernardes está pedindo —
+   * o pão que faltou no balcão e o saco que acabou no estoque são a mesma
+   * viagem de entrega.
+   */
+  pedidosSuprimentos?: PedidoSuprimentos[];
+  catalogoSuprimentos?: Suprimento[];
+  onImprimirSuprimentos?: (pedido: PedidoSuprimentos) => void;
   /** Ausente para quem não é matriz — só ela decide. */
   onDecidirReposicao?: (
     pedido: PedidoFilial,
@@ -75,6 +94,9 @@ export function PainelPedidosFiliais({
   saiuDoForno,
   onDecidirReposicao,
   somenteReposicoes = false,
+  pedidosSuprimentos = [],
+  catalogoSuprimentos = [],
+  onImprimirSuprimentos,
 }: PainelPedidosFiliaisProps) {
   /**
    * Qual reposição está com o campo de motivo aberto. Cancelar é o único
@@ -95,6 +117,11 @@ export function PainelPedidosFiliais({
   const [cancelando, setCancelando] = useState<string | null>(null);
   const [motivo, setMotivo] = useState("");
   const [salvando, setSalvando] = useState<string | null>(null);
+
+  /** Listas de suprimentos com item — as vazias não são pedido nenhum. */
+  const suprimentosEnviados = pedidosSuprimentos.filter(
+    (p) => p.status === "enviado" && variedadesDoPedidoSuprimentos(p) > 0
+  );
 
   async function decidir(
     pedido: PedidoFilial,
@@ -157,9 +184,9 @@ export function PainelPedidosFiliais({
           Agrupada POR FILIAL, e não em lista corrida: quem separa a
           mercadoria separa por loja, e uma lista misturada obriga a
           matriz a fazer esse agrupamento de cabeça toda vez. */}
-      {reposicoesDeHoje.length > 0 && (
+      {(reposicoesDeHoje.length > 0 || suprimentosEnviados.length > 0) && (
         <div className="cartao-reposicoes">
-          <strong>Reposições pedidas hoje</strong>
+          <strong>Pedidos das filiais hoje</strong>
 
           {FILIAIS.map((filial) => {
             /**
@@ -179,7 +206,8 @@ export function PainelPedidosFiliais({
               .sort((a, b) =>
                 (b.enviadoEm ?? b.criadoEm).localeCompare(a.enviadoEm ?? a.criadoEm)
               );
-            if (daFilial.length === 0) return null;
+            const suprimentosDaFilial = suprimentosEnviados.find((p) => p.lojaId === filial.id);
+            if (daFilial.length === 0 && !suprimentosDaFilial) return null;
 
             const pendentes = daFilial.filter((p) => desfechoDaReposicao(p) === "pendente").length;
             /**
@@ -212,9 +240,19 @@ export function PainelPedidosFiliais({
                 >
                   <span className="nome-grupo-reposicao">{filial.nomeCurto}</span>
                   <span className={`resumo-reposicao ${pendentes > 0 ? "pendente" : "ok"}`}>
+                    {/* O cabeçalho resume as DUAS coisas que a loja está
+                        pedindo: o que espera resposta agora e o tamanho da
+                        lista de suprimentos. É o que decide se vale abrir. */}
                     {pendentes > 0
                       ? `${pendentes} esperando`
-                      : `${daFilial.length} respondida${daFilial.length > 1 ? "s" : ""}`}
+                      : daFilial.length > 0
+                        ? `${daFilial.length} respondida${daFilial.length > 1 ? "s" : ""}`
+                        : ""}
+                    {suprimentosDaFilial
+                      ? `${pendentes > 0 || daFilial.length > 0 ? " · " : ""}${variedadesDoPedidoSuprimentos(
+                          suprimentosDaFilial
+                        )} suprimentos`
+                      : ""}
                   </span>
                   <IconeSeta className="seta-sessao" />
                 </button>
@@ -326,6 +364,50 @@ export function PainelPedidosFiliais({
               </div>
             );
           })}
+
+                    {/*
+                      SUPRIMENTOS DENTRO DA SANFONA DA LOJA (ago/2026,
+                      decisão do dono do negócio; o card separado foi
+                      descartado).
+
+                      Vem depois das reposições porque tem outra urgência:
+                      reposição é para HOJE, e embalagem entra na próxima
+                      compra. A ordem da tela é a ordem de quem atende.
+                    */}
+                    {suprimentosDaFilial && (
+                      <div className="bloco-suprimentos">
+                        <div className="titulo-bloco-suprimentos">
+                          <strong>Suprimentos</strong>
+                          <span className="status-filial">
+                            {horaDoInstante(suprimentosDaFilial.enviadoEm)}
+                          </span>
+                        </div>
+                        {agruparPorSegmento(suprimentosDaFilial.itens, catalogoSuprimentos).map(
+                          (grupo) => (
+                            <div key={grupo.chave} className="sessao-do-card">
+                              <h4>{grupo.rotulo}</h4>
+                              {grupo.itens.map((item) => (
+                                <div key={item.nome} className="item-da-loja">
+                                  <span className="nome-item-loja">{item.nome}</span>
+                                  <span className="qtd-item-loja">{item.quantidade}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        )}
+                        {onImprimirSuprimentos && (
+                          <div className="acoes acoes-do-card">
+                            <button
+                              type="button"
+                              className="secundario"
+                              onClick={() => onImprimirSuprimentos(suprimentosDaFilial)}
+                            >
+                              <IconeImpressora tamanho={17} /> Imprimir
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

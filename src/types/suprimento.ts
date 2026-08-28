@@ -32,14 +32,21 @@ export interface SegmentoSuprimento {
 }
 
 /**
- * Dois segmentos, e não uma lista aberta. São as duas naturezas de
- * compra que a padaria faz: o que embala o que ela vende, e o que
- * mantém a loja limpa. Um terceiro segmento aparecerá quando existir uma
- * terceira natureza — não antes.
+ * Três segmentos, e não uma lista aberta — são as três naturezas de
+ * compra da loja: o que embala o que ela vende, o que mantém a loja
+ * limpa, e o que ela revende sem produzir (ago/2026, pedido do dono do
+ * negócio).
+ *
+ * PRODUTOS aqui são os de REVENDA — refrigerante, laticínio, mercearia.
+ * Não se confundem com o catálogo de produção (src/types/produto.ts): a
+ * padaria não os faz, compra prontos, e por isso eles não têm peso
+ * unitário, não saem do forno e não entram na taxa de perda. Pedi-los
+ * junto com o saco de pão é a mesma ida ao fornecedor.
  */
 export const SEGMENTOS_SUPRIMENTO: SegmentoSuprimento[] = [
   { chave: "EMBALAGENS", rotulo: "Embalagens" },
   { chave: "LIMPEZA", rotulo: "Materiais de limpeza" },
+  { chave: "PRODUTOS", rotulo: "Produtos" },
 ];
 
 export function rotuloDoSegmento(chave: string): string {

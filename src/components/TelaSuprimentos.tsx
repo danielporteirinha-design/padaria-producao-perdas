@@ -59,9 +59,27 @@ export function TelaSuprimentos({
   const [valor, setValor] = useState("");
   const [busca, setBusca] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [cadastrando, setCadastrando] = useState(false);
-  const [segmentoNovo, setSegmentoNovo] = useState("");
-  const [salvandoNovo, setSalvandoNovo] = useState(false);
+  /**
+   * O SEGMENTO DEIXOU DE SER UMA PERGUNTA (ago/2026, pedido do dono do
+   * negócio: "o usuário fica confuso ao escolher o segmento").
+   *
+   * Antes o fluxo era: digita o nome → toca em "Cadastrar" → escolhe o
+   * segmento entre pastilhas → confirma. Três decisões, uma delas de
+   * classificação, no meio do atendimento. Classificar é justamente o
+   * tipo de escolha que trava quem está com a fila esperando: nada na
+   * tela dizia se "papel toalha" é limpeza ou embalagem.
+   *
+   * Agora o segmento vem do LUGAR. Dentro de "Embalagens" há um campo
+   * "incluir em Embalagens": quem está ali já respondeu a pergunta ao
+   * abrir a sanfona. Pela busca, os três segmentos aparecem como três
+   * botões que cadastram na hora — uma escolha, um toque, sem confirmar
+   * depois.
+   *
+   * `segmentoCadastrando` guarda em qual sanfona o campo está aberto.
+   */
+  const [segmentoCadastrando, setSegmentoCadastrando] = useState<string | null>(null);
+  const [nomeNovo, setNomeNovo] = useState("");
+  const [salvandoNovo, setSalvandoNovo] = useState("");
 
   /**
    * A lista do dia. Um pedido por loja por dia — reenviar corrige o
@@ -147,34 +165,36 @@ export function TelaSuprimentos({
   }
 
   /**
-   * Cadastra o item novo E já o coloca na lista, numa ação só. Quem
-   * digitou o nome de uma embalagem nesta tela quer PEDIR aquilo — obrigar
-   * a cadastrar, achar de novo e então pedir seria três passos para uma
-   * intenção só.
+   * Cadastra e devolve o item. Uma função só para os dois caminhos — o
+   * campo dentro da sanfona e os botões da busca — porque são a mesma
+   * operação com o segmento vindo de lugares diferentes.
    */
-  async function cadastrarEUsar() {
-    const nome = busca.trim();
-    if (!nome || !segmentoNovo || salvandoNovo) return;
-    setSalvandoNovo(true);
+  async function cadastrar(nome: string, segmento: string) {
+    const limpo = nome.trim();
+    if (!limpo || salvandoNovo) return;
+    setSalvandoNovo(segmento);
     try {
       const novo: Suprimento = {
-        id: idDoSuprimento(nome),
-        nome,
-        segmento: segmentoNovo,
+        id: idDoSuprimento(limpo),
+        nome: limpo,
+        segmento,
         ativo: true,
         criadoPor: operador,
         criadoEm: new Date().toISOString(),
       };
       await onCadastrarSuprimento(novo);
-      setCadastrando(false);
-      setSegmentoNovo("");
-      setExpandido((a) => ({ ...a, [novo.segmento]: true }));
-      // A busca continua no campo: o item recém-criado aparece logo
-      // abaixo, e é ali que se digita a quantidade.
+      setSegmentoCadastrando(null);
+      setNomeNovo("");
+      setExpandido((a) => ({ ...a, [segmento]: true }));
+      // O item entra aberto para digitar a quantidade: quem cadastrou
+      // veio pedir aquilo, não organizar catálogo.
+      setItemAtivo(novo.id);
+      setValor("");
+      setBusca("");
     } catch {
       /* o aviso global cuida da mensagem */
     } finally {
-      setSalvandoNovo(false);
+      setSalvandoNovo("");
     }
   }
 
@@ -269,11 +289,8 @@ export function TelaSuprimentos({
 
       <CampoDeBusca
         valor={busca}
-        onMudar={(v) => {
-          setBusca(v);
-          setCadastrando(false);
-        }}
-        placeholder="Buscar embalagem ou material..."
+        onMudar={setBusca}
+        placeholder="Buscar produto, embalagem ou material..."
         rotulo="Buscar suprimento pelo nome"
         nomesParaVoz={nomesDoCatalogo}
       >
@@ -288,58 +305,34 @@ export function TelaSuprimentos({
         <>
           {resultados.map((s) => linhaDoSuprimento(s))}
 
-          {/* NÃO ACHOU = CADASTRA DAQUI (item 3 do pedido). A busca sem
-              resultado era um beco: a loja precisa do item hoje, e o
-              caminho para frente não pode ser "peça para a matriz
-              cadastrar". */}
-          {!jaExiste && (
+          {/*
+            NÃO ACHOU = TRÊS BOTÕES, UM TOQUE CADA (ago/2026, pedido do
+            dono do negócio).
+
+            A versão anterior pedia "Cadastrar" → escolher o segmento →
+            confirmar. Aqui o nome já está digitado e a única coisa que
+            falta é onde ele mora: cada botão diz o destino e cadastra.
+            A pergunta "em qual segmento?" desapareceu — a resposta É o
+            botão que se toca.
+          */}
+          {!jaExiste && busca.trim().length >= 2 && (
             <div className="cadastro-relampago">
-              {!cadastrando ? (
-                <>
-                  <p className="nota-rodape">Não está na lista de suprimentos.</p>
+              <p className="nota-rodape">
+                Incluir <strong>{busca.trim()}</strong> em:
+              </p>
+              <div className="setores-do-novo">
+                {SEGMENTOS_SUPRIMENTO.map((segmento) => (
                   <button
+                    key={segmento.chave}
                     type="button"
-                    className="secundario"
-                    onClick={() => {
-                      setCadastrando(true);
-                      setSegmentoNovo("");
-                    }}
+                    className="chip-setor"
+                    disabled={salvandoNovo !== ""}
+                    onClick={() => void cadastrar(busca, segmento.chave)}
                   >
-                    Cadastrar "{busca.trim()}"
+                    {salvandoNovo === segmento.chave ? "Salvando..." : segmento.rotulo}
                   </button>
-                </>
-              ) : (
-                <>
-                  <strong className="nome-do-novo">{busca.trim()}</strong>
-                  <p className="nota-rodape">Em qual segmento?</p>
-                  <div className="setores-do-novo">
-                    {SEGMENTOS_SUPRIMENTO.map((segmento) => (
-                      <button
-                        key={segmento.chave}
-                        type="button"
-                        className={`chip-setor ${segmentoNovo === segmento.chave ? "ativo" : ""}`}
-                        aria-pressed={segmentoNovo === segmento.chave}
-                        onClick={() => setSegmentoNovo(segmento.chave)}
-                      >
-                        {segmento.rotulo}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="acoes">
-                    <button type="button" className="link" onClick={() => setCadastrando(false)}>
-                      cancelar
-                    </button>
-                    <button
-                      type="button"
-                      className="primario"
-                      disabled={!segmentoNovo || salvandoNovo}
-                      onClick={() => void cadastrarEUsar()}
-                    >
-                      {salvandoNovo ? "Salvando..." : "Cadastrar"}
-                    </button>
-                  </div>
-                </>
-              )}
+                ))}
+              </div>
             </div>
           )}
         </>
@@ -370,12 +363,58 @@ export function TelaSuprimentos({
 
               {aberto && (
                 <div className="corpo-sessao">
-                  {lista.length === 0 ? (
-                    <p className="nota-rodape">
-                      Nada cadastrado aqui ainda. Use a busca acima para incluir o primeiro item.
-                    </p>
+                  {lista.length === 0 && (
+                    <p className="nota-rodape">Nada cadastrado aqui ainda.</p>
+                  )}
+                  {lista.map((s) => linhaDoSuprimento(s))}
+
+                  {/* O SEGMENTO VEM DO LUGAR, não de uma pergunta: quem
+                      abriu esta sanfona já respondeu onde o item mora. É
+                      um campo e um botão, no fim da lista onde a pessoa
+                      acabou de procurar e não achou. */}
+                  {segmentoCadastrando === segmento.chave ? (
+                    <div className="incluir-item">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder={`Nome do item`}
+                        aria-label={`Nome do item novo em ${segmento.rotulo}`}
+                        value={nomeNovo}
+                        onChange={(e) => setNomeNovo(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void cadastrar(nomeNovo, segmento.chave);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="primario"
+                        disabled={nomeNovo.trim().length < 2 || salvandoNovo !== ""}
+                        onClick={() => void cadastrar(nomeNovo, segmento.chave)}
+                      >
+                        {salvandoNovo === segmento.chave ? "..." : "Incluir"}
+                      </button>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => {
+                          setSegmentoCadastrando(null);
+                          setNomeNovo("");
+                        }}
+                      >
+                        cancelar
+                      </button>
+                    </div>
                   ) : (
-                    lista.map((s) => linhaDoSuprimento(s))
+                    <button
+                      type="button"
+                      className="link incluir-abrir"
+                      onClick={() => {
+                        setSegmentoCadastrando(segmento.chave);
+                        setNomeNovo("");
+                      }}
+                    >
+                      + incluir em {segmento.rotulo}
+                    </button>
                   )}
                 </div>
               )}

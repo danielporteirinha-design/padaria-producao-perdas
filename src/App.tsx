@@ -50,7 +50,6 @@ import { AtivarAvisos } from "./components/AtivarAvisos";
 import { PainelFornoDeHoje } from "./components/PainelFornoDeHoje";
 import { PainelFornadasFilial } from "./components/PainelFornadasFilial";
 import { PainelPedidosFiliais } from "./components/PainelPedidosFiliais";
-import { PainelSuprimentos } from "./components/PainelSuprimentos";
 import { TelaSuprimentos } from "./components/TelaSuprimentos";
 import { ExportarFita } from "./components/ExportarFita";
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "./lib/fornadasVistas";
@@ -135,9 +134,15 @@ const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
   ],
   filial: [
     { chave: "fornada", rotulo: "Reposição" },
+    { chave: "perdas", rotulo: "Perdas" },
+    { chave: "pedido", rotulo: "Lista de Produção" },
     /**
-     * O `\u00AD` é um HÍFEN CONDICIONAL, invisível quando a palavra cabe.
+     * Suprimentos depois da lista de produção (ago/2026, decisão do dono
+     * do negócio): as três primeiras abas são o expediente — o que sai do
+     * forno, o que se perdeu, o que se pede para amanhã. A compra de
+     * embalagem tem outro ritmo.
      *
+     * O `\u00AD` é um HÍFEN CONDICIONAL, invisível quando a palavra cabe.
      * "Suprimentos" tem 87px a 12px e a aba tem 72px úteis num celular de
      * 390px: em barra de cinco abas de largura igual, essa palavra não
      * cabe em uma linha em tamanho legível — o navegador ia quebrá-la de
@@ -145,8 +150,6 @@ const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
      * separação é dita: "Supri-/mentos", com hífen, como se escreve.
      */
     { chave: "suprimentos", rotulo: "Supri\u00ADmentos" },
-    { chave: "perdas", rotulo: "Perdas" },
-    { chave: "pedido", rotulo: "Lista de Produção" },
     // Análises entrou para a filial em ago/2026, travada na própria loja:
     // quem decide o que pedir amanhã é quem está no balcão, e até aqui
     // ela pedia sem enxergar o próprio desperdício. Ver TelaAnalises.
@@ -1469,6 +1472,12 @@ export default function App() {
                 saiuDoForno={(codigo) =>
                   codigosComFornadaNoDia(fornadas, diaCorrente).has(codigo)
                 }
+                /* A lista de suprimentos da loja entra na sanfona dela
+                   (ago/2026): quem abre "Arthur Bernardes" quer ver tudo
+                   que Arthur Bernardes está pedindo. */
+                pedidosSuprimentos={pedidosSuprimentos.filter((p) => p.data === diaCorrente)}
+                catalogoSuprimentos={suprimentos}
+                onImprimirSuprimentos={setSuprimentosParaImprimir}
               />
               {/* Sem o `if` de antes (ago/2026): a busca do painel anuncia
                   qualquer produto do catálogo, então um dia sem cronograma
@@ -1484,14 +1493,6 @@ export default function App() {
                 onReabrirTudo={handleReabrirTudo}
                 onMarcarFornada={handleMarcarFornada}
                 onCadastrarProduto={handleCadastroRelampago}
-              />
-              {/* Suprimentos chegam aqui pelo mesmo motivo das reposições:
-                  é o que uma loja está pedindo à matriz e espera resposta.
-                  Ver PainelSuprimentos.tsx. */}
-              <PainelSuprimentos
-                pedidos={pedidosSuprimentos.filter((p) => p.data === diaCorrente)}
-                catalogo={suprimentos}
-                onImprimir={setSuprimentosParaImprimir}
               />
             </>
           ) : (
