@@ -1,7 +1,7 @@
 /**
  * src/components/PainelFornoDeHoje.tsx
  * ---------------------------------------------------------------
- * Marcação de fornada pronta, ao longo do expediente (ago/2026).
+ * Marcação de fornada pronta, ao longo do expediente.
  */
 
 import { useMemo, useState } from "react";
@@ -54,10 +54,10 @@ export function PainelFornoDeHoje({
   const [categoriaNova, setCategoriaNova] = useState("");
   const [salvandoNovo, setSalvandoNovo] = useState(false);
 
-  // 1. Sanfonas iniciam fechadas por padrão ao selecionar a aba
+  // SANFONAS SEMPRE FECHADAS POR PADRÃO ({})
   const [aberta, setAberta] = useState<Record<string, boolean>>({});
 
-  // 2. Estado do balão informativo do Assistente de Voz
+  // Balão informativo do Assistente de Voz
   const [feedbackVoz, setFeedbackVoz] = useState<{ tipo: "sucesso" | "alerta"; texto: string } | null>(null);
 
   const nomeDoProduto = (codigo: number) =>
@@ -228,7 +228,7 @@ export function PainelFornoDeHoje({
   return (
     <div className="painel-forno">
       <div className="corpo-forno">
-        {/* 1. BOTÃO "ANUNCIAR FALANDO" COMO PRIMEIRO OBJETO */}
+        {/* BOTÃO ANUNCIAR FALANDO NO TOPO */}
         <AssistenteDeVoz
           produtos={produtos}
           modo="anunciar"
@@ -268,7 +268,7 @@ export function PainelFornoDeHoje({
           }}
         />
 
-        {/* BALÃO INFORMATIVO DE VOZ */}
+        {/* BALÃO INFORMATIVO */}
         {feedbackVoz && (
           <div
             style={{
@@ -364,9 +364,9 @@ export function PainelFornoDeHoje({
           </>
         ) : null}
 
-        {/* SANFONAS ENCOLHIDAS POR PADRÃO */}
-        {sanfona("semResposta", "Anúncios sem resposta", semResposta)}
-        {sanfona("concluidos", "Anúncios concluídos", concluidos)}
+        {/* SANFONAS NOMEDAS COMO "Pedidos sem resposta" E "Pedidos concluídos" */}
+        {sanfona("semResposta", "Pedidos sem resposta", semResposta)}
+        {sanfona("concluidos", "Pedidos concluídos", concluidos)}
 
         <TesteDeAvisos destino="filiais" />
       </div>
