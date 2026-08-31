@@ -86,7 +86,9 @@ export function PainelFornadasFilial({
   const [quantidade, setQuantidade] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false);
-  const [aberta, setAberta] = useState<Record<string, boolean>>({ semResposta: true });
+  
+  // SANFONAS SEMPRE RECOLHIDAS AO ABRIR A ABA ({} significa todas fechadas)
+  const [aberta, setAberta] = useState<Record<string, boolean>>({});
 
   /**
    * A lista em montagem sobrevive a trocar de aba e a fechar o app.
@@ -123,7 +125,7 @@ export function PainelFornadasFilial({
 
   /**
    * O dia inteiro nas DUAS DIREÇÕES: o que eu pedi para a matriz e o que
-   * a matriz anunciou para mim, separados por quem ainda deve resposta.
+   * a matriz anunciou para]}/${loja.id}, separados por quem ainda deve resposta.
    */
   const linhas = useMemo(
     () => montarLinhasDoDia({ fornadas, pedidos, hoje, lojaId: loja.id, encerrados, dispensadas }),
@@ -207,8 +209,6 @@ export function PainelFornadasFilial({
         criadoEm: agora,
         enviadoEm: agora,
       });
-      // Enviado, a lista da tela cumpriu a função: o que vale agora é o
-      // documento, e ele aparece logo abaixo em "Pedidos sem resposta".
       setItens([]);
       setBusca("");
       setCodigoPedindo(null);
@@ -275,11 +275,6 @@ export function PainelFornadasFilial({
               {daMatriz ? "Saiu do forno" : "Eu pedi"}
             </em>
             <strong>{nomeDoProduto(linha.codigoPdv)}</strong>
-            {/* A HORA DE CADA OCORRÊNCIA (ago/2026, pedido do dono do
-                negócio). Sem ela, duas linhas do mesmo produto no mesmo
-                dia são indistinguíveis — e é justamente a hora que diz
-                se o pedido das 9h já foi atendido pela entrega ou se
-                ainda está esperando. */}
             <em className="hora-reposicao">{horaDoInstante(linha.quando)}</em>
           </span>
 
@@ -307,10 +302,6 @@ export function PainelFornadasFilial({
             <span className="reposicao-aguardando">Aviso dispensado por esta loja.</span>
           )}
 
-          {/* O aviso pendente da matriz tem DUAS respostas possíveis, e
-              as duas ficam aqui: pedir (o caminho de seguir adiante) ou
-              tirar da frente. Sem elas, a sanfona de cima encheria de
-              avisos que ninguém consegue responder. */}
           {daMatriz && linha.situacao === "pendente" && (
             <span className="acoes-fornada">
               <button
@@ -334,7 +325,6 @@ export function PainelFornadasFilial({
             </span>
           )}
 
-          {/* Quem tocou em "Pedir" digita a quantidade na própria linha. */}
           {daMatriz && codigoPedindo === linha.codigoPdv && (
             <span className="editor-quantidade">
               <input
@@ -383,8 +373,6 @@ export function PainelFornadasFilial({
   return (
     <div className="painel-fornadas">
       <div className="corpo-fornadas">
-        {/* FALAR VEM PRIMEIRO: pedir é o que traz a filial a esta aba, e
-            dizer a lista inteira de uma vez é o caminho mais curto. */}
         <AssistenteDeVoz
           produtos={produtos}
           modo="pedir"
@@ -401,7 +389,6 @@ export function PainelFornadasFilial({
           }
         />
 
-        {/* A BUSCA É A SEGUNDA OPÇÃO, logo abaixo do microfone. */}
         <CampoDeBusca
           className="busca-forno"
           valor={busca}
@@ -481,8 +468,6 @@ export function PainelFornadasFilial({
             ))
           ))}
 
-        {/* A LISTA EM MONTAGEM. Só sai da tela por "Limpar pedido" ou
-            depois de enviada — decisão explícita do dono do negócio. */}
         {itens.length > 0 && (
           <div className="pedido-em-montagem">
             <strong className="titulo-montagem">Pedido de reposição</strong>
@@ -566,11 +551,6 @@ export function PainelFornadasFilial({
         {sanfona("semResposta", "Pedidos sem resposta", semResposta)}
         {sanfona("concluidos", "Pedidos concluídos", concluidos)}
 
-        {/* Diagnóstico da direção filial -> matriz: dispara um aviso de
-            teste sem criar pedido nenhum. Existe porque "a matriz não
-            recebeu meu pedido" tem três causas diferentes — aparelho não
-            registrado, FCM recusou, ou chegou e o celular não tocou — e as
-            três se parecem com "não chegou nada". */}
         <TesteDeAvisos destino="matriz" />
       </div>
     </div>
