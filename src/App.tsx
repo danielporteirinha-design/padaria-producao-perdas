@@ -87,6 +87,12 @@ export default function App() {
   const [usuario, setUsuario] = useState<User | null>(null);
   const [autenticando, setAutenticando] = useState(true);
   const [migracaoResolvida, setMigracaoResolvida] = useState(false);
+  
+  // Estado para checar se as notificações do navegador estão ativadas
+  const [notificacoesAtivas, setNotificacoesAtivas] = useState<boolean>(
+    typeof window !== "undefined" && "Notification" in window ? Notification.permission === "granted" : false
+  );
+
   const loja = useMemo(() => lojaPorEmail(usuario?.email), [usuario]);
   const repositorio = useMemo(
     () => (loja ? new RepositorioFirestore(loja.id) : null),
@@ -116,6 +122,9 @@ export default function App() {
       setUsuario(u);
       setAutenticando(false);
       setMigracaoResolvida(false);
+      if (typeof window !== "undefined" && "Notification" in window) {
+        setNotificacoesAtivas(Notification.permission === "granted");
+      }
     });
   }, []);
 
@@ -717,6 +726,38 @@ export default function App() {
     );
   }
 
+  // BLOQUEIO OBRIGATÓRIO DE NOTIFICAÇÕES (AGO/2026)
+  // Se as notificações estiverem bloqueadas ou não suportadas, o app barra a entrada.
+  if (!notificacoesAtivas) {
+    return (
+      <div className="tela-identificacao">
+        <h1>Notificações Desativadas</h1>
+        <p>
+          Este aplicativo exige que as <strong>notificações do navegador</strong> estejam ativadas para garantir que os avisos urgentes de fornada e reposição não se percam.
+        </p>
+        <p className="nota-rodape" style={{ marginBottom: "20px" }}>
+          Por favor, clique no ícone de cadeado ou configurações na barra de endereços do seu navegador, permita as notificações e recarregue a página.
+        </p>
+        <button
+          type="button"
+          className="primario"
+          onClick={async () => {
+            if (typeof window !== "undefined" && "Notification" in window) {
+              const permissao = await Notification.requestPermission();
+              if (permissao === "granted") {
+                setNotificacoesAtivas(true);
+              } else {
+                alert("As notificações continuam bloqueadas nas configurações do navegador.");
+              }
+            }
+          }}
+        >
+          Permitir notificações agora
+        </button>
+      </div>
+    );
+  }
+
   if (!migracaoResolvida) {
     return <ImportarDadosLocais repositorio={repositorio} onConcluido={() => setMigracaoResolvida(true)} />;
   }
@@ -752,7 +793,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* AO FECHAR O AVISO O SOM É INTERROMPIDO */}
       <AvisoGlobal 
         aviso={aviso} 
         onFechar={() => {
