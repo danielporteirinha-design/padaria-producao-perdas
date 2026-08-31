@@ -25,6 +25,7 @@
  */
 
 let contexto: AudioContext | null = null;
+let loopToque: number | null = null; // Guarda a referência do loop contínuo
 
 type ConstrutorDeContexto = typeof AudioContext;
 
@@ -54,27 +55,42 @@ export function prepararSom(): void {
 }
 
 /**
+ * Interrompe a campainha imediatamente. Chamado quando o usuário 
+ * clica para fechar o aviso na tela.
+ */
+export function pararAvisoSonoro(): void {
+  if (loopToque !== null) {
+    window.clearInterval(loopToque);
+    loopToque = null;
+  }
+}
+
+/**
  * Uma badalada de campainha, e não dois bipes (ago/2026, pedido do dono
  * do negócio: no PC do balcão o aviso precisa soar como campainha).
- *
- * COMO UM SINO SOA, E POR QUE O BIPE NÃO SERVIA
- * ---------------------------------------------
- * Duas notas de onda senoidal eram um alarme de eletrodoméstico. O que
- * faz o ouvido reconhecer um sino são duas coisas que o bipe não tinha:
- *
- * 1. HARMÔNICOS NÃO INTEIROS. Um sino soa a nota fundamental junto de
- *    parciais que não são múltiplos exatos dela — é o que dá o brilho
- *    metálico. As razões abaixo (2,76 / 5,40 / 8,93) vêm da física de
- *    sinos reais.
- * 2. ATAQUE INSTANTÂNEO E CAUDA LONGA. O badalo bate e o metal decai por
- *    quase dois segundos. Cada parcial mais agudo decai MAIS RÁPIDO que
- *    o grave, senão o som fica estridente do começo ao fim.
- *
+ * Agora tocando em loop até ser explicitamente interrompida.
  */
 export function tocarAvisoSonoro(): void {
   try {
     prepararSom();
     if (!contexto) return;
+
+    // Se já estiver tocando, cancela o anterior para não encavalar
+    pararAvisoSonoro();
+
+    const iniciarToqueContinuo = () => {
+      if (!contexto || contexto.state !== "running") return;
+      
+      // Toca a primeira vez imediatamente
+      badaladas(contexto);
+      
+      // Continua tocando a cada 3 segundos (tempo suficiente para o som decair)
+      loopToque = window.setInterval(() => {
+        if (contexto && contexto.state === "running") {
+          badaladas(contexto);
+        }
+      }, 3000);
+    };
 
     /**
      * ESPERAR O CONTEXTO VOLTAR, EM VEZ DE DESISTIR (ago/2026).
@@ -87,11 +103,11 @@ export function tocarAvisoSonoro(): void {
      * atrás do PDV, era quase sempre a primeira.
      */
     if (contexto.state === "running") {
-      badaladas(contexto);
+      iniciarToqueContinuo();
       return;
     }
     void contexto.resume().then(() => {
-      if (contexto && contexto.state === "running") badaladas(contexto);
+      iniciarToqueContinuo();
     });
   } catch (erro) {
     console.warn("Não foi possível tocar o aviso sonoro:", erro);
