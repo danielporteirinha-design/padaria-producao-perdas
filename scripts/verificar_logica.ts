@@ -1684,7 +1684,7 @@ const perdas: RegistroPerda[] = [
     `fornada posterior à abertura volta a contar (obtido: ${fornadasNaoVistas("MATRIZ", HOJE, comNova)})`
   );
 
-  // Cada loja tem a própria marca: a filial abrir não pode zerar a matriz.
+  // Cada loja has a própria marca: a filial abrir não pode zerar a matriz.
   afirmar(
     fornadasNaoVistas("FILIAL_ARTHUR_BERNARDES", HOJE, comNova) === 4,
     "a marca é por loja — abrir numa não zera a outra"
@@ -1791,10 +1791,6 @@ const perdas: RegistroPerda[] = [
     comoLiberarNotificacao().atalho === undefined,
     "no iPhone não se promete um atalho que não existe"
   );
-
-  // Não restaura: este é o último bloco do script e o processo encerra
-  // em seguida. Deixar navigator falso vivo para casos futuros seria a
-  // armadilha clássica de teste que contamina o vizinho.
 }
 
 // ---------------------------------------------------------------
@@ -1806,15 +1802,11 @@ const perdas: RegistroPerda[] = [
 // vinha porque o programa do caixa estava fechado.
 // ---------------------------------------------------------------
 {
-  // Nada respondeu ainda: NÃO está pronto. É este caso que deixa o
-  // relógio de desistência correr até avisar sobre o agente fechado.
   afirmar(
     resumoDaImpressao([], 1).pronto === false,
     "sem resposta nenhuma, o desfecho continua em aberto"
   );
 
-  // Uma parte de duas: ainda em aberto — anunciar sucesso aqui faria o
-  // operador sair de perto da impressora com metade da lista.
   afirmar(
     resumoDaImpressao([{ id: "a", status: "impresso" }], 2).pronto === false,
     "impressão parcial não conta como concluída"
@@ -1839,8 +1831,6 @@ const perdas: RegistroPerda[] = [
     "com uma parte só, o texto não fala em partes"
   );
 
-  // Erro manda em qualquer combinação: se uma parte falhou, a lista está
-  // incompleta, e dizer "impresso" seria pior que não dizer nada.
   const comFalha = resumoDaImpressao(
     [
       { id: "a", status: "impresso" },
@@ -1854,7 +1844,6 @@ const perdas: RegistroPerda[] = [
     `o motivo do agente chega até a tela (obtido: "${comFalha.texto}")`
   );
 
-  // Erro sem mensagem ainda precisa virar frase apresentável.
   const semMotivo = resumoDaImpressao([{ id: "a", status: "erro" }], 1);
   afirmar(
     semMotivo.pronto && !semMotivo.sucesso && semMotivo.texto.length > 10,
@@ -1867,7 +1856,6 @@ const perdas: RegistroPerda[] = [
     "motivo só com espaços não vaza para a mensagem"
   );
 
-  // Pendente é o estado normal logo depois de enviar.
   afirmar(
     resumoDaImpressao([{ id: "a", status: "pendente" }], 1).pronto === false,
     "trabalho pendente mantém o desfecho em aberto"
@@ -1885,25 +1873,20 @@ const perdas: RegistroPerda[] = [
 // ---------------------------------------------------------------
 {
   afirmar(paraBusca("Pão Francês") === "PAO FRANCES", "acento e caixa somem na normalizacao");
-  afirmar(paraBusca("  bolo  ") === "BOLO", "espaco das pontas sai");
+  afirmar(paraBusca("   bolo   ") === "BOLO", "espaco das pontas sai");
 
-  // O caso que originou tudo.
   afirmar(contemBusca("PÃO FRANCÊS", "pao"), '"pao" encontra "PÃO FRANCÊS"');
   afirmar(contemBusca("BOLO DE FUBÁ", "fuba"), '"fuba" encontra "BOLO DE FUBÁ"');
 
-  // E o contrário também: quem digita com acento continua achando.
   afirmar(contemBusca("PAO FRANCES", "pão"), '"pão" encontra um cadastro sem acento');
   afirmar(contemBusca("PÃO FRANCÊS", "pão"), 'digitar com acento continua funcionando');
 
-  // Outros acentos do português, sem tabela de substituição para manter.
   afirmar(contemBusca("AÇÚCAR MASCAVO", "acucar"), "cedilha e til de u: açúcar/acucar");
   afirmar(contemBusca("PÃO DE QUEIJO CONGELADO", "QUEIJO"), "busca no meio do nome");
 
-  // Não pode virar um filtro que aceita qualquer coisa.
   afirmar(!contemBusca("PÃO FRANCÊS", "bolo"), "termo que nao existe continua sem resultado");
   afirmar(contemBusca("PÃO FRANCÊS", ""), "termo vazio nao exclui nada");
 
-  // ----- SINGULAR E PLURAL SÃO A MESMA BUSCA -----
   afirmar(radical("PAES") === radical("PAO"), "PAES e PAO tem o mesmo radical");
   afirmar(radical("SOVADOS") === radical("SOVADO"), "SOVADOS e SOVADO");
   afirmar(radical("FRANCESES") === radical("FRANCES"), "plural duplo: FRANCESES e FRANCES");
@@ -1922,17 +1905,6 @@ const perdas: RegistroPerda[] = [
 
 // ---------------------------------------------------------------
 // Caso 23: relatorio das fornadas (ago/2026)
-//
-// Pedido do dono do negocio: usar a marcacao de fornada, que ja virou
-// habito, para produzir analise. O que precisa ficar travado aqui:
-//
-//   1. a janela e aplicada sobre a MARCACAO, nao sobre a lista de
-//      producao — fornada de outro dia nao entra na conta do periodo;
-//   2. o valor plotado e MEDIA POR DIA, nao total: em 90 dias qualquer
-//      faixa acumula numero grande e o ritmo do dia some;
-//   3. a media divide pelos dias COM fornada, nao pelo tamanho da
-//      janela — senao abrir "90 dias" com 5 dias de dado dilui tudo a
-//      zero e o grafico mente dizendo que o forno esta parado.
 // ---------------------------------------------------------------
 {
   const HOJE = "2026-08-25";
@@ -1971,8 +1943,6 @@ const perdas: RegistroPerda[] = [
     ).toISOString(),
   });
 
-  // somarDias e a base da janela: comecar um dia errado desloca o
-  // relatorio inteiro sem nenhum sinal na tela.
   afirmar(somarDias(HOJE, -6) === "2026-08-19", "janela de 7 dias comeca 6 dias atras");
   afirmar(somarDias("2026-03-01", -1) === "2026-02-28", "somarDias atravessa a virada de mes");
   afirmar(somarDias("2026-01-01", -1) === "2025-12-31", "somarDias atravessa a virada de ano");
@@ -1985,9 +1955,7 @@ const perdas: RegistroPerda[] = [
     marcar(HOJE, 2, 8),
     marcar("2026-08-24", 1, 6),
     marcar("2026-08-24", 1, 11),
-    // Fora da janela de 7 dias — nao pode entrar em conta nenhuma.
     marcar("2026-07-01", 1, 6),
-    // Fora do expediente mapeado (23h): tem que aparecer, e nao sumir.
     marcar(HOJE, 1, 23),
   ];
 
@@ -1998,7 +1966,6 @@ const perdas: RegistroPerda[] = [
     "marcacao de outro mes nao entra na janela"
   );
 
-  // Categoria recorta aqui tambem, junto com o resto da tela.
   const soConfeitaria = recortarFornadas(fornadas, catalogo, HOJE, { dias: 7, categoria: "CONFEITARIA" });
   afirmar(soConfeitaria.length === 1 && soConfeitaria[0].codigoPdv === 2, "filtro de categoria recorta as fornadas");
 
@@ -2006,15 +1973,11 @@ const perdas: RegistroPerda[] = [
   afirmar(totais.total === 7, `total conta cada marcacao (obtido: ${totais.total})`);
   afirmar(totais.diasComFornada === 2, `dois dias com marcacao (obtido: ${totais.diasComFornada})`);
   afirmar(totais.mediaPorDia === 3.5, `media divide pelos dias COM fornada (obtido: ${totais.mediaPorDia})`);
-  // Primeira fornada: 5h num dia, 6h no outro. A mediana nao pode virar
-  // "00h" so porque a lista tem tamanho par.
   afirmar(
     totais.primeiraHoraTipica === "06h",
     `primeira hora tipica sai formatada em duas casas (obtido: "${totais.primeiraHoraTipica}")`
   );
 
-  // Sem nenhuma fornada o relatorio precisa devolver zero, e nao dividir
-  // por zero nem estourar Math.min com lista vazia.
   const vazio = totaisDeFornadas([]);
   afirmar(
     vazio.total === 0 && vazio.diasComFornada === 0 && vazio.mediaPorDia === 0,
@@ -2024,7 +1987,6 @@ const perdas: RegistroPerda[] = [
 
   const faixas = fornadasPorFaixaDeHora(semana);
   const faixaDe = (rotulo: string) => faixas.find((f) => f.rotulo === rotulo);
-  // 04h-07h: 5h, 5h40 (hoje) + 6h (ontem) = 3 marcacoes em 2 dias.
   afirmar(faixaDe("04h–07h")?.valor === 1.5, `faixa da madrugada em media por dia (obtido: ${faixaDe("04h–07h")?.valor})`);
   afirmar(faixaDe("07h–10h")?.valor === 1, "faixa da manha em media por dia");
   afirmar(faixaDe("10h–13h")?.valor === 0.5, "faixa do meio-dia em media por dia");
@@ -2039,8 +2001,6 @@ const perdas: RegistroPerda[] = [
     "faixa zerada explica que nao houve marcacao"
   );
 
-  // Singular/plural: o app fala portugues, e "1 fornadas em 1 dias" e o
-  // tipo de detalhe que faz o operador desconfiar do numero todo.
   const umDia = fornadasPorFaixaDeHora([marcar(HOJE, 1, 5)]);
   afirmar(
     (umDia.find((f) => f.rotulo === "04h–07h")?.detalhe ?? "").includes("1 fornada em 1 dia"),
@@ -2049,35 +2009,16 @@ const perdas: RegistroPerda[] = [
 
   const repeticao = produtosPorNumeroDeFornadas(semana, catalogo);
   afirmar(repeticao[0].rotulo === "PAO FRANCES", "o item que mais repete fornada vem primeiro");
-  // Pao frances: 6 marcacoes em 2 dias = 3/dia. Bolo: 1 em 2 = 0,5/dia.
   afirmar(repeticao[0].valor === 3, `repeticao em media por dia (obtido: ${repeticao[0].valor})`);
   afirmar(repeticao[1].rotulo === "BOLO DE FUBA" && repeticao[1].valor === 0.5, "item de fornada unica fica embaixo");
   afirmar(produtosPorNumeroDeFornadas([], catalogo).length === 0, "sem fornada, nenhuma barra");
 
-  // Produto marcado e depois excluido do catalogo nao pode derrubar a
-  // tela nem aparecer como "undefined".
   const orfa = produtosPorNumeroDeFornadas([marcar(HOJE, 99, 5)], catalogo);
   afirmar(orfa[0].rotulo === "#99", `produto fora do catalogo aparece pelo codigo (obtido: "${orfa[0].rotulo}")`);
 }
 
 // ---------------------------------------------------------------
 // Caso 24: reposicao confirmada entra na producao de hoje (ago/2026)
-//
-// Pedido do dono do negocio: quando a matriz confirma uma reposicao de
-// um item que NAO estava no cronograma, esse item passa a contar como
-// produzido hoje. Sem isso ele some da contabilidade — foi produzido e
-// entregue, mas o plano do dia nao o conhece, e o plano do dia e o
-// DENOMINADOR da taxa de perda. Uma perda lancada amanha sobre ele
-// apareceria como perda sem producao.
-//
-// O que precisa ficar travado:
-//   1. item que JA esta na lista nao entra de novo, e a quantidade
-//      planejada fica intacta — somar as duas inflaria a producao do dia
-//      com mercadoria que nao existiu;
-//   2. o resto do plano nao e reescrito: status, autoria e o registro de
-//      producaoRealizada continuam como estavam;
-//   3. item novo nao citado em codigosNaoProduzidos conta como
-//      produzido, que e exatamente o que aconteceu.
 // ---------------------------------------------------------------
 {
   let contador = 0;
@@ -2104,14 +2045,11 @@ const perdas: RegistroPerda[] = [
   afirmar(planoContemItem(planoBase, 1), "o plano reconhece um item que ele tem");
   afirmar(!planoContemItem(planoBase, 99), "o plano nao inventa item que nao tem");
 
-  // Item ja na lista: nada acontece. E a regra que impede a producao do
-  // dia inflar a cada reposicao atendida com o que ja saiu do forno.
   afirmar(
     incluirItemProduzido(planoBase, { codigoPdv: 1, quantidadeUnidades: 30 }, "PÃES E ROSCAS", novoId) === null,
     "item ja planejado nao entra de novo"
   );
 
-  // Item novo, categoria que ja tem sessao: entra na sessao existente.
   const comItemNovo = incluirItemProduzido(
     planoBase,
     { codigoPdv: 2, quantidadeUnidades: 12 },
@@ -2127,7 +2065,6 @@ const perdas: RegistroPerda[] = [
   );
   afirmar(comItemNovo!.sessoes[0].id === "s1", "a sessao existente mantem o proprio id");
 
-  // O plano nao e reescrito em mais nada.
   afirmar(comItemNovo!.id === planoBase.id, "o plano continua sendo o mesmo documento");
   afirmar(comItemNovo!.status === "confirmado", "o status nao muda");
   afirmar(comItemNovo!.criadoPor === "Daniel", "a autoria nao muda");
@@ -2135,15 +2072,12 @@ const perdas: RegistroPerda[] = [
     comItemNovo!.producaoRealizada?.confirmadoEm === "2026-08-25T19:00:00.000Z",
     "o registro de producao realizada fica intacto"
   );
-  // A consequencia que interessa: item novo nao citado em
-  // codigosNaoProduzidos conta como produzido.
   afirmar(
     !comItemNovo!.producaoRealizada!.codigosNaoProduzidos.includes(2),
     "item recem-incluido conta como produzido"
   );
   afirmar(planoBase.sessoes[0].itens.length === 1, "o plano original nao e mutado");
 
-  // Categoria sem sessao ainda: cria a sessao.
   const outraCategoria = incluirItemProduzido(
     planoBase,
     { codigoPdv: 3, quantidadeUnidades: 5 },
@@ -2156,13 +2090,11 @@ const perdas: RegistroPerda[] = [
     "a sessao nova nasce com o item dentro"
   );
 
-  // Quantidade invalida nao entra: um pedido zerado nao e producao.
   afirmar(
     incluirItemProduzido(planoBase, { codigoPdv: 4, quantidadeUnidades: 0 }, "BOLOS", novoId) === null,
     "quantidade zero nao entra na producao"
   );
 
-  // Dia sem cronograma montado: o plano nasce aqui, ja confirmado.
   const doZero = planoDeHojeCom(
     "2026-08-25",
     "terca",
@@ -2184,10 +2116,6 @@ const perdas: RegistroPerda[] = [
 
 // ---------------------------------------------------------------
 // Caso 25: aba de destino do aviso (ago/2026)
-//
-// Tocar no push abria o app na ultima aba usada. A filial recebia "PAO
-// FRANCES — disponivel para pedidos", tocava, e caia no Cronograma: o
-// aviso avisava e nao levava a lugar nenhum.
 // ---------------------------------------------------------------
 {
   afirmar(abaDaUrl("/?aba=fornada") === "fornada", "a rota do aviso leva a aba Nova Fornada");
@@ -2198,9 +2126,6 @@ const perdas: RegistroPerda[] = [
   );
   afirmar(abaDaUrl(urlDaAba("fornada")) === "fornada", "o que o servidor monta e o que o app le");
 
-  // Sem destino reconhecivel o app fica onde estava: um aviso antigo na
-  // bandeja, ou uma URL adulterada, nao pode levar a um estado que o app
-  // nao sabe renderizar.
   afirmar(abaDaUrl("/") === null, "sem query nao ha destino");
   afirmar(abaDaUrl("") === null, "string vazia nao quebra");
   afirmar(abaDaUrl("/?aba=") === null, "aba vazia nao vira destino");
@@ -2211,12 +2136,6 @@ const perdas: RegistroPerda[] = [
 
 // ---------------------------------------------------------------
 // Caso 26: blocos por categoria na fita impressa (ago/2026)
-//
-// Quem separa a mercadoria de manha anda pela padaria por SETOR, nao por
-// ordem alfabetica de produto. E a ordem dos setores tem que ser a MESMA
-// em todo papel do dia: o pedido que a filial manda direto para a
-// impressora e o romaneio que a matriz imprime sao conferidos um contra o
-// outro, e ordens diferentes transformariam isso em procura.
 // ---------------------------------------------------------------
 {
   const catalogo: Produto[] = [
@@ -2267,8 +2186,6 @@ const perdas: RegistroPerda[] = [
     },
   ];
 
-  // Itens fora de ordem de proposito: e o caso real, porque a filial
-  // adiciona na ordem em que lembra.
   const blocos = agruparPorCategoria(
     [
       { codigoPdv: 2, quantidadeUnidades: 3 },
@@ -2280,7 +2197,6 @@ const perdas: RegistroPerda[] = [
   );
 
   afirmar(blocos.length === 3, `uma sessao por categoria com item (obtido: ${blocos.length})`);
-  // A ordem e a de CATEGORIAS_PRODUCAO, nao a de chegada dos itens.
   afirmar(
     blocos.map((b) => b.rotuloSessao).join(" | ") === "Pães e Roscas | Biscoitos | Bolos",
     `setores na ordem do catalogo (obtido: "${blocos.map((b) => b.rotuloSessao).join(" | ")}")`
@@ -2292,14 +2208,11 @@ const perdas: RegistroPerda[] = [
   );
   afirmar(blocos[0].itens[0].quantidadeUnidades === 200, "a quantidade atravessa o agrupamento");
 
-  // Categoria vazia nao vira sessao em branco no papel.
   afirmar(
     !blocos.some((b) => b.itens.length === 0),
     "categoria sem item nao imprime sessao vazia"
   );
 
-  // Categoria fora das cinco nao pode SUMIR: item que nao aparece na
-  // lista e item que ninguem separa.
   const comAntiga = agruparPorCategoria(
     [
       { codigoPdv: 5, quantidadeUnidades: 2 },
@@ -2317,7 +2230,6 @@ const perdas: RegistroPerda[] = [
     "a categoria desconhecida vai para o fim, com o item dentro"
   );
 
-  // Produto que saiu do catalogo tambem nao pode sumir do papel.
   const orfao = agruparPorCategoria([{ codigoPdv: 999, quantidadeUnidades: 5 }], catalogo);
   afirmar(orfao.length === 1, "item sem cadastro ainda gera uma sessao");
 
@@ -2326,71 +2238,36 @@ const perdas: RegistroPerda[] = [
 
 // ---------------------------------------------------------------
 // Caso 27: virada de dia com o app aberto (ago/2026)
-//
-// Defeito relatado pelo dono do negocio: quinta de manha, e as perdas
-// lancadas na quarta apareciam como "lancadas hoje". Os DADOS estavam
-// certos — cada perda foi gravada com a data certa. A TELA e que nunca
-// soube que o dia mudou, porque no PC do caixa o app fica aberto a noite
-// inteira e nada o fazia renderizar de novo.
-//
-// A mesma raiz atinge Cronograma e Pedido, que abrem no dia SEGUINTE: a
-// data-alvo era escolhida uma vez, na montagem da tela, e nunca mais. Na
-// quinta de manha ela ainda apontava para a quinta, que ja tinha
-// chegado, e quem fosse montar a lista de sexta editava a de quinta.
-//
-// Avancar sozinho e conveniente e perigoso ao mesmo tempo: as 23h59
-// alguem pode estar no meio da digitacao. Dai as guardas.
 // ---------------------------------------------------------------
 {
   const QUINTA = "2026-08-27";
   const SEXTA = "2026-08-28";
   const QUARTA = "2026-08-26";
 
-  // O caso que motivou tudo: tela parada apontando para um dia que ja
-  // chegou, sem nada digitado.
   afirmar(
     proximaDataAlvo(QUINTA, QUINTA, false) === SEXTA,
     `data-alvo que virou hoje avanca para amanha (obtido: ${proximaDataAlvo(QUINTA, QUINTA, false)})`
   );
-  // Fim de semana ou feriado com o app esquecido aberto: pula direto.
   afirmar(proximaDataAlvo(QUARTA, QUINTA, false) === SEXTA, "data-alvo no passado tambem avanca");
 
-  // Ja esta certa: nao mexe (e nao dispara render a toa).
   afirmar(proximaDataAlvo(SEXTA, QUINTA, false) === null, "data-alvo ja em amanha nao muda");
 
-  // A guarda que protege o trabalho: 23h59, alguem digitando.
   afirmar(
     proximaDataAlvo(QUINTA, QUINTA, true) === null,
     "com item digitado na tela, a data NAO vira sozinha"
   );
 
-  // Quem escolheu planejar mais adiante nao pode ser jogado de volta.
   afirmar(
     proximaDataAlvo("2026-09-05", QUINTA, false) === null,
     "data futura escolhida a mao e preservada"
   );
 
-  // Viradas de mes e de ano continuam valendo — a conta e a de somarDias.
   afirmar(proximaDataAlvo("2026-08-31", "2026-08-31", false) === "2026-09-01", "vira o mes");
   afirmar(proximaDataAlvo("2026-12-31", "2026-12-31", false) === "2027-01-01", "vira o ano");
 }
 
 // ---------------------------------------------------------------
 // Caso 28: taxa de perda por LOJA (ago/2026)
-//
-// Defeito que so apareceu quando a aba de Analises foi liberada para as
-// filiais: a tela deixava filtrar por loja, mas o filtro so alcancava as
-// PERDAS. O denominador continuava sendo a producao inteira da padaria —
-// as tres lojas somadas.
-//
-// Resultado: a taxa de uma filial saia dividida por um numero varias
-// vezes maior que o certo, e parecia otima. Numero errado que parece bom
-// e o pior tipo de numero num painel de decisao.
-//
-// A correcao usa a MESMA consolidacao da fita de producao: sem filtro, o
-// denominador e tudo que saiu do forno; com filtro, e o que chegou
-// aquela loja — a matriz fica com o que planejou para si, cada filial com
-// o que pediu.
 // ---------------------------------------------------------------
 {
   const DIA = "2026-08-26"; // quarta
@@ -2407,7 +2284,6 @@ const perdas: RegistroPerda[] = [
     pesoMedioUnitarioGramas: 50,
   };
 
-  // A matriz planejou 100 para si; a filial pediu 50. Total produzido: 150.
   const planoDoDia: PlanoDeProducaoDiario = {
     id: "plano-loja",
     data: DIA,
@@ -2467,7 +2343,6 @@ const perdas: RegistroPerda[] = [
   afirmar(daMatriz.perdido === 10, "matriz conta so as proprias perdas");
   afirmar(daMatriz.taxaPerda === 10, `taxa da matriz = 10/100 (obtido: ${daMatriz.taxaPerda})`);
 
-  // ESTE e o caso que o defeito escondia.
   const daFilial = calcularTotais(
     recortar(catalogo, [planoDoDia], perdasDasLojas, HOJE, { ...janela, lojaId: ARTHUR }, [
       pedidoDaFilial,
@@ -2483,8 +2358,6 @@ const perdas: RegistroPerda[] = [
     `taxa da filial = 10/50 = 20%, e nao 10/150 = 6,7% (obtido: ${daFilial.taxaPerda})`
   );
 
-  // O grafico de produtos usa o mesmo denominador — se ele nao usasse, a
-  // tela mostraria duas taxas diferentes para o mesmo produto.
   const porProdutoFilial = topProdutosPorPerda(
     recortar(catalogo, [planoDoDia], perdasDasLojas, HOJE, { ...janela, lojaId: ARTHUR }, [
       pedidoDaFilial,
@@ -2496,8 +2369,6 @@ const perdas: RegistroPerda[] = [
   );
   afirmar(porProdutoFilial[0].valor === 20, "e a mesma taxa dos numeros-cabecalho");
 
-  // Item marcado como NAO PRODUZIDO no fim do expediente sai do
-  // denominador: ninguem recebeu o que nao saiu do forno.
   const naoSaiu: PlanoDeProducaoDiario = {
     ...planoDoDia,
     producaoRealizada: {
@@ -2512,15 +2383,12 @@ const perdas: RegistroPerda[] = [
   afirmar(semProducao.produzido === 0, "item que nao saiu do forno some do denominador");
   afirmar(semProducao.taxaPerda === null, "sem producao a taxa e nula, e nao zero");
 
-  // Rascunho da filial nao entra: ela ainda esta mexendo no numero.
   const rascunho: PedidoFilial = { ...pedidoDaFilial, status: "rascunho" };
   const comRascunho = calcularTotais(
     recortar(catalogo, [planoDoDia], perdasDasLojas, HOJE, { ...janela, lojaId: ARTHUR }, [rascunho])
   );
   afirmar(comRascunho.produzido === 0, "pedido em rascunho nao vira denominador");
 
-  // Reposicao tambem nao: ela e de HOJE e ja foi entregue por fora do
-  // planejamento (ver ehPedidoDiario em src/types/pedido.ts).
   const reposicao: PedidoFilial = { ...pedidoDaFilial, id: "rep", tipo: "reposicao" };
   const comReposicao = calcularTotais(
     recortar(catalogo, [planoDoDia], perdasDasLojas, HOJE, { ...janela, lojaId: ARTHUR }, [
@@ -2529,7 +2397,6 @@ const perdas: RegistroPerda[] = [
   );
   afirmar(comReposicao.produzido === 0, "reposicao nao entra no denominador do planejamento");
 
-  // Fora da janela, nada conta.
   const forA = calcularTotais(
     recortar(catalogo, [planoDoDia], perdasDasLojas, "2026-10-01", janela, [pedidoDaFilial])
   );
@@ -2538,16 +2405,6 @@ const perdas: RegistroPerda[] = [
 
 // ---------------------------------------------------------------
 // Caso 29: rascunho do cronograma (ago/2026)
-//
-// Defeito relatado: "apaguei a sessao Paes e Roscas, sai da aba, voltei,
-// e ela estava la de novo". A montagem vivia so' na memoria do
-// componente; trocar de aba desmontava a tela e ela era reconstruida a
-// partir do plano GRAVADO. Nao era so' a limpeza: acrescentar item,
-// corrigir quantidade, remover produto — tudo se perdia igual, e em
-// silencio, com numeros plausiveis no lugar.
-//
-// Aqui ficam travadas as duas pecas puras: a comparacao que decide se ha
-// "alteracoes nao confirmadas", e a expiracao dos rascunhos velhos.
 // ---------------------------------------------------------------
 {
   const plano: PlanoDeProducaoDiario = {
@@ -2572,11 +2429,8 @@ const perdas: RegistroPerda[] = [
   afirmar(doPlano["PÃES E ROSCAS"].length === 2, "os itens da sessao atravessam o mapa");
   afirmar(Object.keys(mapaDoPlano(undefined)).length === 0, "sem plano, o mapa nasce vazio");
 
-  // Igual a si mesmo.
   afirmar(mapasIguais(doPlano, mapaDoPlano(plano)), "o mesmo plano se compara igual");
 
-  // ORDEM nao conta: remover e re-adicionar o mesmo produto muda a ordem
-  // sem mudar o pedido, e um alarme nesse caso seria falso.
   const trocado = {
     BOLOS: [{ codigoPdv: 9, quantidadeUnidades: 4 }],
     "PÃES E ROSCAS": [
@@ -2586,17 +2440,14 @@ const perdas: RegistroPerda[] = [
   };
   afirmar(mapasIguais(doPlano, trocado), "ordem de sessao e de item nao conta como alteracao");
 
-  // Categoria vazia é o mesmo que categoria ausente.
   afirmar(
     mapasIguais(doPlano, { ...trocado, SALGADOS: [] }),
     "sessao vazia nao conta como alteracao"
   );
 
-  // O CASO RELATADO: sessao inteira apagada tem que contar como alteracao.
   const semPaes = { BOLOS: [{ codigoPdv: 9, quantidadeUnidades: 4 }] };
   afirmar(!mapasIguais(doPlano, semPaes), "apagar a sessao inteira e' alteracao");
 
-  // As outras formas de editar, que se perdiam do mesmo jeito.
   afirmar(
     !mapasIguais(doPlano, {
       ...doPlano,
@@ -2619,15 +2470,14 @@ const perdas: RegistroPerda[] = [
     "acrescentar uma sessao e' alteracao"
   );
 
-  // --- expiracao ---
   const HOJE = "2026-08-27";
   const chaves = [
-    chaveDoRascunho("2026-08-28"), // amanha
+    chaveDoRascunho("2026-08-28"),
     chaveDoRascunho(HOJE),
-    chaveDoRascunho("2026-08-26"), // ontem
-    chaveDoRascunho("2026-08-25"), // anteontem — ainda no prazo
-    chaveDoRascunho("2026-08-20"), // vencido
-    "padaria:operador:MATRIZ", // de outra coisa: nao pode ser tocado
+    chaveDoRascunho("2026-08-26"),
+    chaveDoRascunho("2026-08-25"),
+    chaveDoRascunho("2026-08-20"),
+    "padaria:operador:MATRIZ",
     "padaria:fornadas-vistas:MATRIZ:2026-08-20",
   ];
   const vencidos = rascunhosVencidos(chaves, HOJE);
@@ -2644,7 +2494,6 @@ const perdas: RegistroPerda[] = [
     !vencidos.includes(chaveDoRascunho("2026-08-28")),
     "rascunho de data futura nunca vence — planejar a semana e' uso legitimo"
   );
-  // Chave estragada pode ir embora: nao da' para saber de que dia e'.
   afirmar(
     rascunhosVencidos([`padaria:rascunho-cronograma:sexta`], HOJE).length === 1,
     "chave de rascunho com data invalida e' descartada"
@@ -2652,8 +2501,7 @@ const perdas: RegistroPerda[] = [
 }
 
 // ---------------------------------------------------------------
-// Ordem da lista de anúncios da Reposição: do mais recente para o mais
-// antigo, com o que ainda não saiu no fim (ver src/lib/ordemDaReposicao.ts)
+// Ordem da lista de anúncios da Reposição
 // ---------------------------------------------------------------
 {
   const DIA = "2026-08-27";
@@ -2665,12 +2513,11 @@ const perdas: RegistroPerda[] = [
     marcadaEm: `${data}T${hora}:00.000Z`,
   });
 
-  // A lista chega na ordem do cronograma: 10, 20, 30, 40.
   const doCronograma = [10, 20, 30, 40];
   const fornadas = [
     forn(10, "06:00"),
     forn(30, "09:30"),
-    forn(10, "10:15"), // pão francês sai de novo: 10 volta para o topo
+    forn(10, "10:15"),
     forn(20, "07:45"),
   ];
 
@@ -2685,7 +2532,6 @@ const perdas: RegistroPerda[] = [
     "reordenar nao perde nem inventa item"
   );
 
-  // Fornada de OUTRO dia nao pode promover nada: a lista e' do dia corrente.
   const deOntem = [forn(40, "05:00", "2026-08-26")];
   afirmar(
     JSON.stringify(ordenarPorAnuncioRecente(doCronograma, deOntem, DIA)) ===
@@ -2693,15 +2539,12 @@ const perdas: RegistroPerda[] = [
     "fornada de outro dia nao muda a ordem de hoje"
   );
 
-  // Sem fornada nenhuma, a ordem do cronograma sobrevive inteira — e' a
-  // ordem em que a padaria produz.
   afirmar(
     JSON.stringify(ordenarPorAnuncioRecente(doCronograma, [], DIA)) ===
       JSON.stringify(doCronograma),
     "sem anuncio, mantem a ordem do cronograma"
   );
 
-  // Empate exato de horario: quem vinha antes continua antes (ordem estavel).
   const empate = [forn(20, "08:00"), forn(30, "08:00")];
   afirmar(
     JSON.stringify(ordenarPorAnuncioRecente(doCronograma, empate, DIA)) ===
@@ -2718,8 +2561,7 @@ const perdas: RegistroPerda[] = [
 }
 
 // ---------------------------------------------------------------
-// Rascunho do pedido da filial: chave por loja E data, e a mesma regra
-// de expiração do cronograma (ver src/lib/rascunhoPedido.ts)
+// Rascunho do pedido da filial
 // ---------------------------------------------------------------
 {
   const HOJE_P = "2026-08-27";
@@ -2737,11 +2579,11 @@ const perdas: RegistroPerda[] = [
 
   const chavesP = [
     chaveDoRascunhoPedido("FILIAL_A", HOJE_P),
-    chaveDoRascunhoPedido("FILIAL_A", "2026-08-25"), // anteontem: no prazo
-    chaveDoRascunhoPedido("FILIAL_A", "2026-08-20"), // vencido
-    chaveDoRascunhoPedido("FILIAL_B", "2026-08-20"), // vencido, outra loja
-    chaveDoRascunhoPedido("FILIAL_A", "2026-09-10"), // futuro: nunca vence
-    "padaria:rascunho-cronograma:2026-08-20", // de outra tela: nao pode ir junto
+    chaveDoRascunhoPedido("FILIAL_A", "2026-08-25"),
+    chaveDoRascunhoPedido("FILIAL_A", "2026-08-20"),
+    chaveDoRascunhoPedido("FILIAL_B", "2026-08-20"),
+    chaveDoRascunhoPedido("FILIAL_A", "2026-09-10"),
+    "padaria:rascunho-cronograma:2026-08-20",
     "padaria:operador:MATRIZ",
   ];
   const vencidosP = rascunhosDePedidoVencidos(chavesP, HOJE_P);
@@ -2755,8 +2597,6 @@ const perdas: RegistroPerda[] = [
     !vencidosP.includes(chaveDoRascunhoPedido("FILIAL_A", "2026-09-10")),
     "rascunho de data futura nunca vence"
   );
-  // A loja fica DEPOIS da data na chave: e' o que permite ler a data sem
-  // saber o nome da loja.
   afirmar(
     rascunhosDePedidoVencidos(["padaria:rascunho-pedido:sabado:FILIAL_A"], HOJE_P).length === 1,
     "chave de rascunho de pedido com data invalida e' descartada"
@@ -2764,7 +2604,7 @@ const perdas: RegistroPerda[] = [
 }
 
 // ---------------------------------------------------------------
-// Ajuste da matriz na lista da filial (ver src/types/pedido.ts)
+// Ajuste da matriz na lista da filial
 // ---------------------------------------------------------------
 {
   const DIA_A = "2026-08-28";
@@ -2784,7 +2624,6 @@ const perdas: RegistroPerda[] = [
     enviadoEm: `${DIA_A}T18:05:00.000Z`,
   };
 
-  // A matriz corta o 10 para 100 e diz que o 30 nao vem.
   const ajustado = ajustarPedidoPelaMatriz(
     baseDoPedido,
     [
@@ -2816,7 +2655,6 @@ const perdas: RegistroPerda[] = [
     "item que ficou igual nao e' marcado como ajustado"
   );
 
-  // AJUSTAR DE NOVO nao pode transformar o ajuste anterior no "pedido da loja".
   const ajustadoDeNovo = ajustarPedidoPelaMatriz(
     ajustado,
     [{ codigoPdv: 10, quantidadeUnidades: 80 }, { codigoPdv: 20, quantidadeUnidades: 30 }],
@@ -2828,8 +2666,6 @@ const perdas: RegistroPerda[] = [
     "o segundo ajuste continua comparando com o que a LOJA pediu (150), nao com o ajuste anterior"
   );
 
-  // Voltar ao original limpa a marca — senao a filial leria um aviso sobre
-  // uma diferenca que nao existe mais.
   const revertido = ajustarPedidoPelaMatriz(
     ajustado,
     baseDoPedido.itens,
@@ -2840,7 +2676,6 @@ const perdas: RegistroPerda[] = [
   afirmar(diferencasDoAjuste(revertido).length === 0, "sem marca, nao ha diferenca a mostrar");
   afirmar(revertido.itens.length === 3, "desfazer devolve os tres itens da loja");
 
-  // Quantidade zero e' o mesmo que tirar da lista.
   const comZero = ajustarPedidoPelaMatriz(
     baseDoPedido,
     [
@@ -2856,7 +2691,6 @@ const perdas: RegistroPerda[] = [
     "quantidade zero vira 'nao vem' em vez de item com zero unidades"
   );
 
-  // Pedido sem ajuste nenhum nao produz diferenca.
   afirmar(diferencasDoAjuste(baseDoPedido).length === 0, "pedido intocado nao tem diferenca");
 
   afirmar(
@@ -2873,7 +2707,7 @@ const perdas: RegistroPerda[] = [
 }
 
 // ---------------------------------------------------------------
-// Rascunho do ajuste da matriz: chave por loja e data, prefixo proprio
+// Rascunho do ajuste da matriz
 // ---------------------------------------------------------------
 {
   const HOJE_A = "2026-08-27";
@@ -2882,9 +2716,9 @@ const perdas: RegistroPerda[] = [
     "o ajuste da matriz nao divide chave com o rascunho da propria filial"
   );
   const chavesA = [
-    chaveDoAjuste("FILIAL_A", "2026-08-20"), // vencido
+    chaveDoAjuste("FILIAL_A", "2026-08-20"),
     chaveDoAjuste("FILIAL_A", HOJE_A),
-    chaveDoRascunhoPedido("FILIAL_A", "2026-08-20"), // de outro prefixo
+    chaveDoRascunhoPedido("FILIAL_A", "2026-08-20"),
   ];
   const vencidosA = ajustesVencidos(chavesA, HOJE_A);
   afirmar(
@@ -2894,7 +2728,7 @@ const perdas: RegistroPerda[] = [
 }
 
 // ---------------------------------------------------------------
-// Documento continuo: um cabecalho, um rodape (ver gerarImagemLista.ts)
+// Documento continuo
 // ---------------------------------------------------------------
 {
   const produtosDoc: Produto[] = [10, 20, 30].map((codigoPdv) => ({
@@ -2931,14 +2765,11 @@ const perdas: RegistroPerda[] = [
     "sessao com mais itens e' mais alta"
   );
 
-  // Cabem numa imagem so'.
   afirmar(
     agruparBlocosContinuos(blocosDoc, ALTURA_CABECALHO_DOC, ALTURA_RODAPE_DOC_ASSINADO).length === 1,
     "lista pequena sai em UMA folha"
   );
 
-  // Uma lista enorme divide — e cada folha paga cabecalho e rodape de novo,
-  // senao a segunda folha sai orfa, sem data e sem o nome da loja.
   const muitos = Array.from({ length: 40 }, (_, i) => ({
     rotuloSessao: `Sessao ${i}`,
     itens: [{ codigoPdv: 10, quantidadeUnidades: 1 }],
@@ -2965,8 +2796,7 @@ const perdas: RegistroPerda[] = [
 }
 
 // ---------------------------------------------------------------
-// Uma tira por LOJA: cabecalho e rodape uma vez, tesoura so' entre lojas
-// (ver PecaContinua em src/lib/gerarImagemLista.ts)
+// Uma tira por LOJA
 // ---------------------------------------------------------------
 {
   const produtosPeca: Produto[] = [10, 20, 30].map((codigoPdv) => ({
@@ -3020,7 +2850,6 @@ const perdas: RegistroPerda[] = [
     "lista pequena nao vira 'folha 1/2'"
   );
 
-  // Sem destino nenhum (a lista de UMA loja) sai uma peca so'.
   const umaLoja = montarPecasContinuas(
     [
       { rotuloSessao: "Pães e Roscas", itens: [{ codigoPdv: 10, quantidadeUnidades: 1 }] },
@@ -3036,12 +2865,10 @@ const perdas: RegistroPerda[] = [
     "sem destino marcado, uma peca so', com o titulo recebido"
   );
 
-  // As duas pecas cabem numa imagem — e a tesoura entre elas entra na conta.
   const imagens = agruparPecasEmImagens(bobina);
   afirmar(imagens.length === 1, "as duas lojas cabem na mesma bobina");
   afirmar(imagens[0].length === 2, "e continuam sendo duas pecas dentro dela");
 
-  // Loja grande demais para uma folha: divide, e cada folha se identifica.
   const setoresDemais = Array.from({ length: 40 }, (_, i) => ({
     rotuloSessao: `Setor ${i}`,
     itens: [{ codigoPdv: 10, quantidadeUnidades: 1 }],
@@ -3069,11 +2896,8 @@ const perdas: RegistroPerda[] = [
 
 // ---------------------------------------------------------------
 // Suprimentos: id normalizado, agrupamento por segmento
-// (ver src/types/suprimento.ts)
 // ---------------------------------------------------------------
 {
-  // O id vem do NOME NORMALIZADO: e' o que impede o catalogo de encher de
-  // quase-duplicatas quando cada loja digita do seu jeito.
   afirmar(
     idDoSuprimento("Saco Kraft 1kg") === idDoSuprimento("SACO KRAFT 1KG"),
     "caixa diferente e' o mesmo item"
@@ -3103,20 +2927,20 @@ const perdas: RegistroPerda[] = [
   afirmar(
     idDoPedidoSuprimentos("2026-08-28", "FILIAL_A") !==
       idDoPedidoSuprimentos("2026-08-28", "FILIAL_B"),
-    "cada loja tem a lista dela"
+    "cada loja has a lista dela"
   );
 
   const catalogo: Suprimento[] = [
-    { id: "SACO_KRAFT", nome: "Saco kraft", segmento: "EMBALAGENS", ativo: true },
-    { id: "GUARDANAPO", nome: "Guardanapo", segmento: "EMBALAGENS", ativo: true },
-    { id: "DETERGENTE", nome: "Detergente", segmento: "LIMPEZA", ativo: true },
+    { id: "SACO_KRAFT", nome: "Saco kraft", segmento: "EMBALAGENS", ativo: true, criadoPor: "Sistema", criadoEm: new Date().toISOString() },
+    { id: "GUARDANAPO", nome: "Guardanapo", segmento: "EMBALAGENS", ativo: true, criadoPor: "Sistema", criadoEm: new Date().toISOString() },
+    { id: "DETERGENTE", nome: "Detergente", segmento: "LIMPEZA", ativo: true, criadoPor: "Sistema", criadoEm: new Date().toISOString() },
   ];
   const grupos = agruparPorSegmento(
     [
       { suprimentoId: "DETERGENTE", quantidade: 4 },
       { suprimentoId: "SACO_KRAFT", quantidade: 10 },
-      { suprimentoId: "GUARDANAPO", quantidade: 0 }, // zero nao entra
-      { suprimentoId: "ITEM_SUMIDO", quantidade: 2 }, // fora do catalogo
+      { suprimentoId: "GUARDANAPO", quantidade: 0 },
+      { suprimentoId: "ITEM_SUMIDO", quantidade: 2 },
     ],
     catalogo
   );
@@ -3150,16 +2974,13 @@ const perdas: RegistroPerda[] = [
     "a contagem ignora item zerado"
   );
 
-  // A aba nova precisa ser destino valido de push, senao o toque no aviso
-  // nao leva a lugar nenhum.
   afirmar(abaDaUrl("/?aba=suprimentos") === "suprimentos", "push de suprimentos abre a aba certa");
 }
 
 // ---------------------------------------------------------------
-// Voz: entender a quantidade dita (ver src/lib/vozRespostas.ts)
+// Voz: entender a quantidade dita
 // ---------------------------------------------------------------
 {
-  // --- quantidade
   const casos: [string, number | null][] = [
     ["40", 40],
     ["quarenta", 40],
@@ -3183,12 +3004,10 @@ const perdas: RegistroPerda[] = [
     const obtido = entenderQuantidade(dito);
     afirmar(obtido === esperado, `"${dito}" -> ${esperado} (obtido: ${obtido})`);
   }
-
 }
 
 // ---------------------------------------------------------------
 // Uma frase inteira vira lista de itens
-// (ver src/lib/interpretarPedidoFalado.ts)
 // ---------------------------------------------------------------
 {
   const CATALOGO = [
@@ -3200,7 +3019,6 @@ const perdas: RegistroPerda[] = [
     "BOLO DE FUBA COM GOIABADA",
   ];
 
-  // O caso da matriz: a frase inteira, com o comando na frente.
   const anuncio = interpretarFrase("anunciar fornada de palito vegetariano", CATALOGO);
   afirmar(
     anuncio.itens.length === 1 && anuncio.itens[0].nome === "PALITO VEGETARIANO",
@@ -3208,7 +3026,6 @@ const perdas: RegistroPerda[] = [
   );
   afirmar(anuncio.itens[0].quantidade === null, "anuncio sem numero nao inventa quantidade");
 
-  // O caso da filial: varios itens numa frase so'.
   const pedido = interpretarFrase("quero 20 pão francês e 10 broa de fubá", CATALOGO);
   afirmar(pedido.itens.length === 2, `dois itens na mesma frase (obtidos: ${pedido.itens.length})`);
   afirmar(
@@ -3220,7 +3037,6 @@ const perdas: RegistroPerda[] = [
     "segundo item com a quantidade certa"
   );
 
-  // Virgulas tambem separam, e o numero pode vir por extenso.
   const tres = interpretarFrase("manda 12 sonho de creme, cinco broa de fubá", CATALOGO);
   afirmar(tres.itens.length === 2, "virgula separa itens");
   afirmar(
@@ -3228,22 +3044,18 @@ const perdas: RegistroPerda[] = [
     "numero por extenso vira numero"
   );
 
-  // O " E " que separa NAO pode partir um nome que contem "DE".
   const comDe = interpretarFrase("15 pão de queijo congelado grande", CATALOGO);
   afirmar(
     comDe.itens.length === 1 && comDe.itens[0].nome === "PAO DE QUEIJO CONGELADO GRANDE",
     "nome com 'DE' nao e' partido"
   );
 
-  // O mesmo produto dito duas vezes SOMA em vez de virar duas linhas.
   const somado = interpretarFrase("10 pão francês e mais 5 pão francês", CATALOGO);
   afirmar(
     somado.itens.length === 1 && somado.itens[0].quantidade === 15,
     `produto repetido soma (obtido: ${JSON.stringify(somado.itens)})`
   );
 
-  // NAO INVENTA: o que nao casa volta como nao reconhecido, e a tela
-  // mostra. Um pedido com o produto errado custa uma entrega errada.
   const desconhecido = interpretarFrase("20 rocambole de nutella", CATALOGO);
   afirmar(desconhecido.itens.length === 0, "produto fora do catalogo nao vira item");
   afirmar(
@@ -3251,22 +3063,13 @@ const perdas: RegistroPerda[] = [
     "o trecho nao reconhecido volta para a tela mostrar"
   );
 
-  // "PAO" sozinho casaria com dois produtos — abaixo do limite, nao casa
-  // com nenhum, porque escolher o pao errado e' pior que perguntar.
   const vago = interpretarFrase("10 pão", CATALOGO);
   afirmar(vago.itens.length === 0, "termo vago demais nao escolhe produto no chute");
 
   afirmar(interpretarFrase("", CATALOGO).itens.length === 0, "frase vazia nao produz item");
 
-  /**
-   * O TRANSCRITOR ANGLICANIZA NOME PRÓPRIO (caso real, ago/2026).
-   *
-   * "ROSCA TATU" ditado sai como "ROSCA TATTOO" — o reconhecedor conhece
-   * a palavra inglesa e não conhece o bicho. Sem tolerância a grafia, o
-   * produto ficava impossível de pedir por voz nas duas cadências.
-   */
   const COM_TATU = [...CATALOGO, "ROSCA TATU"];
-  for (const frase of ["rosca tattoo 100 unidades", "100 unidades de rosca tattoo"]) {
+  for (const frase of ["rosca tattoo 100 unidades", "100 unidades de roska tattoo"]) {
     const lido = interpretarFrase(frase, COM_TATU);
     afirmar(
       lido.itens.length === 1 &&
@@ -3276,10 +3079,6 @@ const perdas: RegistroPerda[] = [
     );
   }
 
-  /**
-   * MAS A APROXIMAÇÃO NÃO PODE VIRAR PALPITE. Sem âncora exata, nada
-   * casa: um produto errado custa uma entrega errada.
-   */
   afirmar(
     interpretarFrase("50 tattoo", COM_TATU).itens.length === 0,
     "so a palavra parecida, sem ancora exata, nao vira produto"
@@ -3293,10 +3092,6 @@ const perdas: RegistroPerda[] = [
     "uma palavra so de um nome composto continua nao casando"
   );
 
-  /**
-   * VÁRIOS PRODUTOS NUMA FRASE SÓ, com e sem conectivo — no balcão
-   * ninguém dita vírgula. As duas cadências valem.
-   */
   for (const frase of [
     "quero 20 pao frances e 10 broa de fuba",
     "20 pao frances 10 broa de fuba",
@@ -3313,12 +3108,6 @@ const perdas: RegistroPerda[] = [
     );
   }
 
-  /**
-   * QUEM PEDE FALA NO PLURAL (ago/2026, defeito relatado em produção).
-   *
-   * "pães sovados" não achava "PÃO SOVADO": a comparação exigia a
-   * palavra idêntica. Agora as duas pontas viram radical.
-   */
   const COM_SOVADO = [...CATALOGO, "PAO SOVADO", "PAO DE MEL"];
   for (const frase of [
     "10 paes sovados",
@@ -3333,7 +3122,6 @@ const perdas: RegistroPerda[] = [
     );
   }
 
-  /** O plural duplo do produto mais vendido da casa. */
   for (const frase of ["20 paes franceses", "20 pães francêses", "20 pao frances"]) {
     const lido = interpretarFrase(frase, COM_SOVADO);
     afirmar(
@@ -3342,7 +3130,6 @@ const perdas: RegistroPerda[] = [
     );
   }
 
-  /** O plural não pode juntar produtos que são diferentes. */
   afirmar(
     interpretarFrase("10 broas de fuba", COM_SOVADO).itens[0]?.nome === "BROA DE FUBA",
     "plural nao confunde BROA DE FUBA com BOLO DE FUBA"
@@ -3353,10 +3140,6 @@ const perdas: RegistroPerda[] = [
     "plural mantem BOLO DE FUBA COM GOIABADA separado de BROA DE FUBA"
   );
 
-  /**
-   * APELIDO DO BALCÃO. Em Minas ninguém pede "pão francês": pede pão de
-   * sal. O apelido vale no plural, e só quando o destino existe.
-   */
   for (const frase of ["30 paes de sal", "30 pao de sal", "30 paozinho"]) {
     const lido = interpretarFrase(frase, COM_SOVADO);
     afirmar(
@@ -3376,7 +3159,6 @@ const perdas: RegistroPerda[] = [
     `cadastro com o nome do apelido ganha do apelido (obtido: ${JSON.stringify(cadastroGanha)})`
   );
 
-  /** Plural e apelido convivem com vários produtos na mesma frase. */
   const frasePlural = interpretarFrase("20 paes de sal e 10 paes sovados", COM_SOVADO);
   afirmar(
     frasePlural.itens.length === 2 &&
@@ -3387,7 +3169,6 @@ const perdas: RegistroPerda[] = [
     `apelido e plural juntos na mesma frase (obtido: ${JSON.stringify(frasePlural)})`
   );
 
-  /** A quantidade por extenso não pode ser destruída pelo radical. */
   const extenso = interpretarFrase("duas duzias de paes sovados", COM_SOVADO);
   afirmar(
     extenso.itens.length === 1 && extenso.itens[0].quantidade === 24,
@@ -3399,7 +3180,6 @@ const perdas: RegistroPerda[] = [
     `"tres" continua 3 (obtido: ${JSON.stringify(porExtenso)})`
   );
 
-  /** E a divisão por número não pode partir um nome que traz "de". */
   const queijo = interpretarFrase("10 pao de queijo", CATALOGO);
   afirmar(
     queijo.itens.length === 1 && queijo.itens[0].quantidade === 10,
@@ -3413,8 +3193,6 @@ const perdas: RegistroPerda[] = [
 {
   console.log("\n--- Entrada sem senha: token personalizado e chave de desligar ---");
 
-  // Chave descartável, gerada aqui: o teste confere FORMATO e ASSINATURA
-  // sem rede e sem chegar perto da conta de serviço de verdade.
   const { generateKeyPairSync, createVerify } = await import("node:crypto");
   const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const conta = {
@@ -3449,12 +3227,6 @@ const perdas: RegistroPerda[] = [
     "a assinatura confere com a chave publica"
   );
 
-  /**
-   * A CHAVE DE DESLIGAR. Sem `UIDS_LOJAS`, o recurso está desligado e a
-   * tela de login volta a pedir senha sozinha — é assim que a volta atrás
-   * acontece sem publicar versão nova.
-   */
-  /** A lista repetida na função de API não pode divergir da do app. */
   afirmar(
     IDS_DAS_LOJAS.length === LOJAS.length &&
       IDS_DAS_LOJAS.every((id, i) => id === LOJAS[i].id),
@@ -3465,11 +3237,6 @@ const perdas: RegistroPerda[] = [
     "os e-mails da funcao de API sao os mesmos de src/lib/lojas.ts"
   );
 
-  /**
-   * A CONTA DE SERVIÇO É A ÚNICA CONFIGURAÇÃO. Se ela não for lida, a
-   * entrada sem senha não liga — e o diagnóstico tem de dizer isso, e
-   * não cair em silêncio.
-   */
   afirmar(lerContaDeServico(undefined) === null, "sem a variavel, nao ha conta de servico");
   afirmar(lerContaDeServico("nao e json") === null, "JSON quebrado nao explode, devolve null");
   afirmar(
@@ -3531,10 +3298,6 @@ const perdas: RegistroPerda[] = [
       encerrados: vazio, dispensadas: vazio, ...entrada,
     });
 
-  /**
-   * O CASO RELATADO: cinco itens ditados, intervalo, mais dois. Nada do
-   * primeiro envio pode sumir por causa do segundo.
-   */
   const doisEnvios = [
     rep("a", `${HOJE}T09:00:00.000Z`, [
       { codigoPdv: 1, quantidadeUnidades: 20 },
@@ -3560,7 +3323,6 @@ const perdas: RegistroPerda[] = [
   afirmar(soMeus.every((l) => l.origem === "filial"), "sem fornada, so ha linha da filial");
   afirmar(soMeus[0].quando >= soMeus[4].quando, "do mais recente para o mais antigo");
 
-  /** A decisão da matriz move a linha para os concluídos. */
   const decididos = [
     rep("c", `${HOJE}T09:00:00.000Z`, [{ codigoPdv: 5, quantidadeUnidades: 4 }], {
       atendimento: { desfecho: "cancelado", motivo: "tem bastante desse produto",
@@ -3582,10 +3344,6 @@ const perdas: RegistroPerda[] = [
     "o aceite aparece como confirmado"
   );
 
-  /**
-   * A OUTRA DIREÇÃO: o aviso de fornada é o "pedido" que a matriz manda,
-   * e fica sem resposta até a filial pedir o produto ou dispensar.
-   */
   const avisos = [forno(7, `${HOJE}T08:00:00.000Z`), forno(7, `${HOJE}T10:00:00.000Z`), forno(8, `${HOJE}T08:30:00.000Z`)];
   const soAvisos = montar({ fornadas: avisos });
   afirmar(soAvisos.length === 2, `duas fornadas do mesmo produto viram UMA linha (obtido: ${soAvisos.length})`);
@@ -3623,7 +3381,6 @@ const perdas: RegistroPerda[] = [
     "produto encerrado pela matriz sai das duas listas"
   );
 
-  /** Não mistura loja, dia nem o pedido diário. */
   const ruido = [
     ...doisEnvios,
     rep("f", `${HOJE}T12:00:00.000Z`, [{ codigoPdv: 9, quantidadeUnidades: 1 }], { lojaId: "FILIAL_BENJAMIN_CONSTANT" }),
@@ -3633,7 +3390,6 @@ const perdas: RegistroPerda[] = [
   afirmar(montar({ pedidos: ruido }).length === 5, "outra loja, outro dia e o pedido diario ficam de fora");
   afirmar(montar({}).length === 0, "sem nada, as duas sanfonas ficam vazias");
 
-  // ---------- as duas sanfonas da MATRIZ ----------
   console.log("\n--- Reposicao: as duas sanfonas da matriz ---");
 
   const daMatriz = (extra: Partial<Parameters<typeof montarLinhasDaMatriz>[0]> = {}) =>
