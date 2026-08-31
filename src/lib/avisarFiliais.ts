@@ -1,198 +1,187 @@
 /**
  * src/lib/avisarFiliais.ts
  * ---------------------------------------------------------------
- * Cliente do endpoint que dispara o aviso de fornada pronta.
+ * Disparo de avisos push, nos dois sentidos (matriz <-> filiais).
  *
- * O envio em si acontece no servidor (api/notificar-fornada.ts) porque
- * exige a chave de serviço do Firebase — que ignora as regras do banco e
- * jamais pode ir para o bundle do app.
+ * DEFEITO CORRIGIDO NESTA VERSÃO (ago/2026) — LEIA ANTES DE MEXER
+ * ---------------------------------------------------------------
+ * A versão anterior deste arquivo chamava CINCO endereços que não
+ * existem no projeto: `/api/notificar-matriz`, `/api/notificar-desfecho`,
+ * `/api/notificar-ajuste` e `/api/testar-aviso`. Só
+ * `/api/notificar-fornada` existe.
  *
- * Manda junto o token de identidade do Firebase para o servidor conferir
- * que quem está pedindo é mesmo a matriz. Sem isso, um endereço público
- * conseguiria disparar notificação para os celulares da padaria inteira.
+ * O modo de falhar era o pior possível: cada chamada dava 404, o `catch`
+ * engolia com um `console.warn`, e a tela seguia como se tivesse dado
+ * certo. Na prática, a filial mandava a lista e a matriz não era avisada;
+ * a matriz confirmava a reposição e a filial não ficava sabendo; o botão
+ * de testar aviso não testava nada. Tudo em silêncio.
+ *
+ * TUDO PASSA POR UM ENDEREÇO SÓ, e é de propósito. `/api/notificar-fornada`
+ * é o único ponto que confere QUEM está chamando (token do Firebase) antes
+ * de disparar — o tipo de aviso é decidido por bandeiras no corpo. Criar
+ * um endereço por tipo multiplicaria a verificação de identidade por
+ * cinco, e é assim que um deles acaba sem verificação nenhuma.
+ *
+ * TODA CHAMADA TEM PRAZO. Sem `AbortController`, uma rede ruim deixa o
+ * botão girando para sempre — e no balcão isso é indistinguível de app
+ * travado.
  */
 
 import { auth } from "./firebase";
 
-export class ErroAviso extends Error {}
+export class ErroAviso extends Error {
+  constructor(mensagem: string) {
+    super(mensagem);
+    this.name = "ErroAviso";
+  }
+}
 
 /**
- * O que o servidor conseguiu fazer. `enviados: 0` NÃO é erro — quer dizer
- * que nenhum aparelho de filial está registrado ainda. Precisa voltar para
- * a tela porque, sem isso, o caso mais comum de "marquei e não chegou
- * nada" acontece em silêncio absoluto: a chamada dá certo, o servidor não
- * tem para quem mandar, e a matriz não tem como saber disso.
+ * Quanto esperar antes de desistir do aviso.
+ *
+ * Generoso o bastante para uma conexão de padaria confirmar de verdade,
+ * curto o bastante para o operador não achar que o app morreu.
  */
-export interface ResultadoAviso {
+export const SEGUNDOS_ATE_DESISTIR_DO_AVISO = 12;
+
+export interface ResultadoDoAviso {
   enviados: number;
-  falharam?: number;
-  removidos?: number;
-  /** Quantos aparelhos de filial estavam registrados na hora do envio. */
-  registrados?: number;
-  /** Códigos de erro do FCM, sem repetição — a causa real da falha. */
+  registrados: number;
   motivos?: string[];
+  /** Modo de manutenção ligado — ver api/manutencao.ts. */
+  manutencao?: boolean;
+  silenciados?: number;
   aviso?: string;
 }
 
 /**
- * Traduz o código do FCM para o que fazer a respeito. O código cru
- * ("messaging/third-party-auth-error") não diz nada para quem está com o
- * celular na mão às 6h; o que resolve é a frase seguinte.
- */
-export function explicarFalhaDeEnvio(codigo: string): string {
-  if (codigo.includes("registration-token-not-registered"))
-    return "o aparelho da filial desinstalou o app ou limpou os dados — precisa ativar de novo";
-  if (codigo.includes("invalid-registration-token") || codigo.includes("invalid-argument"))
-    return "o registro do aparelho está inválido — a filial precisa ativar de novo";
-  if (codigo.includes("third-party-auth-error"))
-    return "a chave VAPID do projeto não confere com a que o app está usando";
-  if (codigo.includes("sender-id-mismatch"))
-    return "o aparelho foi registrado em outro projeto do Firebase";
-  if (codigo.includes("quota-exceeded") || codigo.includes("unavailable"))
-    return "o serviço do Google recusou o envio agora — dá para tentar de novo";
-  return codigo;
-}
-
-export async function avisarFiliais(
-  nomeProduto: string,
-  codigoPdv: number,
-  vezesHoje: number,
-  /** Quantas peças saíram, quando informado (anúncio por voz). */
-  quantidade?: number
-): Promise<ResultadoAviso> {
-  return enviar({ nomeProduto, codigoPdv, vezesHoje, quantidade });
-}
-
-/**
- * Avisa a MATRIZ que esta filial acabou de pedir reposição. Quem decide o
- * destino é o servidor, a partir do e-mail verificado da conta — o app não
- * escolhe para quem o aviso vai, só informa o que aconteceu.
- */
-export async function avisarMatriz(
-  nomeProduto: string,
-  codigoPdv: number,
-  quantidade: number,
-  /** Quantos itens a reposição tem ao todo — 1 no pedido de um item só. */
-  itensNoPedido = 1
-): Promise<ResultadoAviso> {
-  return enviar({ nomeProduto, codigoPdv, quantidade, itensNoPedido });
-}
-
-/**
- * Avisa a MATRIZ que esta filial acabou de enviar a lista do dia
- * seguinte (ago/2026).
+ * O disparo, com identidade e prazo.
  *
- * É planejamento, não urgência — mas a matriz monta o cronograma no fim
- * do expediente e, se uma filial atrasa, a produção sai sem ela e a loja
- * abre no dia seguinte sem mercadoria. O aviso dá fim conhecido a essa
- * espera, em vez de a matriz ficar reabrindo a tela para ver se chegou.
- *
- * Manda VARIEDADES, não unidades: "12 produtos" dá a dimensão da lista
- * que vai chegar para separar; "195 unidades" não diz nada a quem lê de
- * relance na tela bloqueada.
+ * O token vai no cabeçalho porque o servidor decide o DESTINO a partir de
+ * quem chamou: matriz avisa filiais, filial avisa matriz. Se o app
+ * pudesse declarar o destino no corpo, qualquer conta conseguiria
+ * disparar aviso para todos os celulares da padaria.
  */
-export async function avisarListaEnviada(variedades: number): Promise<ResultadoAviso> {
-  return enviar({ listaDiaria: true, variedades });
-}
-
-/**
- * Avisa a filial que pediu qual foi o desfecho da reposição. Só a matriz
- * consegue endereçar uma loja específica — o servidor confere isso pela
- * conta de quem chamou, não por este parâmetro.
- */
-export async function avisarDesfechoReposicao(
-  paraLojaId: string,
-  nomeProduto: string,
-  codigoPdv: number,
-  desfecho: "confirmado" | "cancelado",
-  motivo?: string
-): Promise<ResultadoAviso> {
-  return enviar({ paraLojaId, nomeProduto, codigoPdv, desfecho, motivo });
-}
-
-/**
- * Avisa UMA filial que a matriz confirmou a lista dela com mudanças
- * (ago/2026).
- *
- * A filial monta a lista no fim do expediente e vai embora. Sem aviso,
- * ela só descobriria o corte na manhã seguinte, quando a mercadoria
- * chegasse a menos — tarde demais para procurar alternativa. Manda a
- * QUANTIDADE DE ITENS alterados, não quais: o número dá a dimensão para
- * quem lê na tela bloqueada, e a lista item a item está a um toque.
- */
-export async function avisarListaAjustada(
-  paraLojaId: string,
-  itensAlterados: number
-): Promise<ResultadoAviso> {
-  return enviar({ paraLojaId, listaAjustada: true, itensAlterados });
-}
-
-/**
- * Avisa a MATRIZ que esta filial enviou a lista de suprimentos
- * (ago/2026).
- *
- * Embalagem que acabou não espera: sem saco, o pão não sai da loja. O
- * aviso existe para a lista não ficar parada num documento que só é
- * descoberto quando alguém lembra de abrir a aba.
- */
-export async function avisarListaDeSuprimentos(variedades: number): Promise<ResultadoAviso> {
-  return enviar({ suprimentos: true, variedades });
-}
-
-/**
- * Dispara um aviso de teste para os aparelhos das filiais, sem marcar
- * fornada nenhuma. Existe porque a alternativa para conferir se o push
- * funciona é marcar uma fornada de mentira — que entra no histórico do dia
- * e suja o número que o app existe para medir.
- */
-export async function testarAvisos(): Promise<ResultadoAviso> {
-  return enviar({ teste: true });
-}
-
-/**
- * Quanto esperar o servidor de avisos antes de desistir.
- *
- * Existe por um defeito real (ago/2026): `fetch` sem limite espera para
- * sempre, e uma função serverless hibernada acordando devagar — ou uma
- * conexão que trava sem fechar — deixava a chamada pendurada. Quem
- * esperava por ela nunca era liberado. Doze segundos cobrem com folga o
- * pior início de função frio; mais que isso, o aviso já perdeu a hora de
- * qualquer forma.
- */
-const SEGUNDOS_ATE_DESISTIR_DO_AVISO = 12_000;
-
-async function enviar(corpo: Record<string, unknown>): Promise<ResultadoAviso> {
-  const usuario = auth.currentUser;
-  if (!usuario) throw new ErroAviso("Sessão não encontrada para avisar as filiais.");
-
-  const token = await usuario.getIdToken();
-  const desistir = new AbortController();
-  const relogio = setTimeout(() => desistir.abort(), SEGUNDOS_ATE_DESISTIR_DO_AVISO);
-  let resposta: Response;
+async function dispararAviso(corpo: Record<string, unknown>): Promise<ResultadoDoAviso> {
+  const relogio = new AbortController();
+  const prazo = setTimeout(() => relogio.abort(), SEGUNDOS_ATE_DESISTIR_DO_AVISO * 1000);
   try {
-    resposta = await fetch("/api/notificar-fornada", {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new ErroAviso("Sessão expirada — entre de novo para enviar avisos.");
+
+    const resposta = await fetch("/api/notificar-fornada", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(corpo),
-      signal: desistir.signal,
+      signal: relogio.signal,
     });
+    if (!resposta.ok) throw new Error(`Servidor respondeu ${resposta.status}`);
+    return (await resposta.json()) as ResultadoDoAviso;
   } catch (erro) {
-    throw new ErroAviso(
-      desistir.signal.aborted
-        ? "O servidor de avisos não respondeu a tempo. O que você fez já está gravado."
-        : "Não foi possível falar com o servidor de avisos."
-    );
+    console.warn("Falha ao enviar aviso:", erro);
+    throw new ErroAviso("Não foi possível enviar o aviso agora.");
   } finally {
-    clearTimeout(relogio);
+    clearTimeout(prazo);
   }
+}
 
-  if (!resposta.ok) {
-    const corpo = await resposta.json().catch(() => ({}));
-    throw new ErroAviso(corpo.erro ?? `Falha ao avisar as filiais (HTTP ${resposta.status}).`);
+/**
+ * Os avisos que NÃO podem derrubar a ação que os gerou.
+ *
+ * Gravar o pedido é o que importa; avisar é consequência. Um aviso que
+ * falha não pode desfazer uma lista que já foi enviada — por isso estes
+ * engolem o erro, enquanto os que a tela mostra (`avisarFiliais`,
+ * `testarAvisos`) o propagam.
+ */
+async function tentarAviso(corpo: Record<string, unknown>): Promise<void> {
+  try {
+    await dispararAviso(corpo);
+  } catch {
+    /* já registrado no console por dispararAviso */
   }
+}
 
-  return (await resposta.json().catch(() => ({ enviados: 0 }))) as ResultadoAviso;
+/** Teste manual: dispara um aviso que não cria pedido nenhum. */
+export async function testarAvisos(destino: "matriz" | "filial"): Promise<ResultadoDoAviso> {
+  // O destino real vem de quem está autenticado; o parâmetro fica para a
+  // tela saber o que dizer, e para o servidor registrar a intenção.
+  return dispararAviso({ teste: true, destino });
+}
+
+/** Matriz -> filiais: saiu do forno. */
+export async function avisarFiliais(
+  nomeProduto: string,
+  codigoPdv: number,
+  vezesHoje: number,
+  quantidade?: number
+): Promise<ResultadoDoAviso> {
+  return dispararAviso({ nomeProduto, codigoPdv, vezesHoje, quantidade });
+}
+
+/** Filial -> matriz: pedido de reposição. */
+export async function avisarMatriz(
+  nomeProduto: string,
+  codigoPdv: number,
+  quantidade: number,
+  variedades: number
+): Promise<void> {
+  await tentarAviso({ nomeProduto, codigoPdv, quantidade, itensNoPedido: variedades });
+}
+
+/** Filial -> matriz: a lista de amanhã foi enviada. */
+export async function avisarListaEnviada(variedades: number): Promise<void> {
+  await tentarAviso({ listaDiaria: true, variedades });
+}
+
+/** Filial -> matriz: lista de embalagens e material de limpeza. */
+export async function avisarListaDeSuprimentos(variedades: number): Promise<void> {
+  await tentarAviso({ suprimentos: true, variedades });
+}
+
+/** Matriz -> filial: resposta ao pedido de reposição. */
+export async function avisarDesfechoReposicao(
+  lojaId: string,
+  nomeProduto: string,
+  codigoPdv: number,
+  desfecho: "confirmado" | "cancelado",
+  motivo?: string
+): Promise<void> {
+  await tentarAviso({ paraLojaId: lojaId, nomeProduto, codigoPdv, desfecho, motivo });
+}
+
+/** Matriz -> filial: resposta à lista de suprimentos. */
+export async function avisarDesfechoSuprimentos(
+  lojaId: string,
+  desfecho: "confirmado" | "cancelado",
+  motivo?: string
+): Promise<void> {
+  await tentarAviso({ paraLojaId: lojaId, suprimentos: true, desfecho, motivo });
+}
+
+/** Matriz -> filial: a lista de amanhã foi confirmada com mudanças. */
+export async function avisarListaAjustada(lojaId: string, diferencas: number): Promise<void> {
+  await tentarAviso({ paraLojaId: lojaId, listaAjustada: true, itensAlterados: diferencas });
+}
+
+/**
+ * Traduz o código de erro do FCM para algo que a padaria entenda.
+ *
+ * O código cru ("messaging/registration-token-not-registered") não ajuda
+ * ninguém no balcão, e é justamente ele que aparece quando alguém
+ * desinstalou o app e o registro ficou para trás.
+ */
+export function explicarFalhaDeEnvio(motivo: string): string {
+  if (motivo.includes("registration-token-not-registered")) {
+    return "um aparelho desinstalou o app";
+  }
+  if (motivo.includes("invalid-argument") || motivo.includes("token")) {
+    return "aparelho sem registro válido";
+  }
+  if (motivo.includes("network") || motivo.includes("unavailable")) {
+    return "sem conexão com o serviço de avisos";
+  }
+  return motivo;
 }

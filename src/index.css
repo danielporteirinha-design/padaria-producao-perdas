@@ -1568,6 +1568,19 @@ button.perigo:hover { background: #822525; }
 /* A lista de reposição EM MONTAGEM, antes de virar pedido. Fica em
    destaque porque é trabalho não gravado: quem está olhando precisa ver,
    de relance, que ainda falta enviar. */
+/* A faixa do modo de manutenção. Vermelha e no topo de tudo, de
+   propósito: ela existe para ninguém esquecer que os avisos estão
+   suspensos, e uma faixa discreta não cumpriria isso. */
+.faixa-manutencao {
+  padding: 8px 12px;
+  background: #9b2c2c;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.35;
+}
+
 .pedido-em-montagem {
   margin: 12px 0;
   padding: 12px;

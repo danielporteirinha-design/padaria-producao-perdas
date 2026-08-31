@@ -13,6 +13,7 @@ import { ehFalhaTemporariaDeRede, mensagemDeFalhaAoSalvar } from "./lib/errosFir
 import { dataDeHojeIso, diaDaSemanaDeData, formatarDataBr } from "./lib/data";
 import { incluirItemProduzido, planoDeHojeCom } from "./lib/producaoDeHoje";
 import { gerarId } from "./lib/id";
+import { fraseDaManutencao, lerManutencao, type EstadoDaManutencao } from "./lib/manutencao";
 import { TelaCronograma } from "./components/TelaCronograma";
 import { TelaCadastroProdutos } from "./components/TelaCadastroProdutos";
 import { TelaPerdas } from "./components/TelaPerdas";
@@ -37,6 +38,7 @@ import {
 } from "./types/suprimento";
 import {
   avisarDesfechoReposicao,
+  avisarDesfechoSuprimentos,
   avisarFiliais,
   avisarListaAjustada,
   avisarListaDeSuprimentos,
@@ -88,7 +90,6 @@ export default function App() {
   const [autenticando, setAutenticando] = useState(true);
   const [migracaoResolvida, setMigracaoResolvida] = useState(false);
   
-  // Estado para checar se as notificações do navegador estão ativadas
   const [notificacoesAtivas, setNotificacoesAtivas] = useState<boolean>(
     typeof window !== "undefined" && "Notification" in window ? Notification.permission === "granted" : false
   );
@@ -129,6 +130,20 @@ export default function App() {
   }, []);
 
   const [operador, setOperador] = useState("");
+  /**
+   * Modo de manutenção — ver api/manutencao.ts e src/lib/manutencao.ts.
+   *
+   * Lido uma vez na abertura. A chave mora numa variável de ambiente e só
+   * muda com um deploy novo, então não há o que ficar consultando: um
+   * deploy recarrega o app de qualquer jeito.
+   */
+  const [manutencao, setManutencao] = useState<EstadoDaManutencao>({
+    ativa: false,
+    aparelhosDeTeste: [],
+  });
+  useEffect(() => {
+    void lerManutencao().then(setManutencao);
+  }, []);
   const [nomeSugerido, setNomeSugerido] = useState("");
   const [aba, setAba] = useState<Aba>("cronograma");
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -613,6 +628,34 @@ export default function App() {
     ]);
   }
 
+  async function handleDecidirSuprimentos(
+    pedido: PedidoSuprimentos,
+    desfecho: "confirmado" | "cancelado",
+    motivo?: string
+  ) {
+    const agora = new Date().toISOString();
+    const atualizado: PedidoSuprimentos = {
+      ...pedido,
+      atendimento: {
+        desfecho,
+        por: operador,
+        em: agora,
+        ...(motivo ? { motivo } : {}),
+      },
+    };
+    await comRetorno(
+      () => repositorio!.salvarPedidoSuprimentos(atualizado),
+      desfecho === "confirmado" ? "Suprimentos confirmados." : "Suprimentos cancelados."
+    );
+    setPedidosSuprimentos((atual) => [...atual.filter((p) => p.id !== atualizado.id), atualizado]);
+
+    try {
+      await avisarDesfechoSuprimentos(pedido.lojaId, desfecho, motivo);
+    } catch (erro) {
+      console.warn("Decisão de suprimentos gravada, mas o aviso à filial não saiu:", erro);
+    }
+  }
+
   async function registrarReposicaoNaProducao(
     pedido: PedidoFilial,
     desfecho: "confirmado" | "cancelado"
@@ -726,8 +769,6 @@ export default function App() {
     );
   }
 
-  // BLOQUEIO OBRIGATÓRIO DE NOTIFICAÇÕES (AGO/2026)
-  // Se as notificações estiverem bloqueadas ou não suportadas, o app barra a entrada.
   if (!notificacoesAtivas) {
     return (
       <div className="tela-identificacao">
@@ -784,6 +825,17 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* A FAIXA DA MANUTENÇÃO VEM ANTES DE TUDO (ago/2026).
+
+          A chave mora fora do app, na Vercel — e é justamente por isso
+          que ela precisa aparecer aqui: sem a faixa, os avisos param de
+          chegar e ninguém liga uma coisa à outra. Passa um dia, passa uma
+          semana, e a padaria conclui que o recurso quebrou. */}
+      {manutencao.ativa && (
+        <div className="faixa-manutencao" role="status">
+          {fraseDaManutencao(manutencao)}
+        </div>
+      )}
       <header className="cabecalho-app">
         <div><strong className="loja-atual">{loja.nome}</strong></div>
         <div className="operador-atual">
@@ -904,11 +956,12 @@ export default function App() {
                 somenteReposicoes
                 reposicoesDeHoje={pedidos.filter((p) => p.data === diaCorrente && p.tipo === "reposicao")}
                 onDecidirReposicao={handleDecidirReposicao}
+                pedidosSuprimentos={pedidosSuprimentos}
+                catalogoSuprimentos={suprimentos}
+                onDecidirSuprimentos={handleDecidirSuprimentos}
                 onImprimirReposicao={setReposicaoParaImprimir}
                 nomeDoProduto={(codigo) => produtos.find((p) => p.codigoPdv === codigo)?.nome ?? `#${codigo}`}
                 saiuDoForno={(codigo) => codigosComFornadaNoDia(fornadas, diaCorrente).has(codigo)}
-                pedidosSuprimentos={pedidosSuprimentos.filter((p) => p.data === diaCorrente)}
-                catalogoSuprimentos={suprimentos}
                 onImprimirSuprimentos={setSuprimentosParaImprimir}
               />
               <PainelFornoDeHoje
@@ -929,6 +982,8 @@ export default function App() {
               produtos={produtos}
               fornadas={fornadas}
               pedidos={pedidos}
+              pedidosSuprimentos={pedidosSuprimentos}
+              catalogoSuprimentos={suprimentos}
               operador={operador}
               encerrados={codigosEncerrados(anunciosEncerrados, diaCorrente)}
               onSalvarPedido={handleSalvarPedido}

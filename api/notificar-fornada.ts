@@ -131,6 +131,8 @@ function aplicativoAdmin(modulos: ModulosAdmin) {
  * desenho. Ela não autentica ninguém: só diz a qual projeto do Firebase a
  * pergunta se refere. Quem prova a identidade é o token de quem chamou.
  */
+import { filtrarDestinatarios } from "./manutencao";
+
 const CHAVE_WEB = "AIzaSyAWQq1TVzd9ycS8tpwl-lxmj7SPek0Pyuc";
 
 /**
@@ -277,17 +279,29 @@ export default async function handler(req: any, res: any) {
         ? await colecao.where("lojaId", "!=", "MATRIZ").get()
         : await colecao.where("lojaId", "==", "MATRIZ").get();
 
-    const tokens = snapshot.docs
-      .map((documento) => documento.get("token") as string)
-      .filter((token): token is string => Boolean(token));
+    /**
+     * MODO DE MANUTENÇÃO — ver api/manutencao.ts. Fora dele o filtro
+     * devolve todo mundo e nada muda; ligado, só os aparelhos de teste
+     * passam, e o celular do colaborador não toca durante um teste.
+     */
+    const destinatarios = filtrarDestinatarios(
+      snapshot.docs.map((documento) => ({
+        token: documento.get("token") as string | undefined,
+        registradoPor: documento.get("registradoPor") as string | undefined,
+      }))
+    );
+    const tokens = destinatarios.tokens;
 
     if (tokens.length === 0) {
       res.status(200).json({
         enviados: 0,
         registrados: 0,
-        aviso: ehDaMatriz
-          ? "Nenhuma filial ativou os avisos ainda."
-          : "A matriz ainda não ativou os avisos neste computador.",
+        manutencao: destinatarios.manutencao,
+        aviso: destinatarios.manutencao
+          ? `Modo de manutenção ligado: ${destinatarios.silenciados} aparelho(s) não foram avisados.`
+          : ehDaMatriz
+            ? "Nenhuma filial ativou os avisos ainda."
+            : "A matriz ainda não ativou os avisos neste computador.",
       });
       return;
     }
@@ -298,7 +312,24 @@ export default async function handler(req: any, res: any) {
     /** Aba que o toque no aviso abre — ver src/lib/rota.ts. */
     let destinoNoApp = "/?aba=fornada";
 
-    if (desfecho && destinoDirigido) {
+    if (desfecho && destinoDirigido && suprimentos) {
+      /**
+       * Resposta da matriz à lista de SUPRIMENTOS (ago/2026).
+       *
+       * Sem esta ramificação o aviso caía no caso da reposição logo
+       * abaixo, que fala de um produto — e uma lista de embalagens não
+       * tem produto nenhum. O celular da filial recebia "undefined
+       * confirmado".
+       */
+      titulo =
+        desfecho === "confirmado" ? "Suprimentos separados" : "Suprimentos não virão";
+      corpo =
+        desfecho === "confirmado"
+          ? "A matriz confirmou e separou a sua lista de suprimentos."
+          : motivo || "A matriz não pôde enviar os suprimentos.";
+      etiqueta = "suprimentos-resposta";
+      destinoNoApp = "/?aba=suprimentos";
+    } else if (desfecho && destinoDirigido) {
       // Resposta à reposição. O motivo vai no corpo do aviso, não numa
       // tela que a filial teria que abrir: quem está sem o produto no
       // balcão precisa decidir o que fazer agora, e o motivo é o que
@@ -489,6 +520,10 @@ export default async function handler(req: any, res: any) {
       removidos: invalidos.length,
       registrados: tokens.length,
       motivos,
+      // A tela mostra a faixa de manutenção a partir daqui: quem acabou
+      // de disparar precisa saber que o aviso não saiu para a equipe.
+      manutencao: destinatarios.manutencao,
+      silenciados: destinatarios.silenciados,
     });
   } catch (erro) {
     if (erro instanceof ErroNotificacao) {

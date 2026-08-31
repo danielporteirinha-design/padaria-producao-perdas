@@ -205,12 +205,24 @@ function pontuar(nome: string, trecho: string): number {
   }
 
   /**
-   * APROXIMAÇÃO SÓ VALE COM ÂNCORA. Um nome que casa apenas por
-   * semelhança não casa: seria abrir o catálogo inteiro para palpite de
-   * transcrição. Com pelo menos uma palavra EXATA — "ROSCA" em "rosca
-   * tattoo" — a semelhança na outra deixa de ser chute e vira correção.
+   * APROXIMAÇÃO SÓ VALE COM ÂNCORA — OU COM O NOME INTEIRO.
+   *
+   * A regra original exigia pelo menos uma palavra EXATA: com "ROSCA"
+   * certo, a semelhança em "TATU" deixa de ser chute e vira correção.
+   * Ela cai num caso real (ago/2026): "roska tattoo", em que o
+   * transcritor errou AS DUAS palavras e não sobrou âncora nenhuma.
+   *
+   * A saída não é afrouxar o limite — é exigir mais do outro lado.
+   * Sem nenhuma palavra exata, só casa quando TODAS as palavras do nome
+   * casaram por semelhança, e o nome tem pelo menos duas. Duas palavras
+   * erradas do mesmo jeito, na mesma ordem, é transcrição ruim do
+   * produto certo; uma palavra parecida sozinha continua sendo chute, e
+   * chute vira entrega errada.
    */
-  if (exatas === 0) return 0;
+  if (exatas === 0) {
+    if (palavrasDoNome.length < 2) return 0;
+    if (aproximadas !== palavrasDoNome.length) return 0;
+  }
 
   const encontradas = exatas + aproximadas;
 

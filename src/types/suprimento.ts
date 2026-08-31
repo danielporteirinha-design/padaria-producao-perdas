@@ -1,86 +1,17 @@
 /**
- * Modelo de dados — Suprimentos
+ * src/types/suprimento.ts
  * ---------------------------------------------------------------
- * O que a loja consome para PODER vender, e que não é produto de padaria
- * (ago/2026, pedido do dono do negócio).
- *
- * POR QUE NÃO ENTRA NO CATÁLOGO DE PRODUTOS
- * ------------------------------------------
- * Saco de pão e detergente não têm nada em comum com pão francês, exceto
- * o fato de acabarem. Não têm peso unitário, não têm validade de fornada,
- * não entram na taxa de perda, não saem do forno e não viram análise de
- * produção. Enfiá-los na tabela de produtos contaminaria todo relatório
- * que hoje responde "quanto se produziu e quanto se perdeu" — e essa
- * conta é a razão de o app existir.
- *
- * São, portanto, uma coleção própria, com um pedido próprio.
- *
- * O CATÁLOGO CRESCE SOZINHO. A filial digita um item que não está na
- * lista, escolhe o segmento, e ele passa a existir para as próximas
- * vezes (item 3 do pedido). O id vem do NOME NORMALIZADO justamente por
- * isso: sem essa normalização, "Saco Kraft 1kg", "SACO KRAFT 1KG" e
- * "saco kraft 1kg" virariam três itens diferentes no mesmo mês, e o
- * catálogo — que existe para poupar digitação — viraria uma lista suja
- * que ninguém encontra nada.
+ * Tipos e utilitários para a lista de suprimentos (embalagens e
+ * material de limpeza) pedida pelas filiais à matriz (ago/2026).
  */
-
-import { paraBusca } from "../lib/texto";
-
-export interface SegmentoSuprimento {
-  chave: string;
-  rotulo: string;
-}
-
-/**
- * Três segmentos, e não uma lista aberta — são as três naturezas de
- * compra da loja: o que embala o que ela vende, o que mantém a loja
- * limpa, e o que ela revende sem produzir (ago/2026, pedido do dono do
- * negócio).
- *
- * PRODUTOS aqui são os de REVENDA — refrigerante, laticínio, mercearia.
- * Não se confundem com o catálogo de produção (src/types/produto.ts): a
- * padaria não os faz, compra prontos, e por isso eles não têm peso
- * unitário, não saem do forno e não entram na taxa de perda. Pedi-los
- * junto com o saco de pão é a mesma ida ao fornecedor.
- */
-export const SEGMENTOS_SUPRIMENTO: SegmentoSuprimento[] = [
-  { chave: "EMBALAGENS", rotulo: "Embalagens" },
-  { chave: "LIMPEZA", rotulo: "Materiais de limpeza" },
-  { chave: "PRODUTOS", rotulo: "Produtos" },
-];
-
-export function rotuloDoSegmento(chave: string): string {
-  return SEGMENTOS_SUPRIMENTO.find((s) => s.chave === chave)?.rotulo ?? "Outros";
-}
 
 export interface Suprimento {
-  /** Nome normalizado — ver idDoSuprimento. */
   id: string;
   nome: string;
   segmento: string;
-  /**
-   * Item fora de uso não some do catálogo: ele sai das listas novas e
-   * continua existindo nos pedidos antigos, que precisam continuar
-   * legíveis. Apagar o item apagaria o histórico junto.
-   */
   ativo: boolean;
-  criadoPor?: string;
-  criadoEm?: string; // ISO 8601 datetime
-}
-
-/**
- * Id derivado do nome, sem acento e sem caixa: cadastrar o mesmo item de
- * novo ATUALIZA em vez de duplicar.
- *
- * Os espaços viram `_` e o que não for letra, número ou espaço sai fora —
- * id de documento do Firestore não aceita `/`, e "SACO 1/2 KG" é um nome
- * perfeitamente normal de embalagem.
- */
-export function idDoSuprimento(nome: string): string {
-  return paraBusca(nome)
-    .replace(/[^A-Z0-9 ]+/g, " ")
-    .trim()
-    .replace(/\s+/g, "_");
+  criadoPor: string;
+  criadoEm: string;
 }
 
 export interface ItemPedidoSuprimento {
@@ -88,58 +19,110 @@ export interface ItemPedidoSuprimento {
   quantidade: number;
 }
 
+export interface AtendimentoSuprimento {
+  desfecho: "confirmado" | "cancelado";
+  por: string;
+  em: string;
+  motivo?: string;
+}
+
 export interface PedidoSuprimentos {
-  /** `<data>_<loja>` — reenviar no mesmo dia atualiza em vez de duplicar. */
   id: string;
   lojaId: string;
-  /** Dia em que a lista foi montada (ISO YYYY-MM-DD). */
   data: string;
   itens: ItemPedidoSuprimento[];
   status: "rascunho" | "enviado";
+  atendimento?: AtendimentoSuprimento;
   criadoPor: string;
-  criadoEm: string; // ISO 8601 datetime
+  criadoEm: string;
   enviadoEm?: string;
 }
 
-export function idDoPedidoSuprimentos(data: string, lojaId: string): string {
-  return `${data}_${lojaId}`;
+export const SEGMENTOS_SUPRIMENTO: { chave: string; rotulo: string }[] = [
+  { chave: "embalagens", rotulo: "Embalagens" },
+  { chave: "sacolas", rotulo: "Sacolas" },
+  { chave: "limpeza", rotulo: "Material de Limpeza" },
+];
+
+export function idDoSuprimento(nome: string): string {
+  return nome
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
-/** Quantos itens diferentes a lista pede. Zero conta como ausente. */
+export function idDoPedidoSuprimentos(data: string, lojaId: string): string {
+  return `suprimentos-${data}-${lojaId}`;
+}
+
+/**
+ * Quantas variedades a loja está pedindo de verdade.
+ *
+ * CONTA SÓ O QUE TEM QUANTIDADE. Item zerado é campo que a pessoa abriu e
+ * não preencheu — contá-lo faz o resumo prometer um item que não vai na
+ * lista impressa, e a divergência aparece só na hora da conferência.
+ */
 export function variedadesDoPedidoSuprimentos(pedido: PedidoSuprimentos | undefined): number {
   return (pedido?.itens ?? []).filter((i) => i.quantidade > 0).length;
 }
 
-/**
- * Os itens do pedido agrupados por segmento, na ordem de
- * SEGMENTOS_SUPRIMENTO — que é a ordem em que a compra é feita.
- *
- * Item cujo suprimento sumiu do catálogo não desaparece: cai em "Outros"
- * com o próprio id no lugar do nome. Uma lista de compra que esconde uma
- * linha é pior que uma lista com uma linha estranha.
- */
+export function desfechoDosSuprimentos(pedido: PedidoSuprimentos | undefined): "pendente" | "confirmado" | "cancelado" {
+  if (!pedido || pedido.status !== "enviado") return "pendente";
+  if (!pedido.atendimento) return "pendente";
+  return pedido.atendimento.desfecho;
+}
+
+/** Chave do segmento sem depender de caixa — ver `agruparPorSegmento`. */
+function chaveDoSegmento(bruto: string | undefined): string {
+  return (bruto ?? "").trim().toUpperCase();
+}
+
+/** O balde de quem não pertence a nenhum segmento conhecido. */
+const OUTROS = { chave: "OUTROS", rotulo: "Outros" };
+
 export function agruparPorSegmento(
   itens: ItemPedidoSuprimento[],
   catalogo: Suprimento[]
 ): { chave: string; rotulo: string; itens: { nome: string; quantidade: number }[] }[] {
-  const porId = new Map(catalogo.map((s) => [s.id, s]));
-  const grupos = new Map<string, { nome: string; quantidade: number }[]>();
+  const mapaCatalogo = new Map(catalogo.map((s) => [s.id, s]));
+
+  /**
+   * A COMPARAÇÃO IGNORA A CAIXA, E EXISTE UM "OUTROS" — as duas coisas
+   * existem para o mesmo motivo: NADA PODE SUMIR DA LISTA DE COMPRA.
+   *
+   * Os segmentos já foram gravados em MAIÚSCULAS ("EMBALAGENS") e hoje
+   * são declarados em minúsculas ("embalagens"). Sem normalizar, todo
+   * suprimento salvo antes da mudança deixaria de casar com qualquer
+   * grupo — e, como a montagem só percorre os grupos CONHECIDOS, o item
+   * não ia para "Outros": ele desaparecia do papel, em silêncio, e a
+   * loja ficaria sem o produto sem ninguém entender por quê.
+   *
+   * Uma lista de compra que perde item é pior que uma lista feia.
+   */
+  const gruposMap = new Map<string, { nome: string; quantidade: number }[]>();
+  for (const seg of SEGMENTOS_SUPRIMENTO) {
+    gruposMap.set(chaveDoSegmento(seg.chave), []);
+  }
+  gruposMap.set(OUTROS.chave, []);
 
   for (const item of itens) {
+    // Quantidade zero não é pedido: é campo aberto e não preenchido.
     if (item.quantidade <= 0) continue;
-    const suprimento = porId.get(item.suprimentoId);
-    const chave = suprimento?.segmento ?? "OUTROS";
-    const lista = grupos.get(chave) ?? [];
-    lista.push({ nome: suprimento?.nome ?? item.suprimentoId, quantidade: item.quantidade });
-    grupos.set(chave, lista);
+    const sup = mapaCatalogo.get(item.suprimentoId);
+    const nome = sup?.nome ?? item.suprimentoId;
+    const chave = chaveDoSegmento(sup?.segmento);
+    const destino = gruposMap.has(chave) ? chave : OUTROS.chave;
+
+    gruposMap.get(destino)!.push({ nome, quantidade: item.quantidade });
   }
 
-  const ordenadas = [...SEGMENTOS_SUPRIMENTO.map((s) => s.chave), "OUTROS"];
-  return ordenadas
-    .filter((chave) => (grupos.get(chave) ?? []).length > 0)
-    .map((chave) => ({
-      chave,
-      rotulo: chave === "OUTROS" ? "Outros" : rotuloDoSegmento(chave),
-      itens: (grupos.get(chave) ?? []).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
-    }));
+  return [...SEGMENTOS_SUPRIMENTO, OUTROS]
+    .map((seg) => ({
+      chave: seg.chave,
+      rotulo: seg.rotulo,
+      itens: gruposMap.get(chaveDoSegmento(seg.chave)) ?? [],
+    }))
+    .filter((g) => g.itens.length > 0);
 }

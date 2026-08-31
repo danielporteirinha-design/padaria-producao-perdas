@@ -359,7 +359,7 @@ export function PainelFornoDeHoje({
         {sanfona("semResposta", "Pedidos sem resposta", semResposta)}
         {sanfona("concluidos", "Pedidos concluídos", concluidos)}
 
-        <TesteDeAvisos destino="filiais" />
+        <TesteDeAvisos destino="filial" />
       </div>
     </div>
   );

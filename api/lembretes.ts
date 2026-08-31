@@ -112,6 +112,8 @@ async function filiaisDevendo(modulos: ModulosAdmin, app: object, data: string) 
   return FILIAIS.filter((f) => !enviaram.has(f.id));
 }
 
+import { filtrarDestinatarios } from "./manutencao";
+
 async function tokensDasLojas(modulos: ModulosAdmin, app: object, lojaIds: string[]) {
   if (lojaIds.length === 0) return [];
   const snapshot = await modulos.firestore
@@ -119,9 +121,17 @@ async function tokensDasLojas(modulos: ModulosAdmin, app: object, lojaIds: strin
     .collection("dispositivos")
     .where("lojaId", "in", lojaIds)
     .get();
-  return snapshot.docs
-    .map((d) => d.get("token") as string)
-    .filter((t): t is string => Boolean(t));
+  /**
+   * MODO DE MANUTENÇÃO — ver api/manutencao.ts. O lembrete automático é
+   * o pior de todos para tocar durante um teste: ele dispara sozinho, por
+   * horário, sem ninguém do lado para explicar o que aconteceu.
+   */
+  return filtrarDestinatarios(
+    snapshot.docs.map((d) => ({
+      token: d.get("token") as string | undefined,
+      registradoPor: d.get("registradoPor") as string | undefined,
+    }))
+  ).tokens;
 }
 
 export default async function handler(req: any, res: any) {

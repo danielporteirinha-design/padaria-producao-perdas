@@ -71,6 +71,13 @@ const CONFERENCIAS = [
   ["src/components/AssistenteDeVoz.tsx", "NÃO LIMPA A LISTA", "Voz: falar de novo acrescenta"],
   ["api/entrar-como-loja.ts", "diagnostico", "Entrada sem senha: diagnóstico"],
 
+  // --- Modo de manutenção: testar sem tocar o celular da equipe
+  ["api/manutencao.ts", "filtrarDestinatarios", "Manutenção: filtro dos avisos"],
+  ["api/notificar-fornada.ts", "filtrarDestinatarios", "Manutenção: aplicada no aviso de fornada"],
+  ["api/lembretes.ts", "filtrarDestinatarios", "Manutenção: aplicada nos lembretes"],
+  ["src/lib/manutencao.ts", "fraseDaManutencao", "Manutenção: faixa no topo do app"],
+  ["src/App.tsx", "faixa-manutencao", "Manutenção: faixa ligada no App"],
+
   // --- Sugestão por IA
   ["src/lib/sugestaoProducao.ts", "montarHistoricoDaFilial", "IA: sugestão para a filial"],
   ["src/components/TelaPedidoFilial.tsx", "gerarSugestaoIA", "Filial: botão de sugerir com IA"],
@@ -79,9 +86,9 @@ const CONFERENCIAS = [
   // --- Avisos e impressão
   ["src/App.tsx", "avisarMatrizDoPedido", "Aviso e impressão em paralelo"],
   ["src/lib/avisarFiliais.ts", "SEGUNDOS_ATE_DESISTIR_DO_AVISO", "Limite de espera do aviso"],
+  ["src/lib/avisarFiliais.ts", "dispararAviso", "Avisos: um endereco so, autenticado"],
   ["src/lib/avisarFiliais.ts", "avisarListaEnviada", "Aviso de lista enviada"],
   ["src/lib/blocosDeImpressao.ts", "agruparPorCategoria", "Setores na mesma ordem em todo papel"],
-  ["src/App.tsx", "A IMPRESSÃO AUTOMÁTICA SAIU DAQUI", "Lista da filial nao imprime sozinha"],
   ["public/firebase-messaging-sw.js", "tocar-aviso", "Som com a janela em segundo plano"],
   ["src/lib/somDeAviso.ts", "PARCIAIS", "Campainha"],
 
@@ -132,7 +139,7 @@ const CONFERENCIAS = [
   ["src/components/TelaSuprimentos.tsx", "onEnviarLista", "Filial: aba Suprimentos"],
   ["src/components/PainelPedidosFiliais.tsx", "linhaDeSuprimentos", "Matriz: suprimentos na linha do tempo da loja"],
   ["src/components/TelaSuprimentos.tsx", "incluir em", "Cadastro de suprimento sem escolher segmento"],
-  ["src/types/suprimento.ts", "PRODUTOS", "Segmento Produtos nos suprimentos"],
+  ["src/types/suprimento.ts", "chaveDoSegmento", "Suprimentos: segmento antigo nao some da lista"],
   ["src/data/repositorioFirestore.ts", "pedidos_suprimentos", "Firestore: colecao dos suprimentos"],
   ["firestore.rules", "pedidos_suprimentos", "Regras dos suprimentos (COLAR NO CONSOLE!)"],
   ["src/lib/avisarFiliais.ts", "avisarListaDeSuprimentos", "Aviso de suprimentos"],
@@ -146,7 +153,7 @@ const CONFERENCIAS = [
   ["src/lib/gerarImagemLista.ts", "computarBlocosContinuos", "Lista da loja: um cabecalho, um rodape"],
   ["src/lib/gerarImagemLista.ts", "VERMELHO_MARCA", "Cupom: loja em vermelho, data sem faixa preta"],
   ["src/components/PainelPedidosFiliais.tsx", "hora-pedido", "Hora da solicitacao na Reposicao"],
-  ["src/components/PainelPedidosFiliais.tsx", "DO MAIS RECENTE PARA O MAIS ANTIGO", "Reposicoes: recentes primeiro"],
+  ["src/components/PainelPedidosFiliais.tsx", "localeCompare", "Reposicoes: recentes primeiro"],
   ["src/components/TelaPerdas.tsx", "ultimo-lancamento", "Perdas sem a tabela do dia"],
   ["src/index.css", "ABAS DE LARGURA IGUAL", "Abas alinhadas e centradas"],
   ["src/lib/avisarFiliais.ts", "avisarListaAjustada", "Aviso de lista ajustada"],
@@ -189,6 +196,7 @@ const DEVEM_TER_SIDO_APAGADOS = [
   ["src/components/AnuncioPorVoz.tsx", "diálogo de voz antigo — virou AssistenteDeVoz.tsx"],
   ["src/lib/falar.ts", "síntese de voz — o app não fala mais"],
   ["src/components/PainelSuprimentos.tsx", "card de suprimentos — virou linha na sanfona da loja"],
+  ["api/notificar-desfecho-suprimentos.ts", "endpoint sem autenticação — o aviso voltou para /api/notificar-fornada"],
 ];
 
 let faltando = 0;

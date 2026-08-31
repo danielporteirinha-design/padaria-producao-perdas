@@ -1,31 +1,7 @@
 /**
  * src/components/PainelFornadasFilial.tsx
  * ---------------------------------------------------------------
- * A aba REPOSIÇÃO da filial (reescrita em ago/2026, a pedido do dono do
- * negócio, para deixar o app "o mais resumido possível" na implantação).
- *
- * O QUE MUDOU, E POR QUÊ
- * -----------------------
- * 1. PEDIR VIROU MONTAR UMA LISTA, e não disparar um pedido por item.
- *    Antes, cada produto falado virava um documento na nuvem na hora:
- *    cinco itens, cinco pedidos, cinco avisos para a matriz. Pior, o item
- *    saía da tela assim que era enviado — e "sumiu" é indistinguível de
- *    "o app apagou o que eu pedi", que foi o defeito relatado.
- *
- *    Agora a fala MONTA. A lista fica na tela, aceita mais itens (falando
- *    de novo ou pela busca), só é descartada por um botão explícito
- *    ("Limpar pedido") e só vira pedido quando a pessoa clica em "Enviar
- *    pedido" — um documento, um aviso.
- *
- * 2. A LISTA DE AVISOS DE FORNADA SAIU, e no lugar dela ficaram duas
- *    sanfonas que respondem à pergunta que a loja realmente faz:
- *    PEDIDOS SEM RESPOSTA (de quem ainda estou esperando) e PEDIDOS
- *    CONCLUÍDOS (o que já foi decidido hoje). O aviso de fornada continua
- *    chegando por push; o que saiu foi a lista que ele alimentava.
- *
- * 3. A BUSCA É A SEGUNDA OPÇÃO, logo abaixo do microfone. Falar é o
- *    caminho curto; digitar é o caminho para um item só, ou para quando o
- *    reconhecimento não ajuda.
+ * A aba REPOSIÇÃO da filial (reescrita em ago/2026, com suporte a suprimentos).
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -34,6 +10,8 @@ import type { ItemPlanoProducao } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
 import { idDaReposicao } from "../types/pedido";
+import type { PedidoSuprimentos, Suprimento } from "../types/suprimento";
+import { desfechoDosSuprimentos } from "../types/suprimento";
 import type { LinhaDoDia } from "../lib/reposicaoDoDia";
 import { estaPendente, montarLinhasDoDia } from "../lib/reposicaoDoDia";
 import { dispensarFornada, fornadasDispensadas } from "../lib/fornadasDispensadas";
@@ -52,21 +30,16 @@ import {
   limparRascunhosDeReposicaoAntigos,
 } from "../lib/rascunhoReposicao";
 
-/** Quantos resultados a busca mostra — ver PainelFornoDeHoje.tsx. */
 const MAXIMO_RESULTADOS = 12;
 
 interface PainelFornadasFilialProps {
   loja: Loja;
   produtos: Produto[];
-  /** Avisos de fornada da matriz — o "pedido" que vem na outra direção. */
   fornadas: FornadaPronta[];
   pedidos: PedidoFilial[];
+  pedidosSuprimentos?: PedidoSuprimentos[];
+  catalogoSuprimentos?: Suprimento[];
   operador: string;
-  /**
-   * Produtos que a MATRIZ tirou da vitrine de hoje. Acabou o produto — a
-   * loja precisa parar de oferecer no mesmo instante, e não continuar
-   * pedindo mercadoria que não existe mais.
-   */
   encerrados: Set<number>;
   onSalvarPedido: (pedido: PedidoFilial) => Promise<void>;
 }
@@ -76,6 +49,8 @@ export function PainelFornadasFilial({
   produtos,
   fornadas,
   pedidos,
+  pedidosSuprimentos = [],
+  catalogoSuprimentos = [],
   operador,
   encerrados,
   onSalvarPedido,
@@ -86,18 +61,19 @@ export function PainelFornadasFilial({
   const [quantidade, setQuantidade] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false);
-  
-  // SANFONAS SEMPRE RECOLHIDAS AO ABRIR A ABA ({} significa todas fechadas)
   const [aberta, setAberta] = useState<Record<string, boolean>>({});
 
-  /**
-   * A lista em montagem sobrevive a trocar de aba e a fechar o app.
-   *
-   * Sem isso ela viveria só na memória do componente, e sair da aba
-   * apagaria o que a pessoa acabou de ditar — que é exatamente a queixa
-   * que este painel existe para não repetir. Ver
-   * src/lib/rascunhoReposicao.ts.
-   */
+  const pedidoSuprimentosHoje = useMemo(
+    () => pedidosSuprimentos.find((p) => p.data === hoje && p.lojaId === loja.id),
+    [pedidosSuprimentos, hoje, loja.id]
+  );
+  const desfechoSup = desfechoDosSuprimentos(pedidoSuprimentosHoje);
+
+  const nomePorSuprimentoId = useMemo(
+    () => new Map(catalogoSuprimentos.map((s) => [s.id, s.nome])),
+    [catalogoSuprimentos]
+  );
+
   const [itens, setItens] = useState<ItemPlanoProducao[]>(
     () => lerRascunhoReposicao(loja.id, hoje) ?? []
   );
@@ -117,16 +93,8 @@ export function PainelFornadasFilial({
   );
   const nomeDoProduto = (codigo: number) => nomePorCodigo.get(codigo) ?? `Produto ${codigo}`;
 
-  /**
-   * Avisos que esta loja já resolveu e tirou da frente. Some da tela, não
-   * do banco — ver src/lib/fornadasDispensadas.ts.
-   */
   const [dispensadas, setDispensadas] = useState(() => fornadasDispensadas(loja.id, hoje));
 
-  /**
-   * O dia inteiro nas DUAS DIREÇÕES: o que eu pedi para a matriz e o que
-   * a matriz anunciou para]}/${loja.id}, separados por quem ainda deve resposta.
-   */
   const linhas = useMemo(
     () => montarLinhasDoDia({ fornadas, pedidos, hoje, lojaId: loja.id, encerrados, dispensadas }),
     [fornadas, pedidos, hoje, loja.id, encerrados, dispensadas]
@@ -134,11 +102,6 @@ export function PainelFornadasFilial({
   const semResposta = useMemo(() => linhas.filter(estaPendente), [linhas]);
   const concluidos = useMemo(() => linhas.filter((l) => !estaPendente(l)), [linhas]);
 
-  /**
-   * Busca no catálogo inteiro. Só produtos ATIVOS e não encerrados hoje:
-   * pedir item pausado no cadastro seria pedir coisa que a padaria
-   * decidiu não fazer, e a resposta seria sempre a mesma recusa.
-   */
   const resultados = useMemo(() => {
     const termo = busca.trim();
     if (termo.length === 0) return [];
@@ -148,14 +111,6 @@ export function PainelFornadasFilial({
       .slice(0, MAXIMO_RESULTADOS);
   }, [produtos, busca, encerrados]);
 
-  /**
-   * Acrescenta à lista em montagem.
-   *
-   * O mesmo produto dito duas vezes SOMA, em vez de virar duas linhas:
-   * quem falou "10 pão francês" e depois "mais 5 pão francês" está
-   * pedindo 15. A quantidade continua editável na própria linha, então a
-   * soma nunca é uma decisão irreversível.
-   */
   function acrescentar(novos: { codigoPdv: number; quantidadeUnidades: number }[]) {
     if (novos.length === 0) return;
     setItens((atual) => {
@@ -187,11 +142,6 @@ export function PainelFornadasFilial({
     );
   }
 
-  /**
-   * ENVIAR É O ÚNICO MOMENTO EM QUE A MATRIZ FICA SABENDO. Um documento
-   * com a lista inteira, e por consequência um aviso só — e não um por
-   * item, que era o que enchia o celular da matriz.
-   */
   async function enviarPedido() {
     const validos = itens.filter((i) => i.quantidadeUnidades > 0);
     if (validos.length === 0 || enviando) return;
@@ -221,7 +171,6 @@ export function PainelFornadasFilial({
   const totalUnidades = itens.reduce((soma, i) => soma + i.quantidadeUnidades, 0);
   const faltaQuantidade = itens.some((i) => i.quantidadeUnidades <= 0);
 
-  /** Uma sanfona, igual nas duas listas. */
   function sanfona(chave: string, titulo: string, linhasDaLista: LinhaDoDia[]) {
     const abertaAgora = !!aberta[chave];
     return (
@@ -256,15 +205,6 @@ export function PainelFornadasFilial({
     );
   }
 
-  /**
-   * Uma linha das sanfonas.
-   *
-   * A ETIQUETA DE ORIGEM VEM PRIMEIRO porque as duas direções convivem
-   * na mesma lista: "Eu pedi" é coisa que eu mandei e espero resposta;
-   * "Saiu do forno" é coisa que a matriz mandou e espera a minha. Sem a
-   * etiqueta, as duas linhas se parecem e a pessoa não sabe de quem é a
-   * vez.
-   */
   function linhaDoDia(linha: LinhaDoDia) {
     const daMatriz = linha.origem === "matriz";
     return (
@@ -373,6 +313,30 @@ export function PainelFornadasFilial({
   return (
     <div className="painel-fornadas">
       <div className="corpo-fornadas">
+        {pedidoSuprimentosHoje && pedidoSuprimentosHoje.status === "enviado" && (
+          <div className={`cartao-status-suprimentos ${desfechoSup}`}>
+            <strong className="titulo-montagem">Lista de Suprimentos enviada hoje</strong>
+            <p className="nota-rodape">
+              {pedidoSuprimentosHoje.itens
+                .map((i) => `${nomePorSuprimentoId.get(i.suprimentoId) ?? i.suprimentoId} (${i.quantidade} un)`)
+                .join(", ")}
+            </p>
+            {desfechoSup === "pendente" && (
+              <span className="reposicao-aguardando">Aguardando a matriz responder a lista de suprimentos...</span>
+            )}
+            {desfechoSup === "confirmado" && (
+              <span className="reposicao-confirmada">
+                <IconeConfere tamanho={14} /> Suprimentos separados pela matriz!
+              </span>
+            )}
+            {desfechoSup === "cancelado" && (
+              <span className="reposicao-negada">
+                Suprimentos não enviados: {pedidoSuprimentosHoje.atendimento?.motivo}
+              </span>
+            )}
+          </div>
+        )}
+
         <AssistenteDeVoz
           produtos={produtos}
           modo="pedir"

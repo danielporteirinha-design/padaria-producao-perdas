@@ -57,6 +57,7 @@ import {
   montarLinhasDaMatriz,
   montarLinhasDoDia,
 } from "../src/lib/reposicaoDoDia";
+import { filtrarDestinatarios } from "../api/manutencao";
 import {
   CONTAS_DAS_LOJAS,
   IDS_DAS_LOJAS,
@@ -2930,10 +2931,16 @@ const perdas: RegistroPerda[] = [
     "cada loja has a lista dela"
   );
 
+  /**
+   * O catálogo de propósito com o segmento em MAIÚSCULAS: é assim que os
+   * suprimentos foram gravados antes de os segmentos passarem a ser
+   * declarados em minúsculas. O agrupamento tem de continuar achando o
+   * grupo — senão o item some da lista de compra sem deixar rastro.
+   */
   const catalogo: Suprimento[] = [
     { id: "SACO_KRAFT", nome: "Saco kraft", segmento: "EMBALAGENS", ativo: true, criadoPor: "Sistema", criadoEm: new Date().toISOString() },
     { id: "GUARDANAPO", nome: "Guardanapo", segmento: "EMBALAGENS", ativo: true, criadoPor: "Sistema", criadoEm: new Date().toISOString() },
-    { id: "DETERGENTE", nome: "Detergente", segmento: "LIMPEZA", ativo: true, criadoPor: "Sistema", criadoEm: new Date().toISOString() },
+    { id: "DETERGENTE", nome: "Detergente", segmento: "limpeza", ativo: true, criadoPor: "Sistema", criadoEm: new Date().toISOString() },
   ];
   const grupos = agruparPorSegmento(
     [
@@ -2945,7 +2952,7 @@ const perdas: RegistroPerda[] = [
     catalogo
   );
   afirmar(
-    grupos[0].chave === "EMBALAGENS",
+    grupos[0].chave === "embalagens",
     "embalagens vem antes de limpeza — a ordem da compra"
   );
   afirmar(
@@ -2956,6 +2963,10 @@ const perdas: RegistroPerda[] = [
   afirmar(
     outros !== undefined && outros.itens[0].nome === "ITEM_SUMIDO",
     "item fora do catalogo NAO some da lista — cai em Outros"
+  );
+  afirmar(
+    grupos.some((g) => g.chave === "limpeza" && g.itens[0]?.nome === "Detergente"),
+    "segmento gravado em MAIUSCULAS continua achando o grupo (dados antigos)"
   );
 
   afirmar(
@@ -3447,6 +3458,94 @@ const perdas: RegistroPerda[] = [
       pedidos: [], hoje: HOJE, encerrados: vazio,
     }).length === 0,
     "fornada de ontem nao entra na lista de hoje"
+  );
+}
+
+// ===================================================================
+// MODO DE MANUTENÇÃO — api/manutencao.ts
+// ===================================================================
+{
+  console.log("\n--- Modo de manutencao: quem recebe e quem fica mudo ---");
+
+  const aparelhos = [
+    { token: "t-daniel-celular", registradoPor: "Daniel" },
+    { token: "t-daniel-pc", registradoPor: "daniel sarmento" },
+    { token: "t-balcao-arthur", registradoPor: "Joana" },
+    { token: "t-balcao-benjamin", registradoPor: "Marcos" },
+    { token: undefined, registradoPor: "Sem token" },
+  ];
+
+  /** DESLIGADO É O ESTADO NORMAL, e nele nada pode mudar. */
+  const normal = filtrarDestinatarios(aparelhos, {});
+  afirmar(normal.tokens.length === 4, "sem manutencao, todo aparelho com token recebe");
+  afirmar(normal.manutencao === false, "sem a variavel, a manutencao esta desligada");
+  afirmar(normal.silenciados === 0, "sem manutencao, ninguem e silenciado");
+  afirmar(
+    filtrarDestinatarios(aparelhos, { MANUTENCAO: "0" }).tokens.length === 4,
+    "MANUTENCAO=0 e desligado"
+  );
+  afirmar(
+    filtrarDestinatarios(aparelhos, { MANUTENCAO: "false" }).tokens.length === 4,
+    "MANUTENCAO=false e desligado"
+  );
+  afirmar(
+    filtrarDestinatarios(aparelhos, { MANUTENCAO: "   " }).tokens.length === 4,
+    "variavel so com espaco e desligado"
+  );
+
+  /** LIGADO: só os aparelhos de teste recebem. */
+  const ligado = filtrarDestinatarios(aparelhos, {
+    MANUTENCAO: "1",
+    APARELHOS_DE_TESTE: "Daniel",
+  });
+  afirmar(ligado.manutencao === true, "MANUTENCAO=1 liga");
+  afirmar(ligado.tokens.length === 2, `so os dois aparelhos do Daniel recebem (obtido: ${ligado.tokens.length})`);
+  afirmar(
+    ligado.tokens.includes("t-daniel-celular") && ligado.tokens.includes("t-daniel-pc"),
+    "o nome completo tambem casa com o primeiro nome"
+  );
+  afirmar(
+    !ligado.tokens.includes("t-balcao-arthur") && !ligado.tokens.includes("t-balcao-benjamin"),
+    "o celular do colaborador NAO toca durante a manutencao"
+  );
+  afirmar(ligado.silenciados === 2, `a resposta diz quantos ficaram mudos (obtido: ${ligado.silenciados})`);
+
+  afirmar(
+    filtrarDestinatarios(aparelhos, { MANUTENCAO: "sim", APARELHOS_DE_TESTE: "DANIEL" })
+      .tokens.length === 2,
+    "a comparacao do nome ignora a caixa"
+  );
+  afirmar(
+    filtrarDestinatarios(
+      [{ token: "t", registradoPor: "Antônio" }],
+      { MANUTENCAO: "1", APARELHOS_DE_TESTE: "antonio" }
+    ).tokens.length === 1,
+    "a comparacao do nome ignora acento"
+  );
+  afirmar(
+    filtrarDestinatarios(aparelhos, { MANUTENCAO: "1", APARELHOS_DE_TESTE: "Daniel, Joana" })
+      .tokens.length === 3,
+    "mais de um nome, separados por virgula"
+  );
+
+  /**
+   * ESQUECER A LISTA SILENCIA TUDO. É o lado seguro do erro: o pior que
+   * acontece e ninguem receber, nunca o contrario.
+   */
+  const semLista = filtrarDestinatarios(aparelhos, { MANUTENCAO: "1" });
+  afirmar(semLista.tokens.length === 0, "manutencao sem APARELHOS_DE_TESTE silencia todos");
+  afirmar(semLista.silenciados === 4, "e diz quantos ficaram mudos");
+
+  afirmar(
+    filtrarDestinatarios(
+      [{ token: "t", registradoPor: "" }],
+      { MANUTENCAO: "1", APARELHOS_DE_TESTE: "Daniel" }
+    ).tokens.length === 0,
+    "aparelho sem nome de operador nao vira aparelho de teste por acidente"
+  );
+  afirmar(
+    filtrarDestinatarios([], { MANUTENCAO: "1", APARELHOS_DE_TESTE: "Daniel" }).tokens.length === 0,
+    "sem aparelho nenhum, nada quebra"
   );
 }
 

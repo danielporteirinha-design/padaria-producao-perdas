@@ -3,27 +3,13 @@
  * ---------------------------------------------------------------
  * Indicador de "quem já mandou o pedido", no topo do Cronograma da
  * matriz (Parte B, ago/2026).
- *
- * Resolve um risco operacional concreto: a matriz monta o cronograma no
- * fim do expediente, e se uma filial atrasar o envio a produção sai sem
- * ela — a loja abre no dia seguinte sem mercadoria e ninguém percebeu a
- * tempo. O indicador põe isso na frente do operador ANTES de confirmar.
- *
- * Não bloqueia a confirmação de propósito: pode ser tarde, a filial pode
- * não ter o que pedir, e travar o cronograma da padaria inteira por causa
- * de uma loja seria pior. O que se garante é que ninguém confirme sem ter
- * visto que faltava alguém.
- *
- * O desenho é de CARTÃO por loja, não de linha de tabela (ago/2026): a
- * primeira versão era compacta demais e exigia leitura para entender o
- * estado. Cada loja agora ocupa um bloco com cor de fundo própria — verde
- * ou âmbar — e o estado se lê pela cor, antes de ler a palavra.
  */
 
 import { useState } from "react";
 import { desfechoDaReposicao, type PedidoFilial } from "../types/pedido";
 import {
   agruparPorSegmento,
+  desfechoDosSuprimentos,
   variedadesDoPedidoSuprimentos,
   type PedidoSuprimentos,
   type Suprimento,
@@ -32,11 +18,6 @@ import { FILIAIS } from "../lib/lojas";
 import { horaDoInstante } from "../lib/data";
 import { IconeAtencao, IconeConfere, IconeImpressora, IconeSeta } from "./Icones";
 
-/**
- * Quantas VARIEDADES o pedido tem, não quantas unidades (ago/2026): "195
- * unidades" não diz nada a quem confere de relance, enquanto "12
- * produtos" dá a dimensão da lista que vai chegar para separar.
- */
 function variedadesDoPedido(pedido: PedidoFilial | undefined): number {
   return pedido?.itens.length ?? 0;
 }
@@ -44,46 +25,24 @@ function variedadesDoPedido(pedido: PedidoFilial | undefined): number {
 interface PainelPedidosFiliaisProps {
   pedidos: PedidoFilial[];
   data: string;
-  /** Reposições pedidas HOJE — urgentes, aparecem em destaque à parte. */
   reposicoesDeHoje?: PedidoFilial[];
   nomeDoProduto?: (codigoPdv: number) => string;
-  /**
-   * O produto já saiu do forno hoje? (ago/2026)
-   *
-   * Desde que a filial pode pedir QUALQUER item do catálogo — e não só o
-   * que foi anunciado —, as duas coisas chegam pela mesma porta e exigem
-   * decisões diferentes: separar o que já está pronto é uma coisa,
-   * decidir se ainda dá tempo de ASSAR é outra. Sem essa marca, a matriz
-   * confirmaria um pedido de coisa que ninguém fez, e a filial ficaria
-   * esperando uma entrega que não vem.
-   */
   saiuDoForno?: (codigoPdv: number) => boolean;
-  /**
-   * Esconde os cartões de "enviou / aguardando" e deixa só as
-   * reposições. Desde ago/2026 esse status vive na linha do título do
-   * Cronograma — mostrá-lo aqui de novo seria dizer duas vezes a mesma
-   * coisa em telas de altura contada.
-   */
   somenteReposicoes?: boolean;
-  /**
-   * A lista de suprimentos de HOJE de cada filial (ago/2026, decisão do
-   * dono do negócio: ela passou a morar DENTRO da sanfona da loja, e não
-   * num card à parte).
-   */
   pedidosSuprimentos?: PedidoSuprimentos[];
   catalogoSuprimentos?: Suprimento[];
   onImprimirSuprimentos?: (pedido: PedidoSuprimentos) => void;
-  /** Ausente para quem não é matriz — só ela decide. */
   onDecidirReposicao?: (
     pedido: PedidoFilial,
     desfecho: "confirmado" | "cancelado",
     motivo?: string
   ) => Promise<void>;
-  /**
-   * Imprime a lista de uma reposição. Existe para o pedido com vários
-   * itens (ago/2026): separar oito produtos lendo do celular, com as mãos
-   * ocupadas, é o tipo de coisa que se faz com papel.
-   */
+  /** Decisão da matriz sobre a lista de suprimentos da filial (ago/2026). */
+  onDecidirSuprimentos?: (
+    pedido: PedidoSuprimentos,
+    desfecho: "confirmado" | "cancelado",
+    motivo?: string
+  ) => Promise<void>;
   onImprimirReposicao?: (pedido: PedidoFilial) => void;
 }
 
@@ -94,32 +53,50 @@ export function PainelPedidosFiliais({
   nomeDoProduto,
   saiuDoForno,
   onDecidirReposicao,
+  onDecidirSuprimentos,
   onImprimirReposicao,
   somenteReposicoes = false,
   pedidosSuprimentos = [],
   catalogoSuprimentos = [],
   onImprimirSuprimentos,
 }: PainelPedidosFiliaisProps) {
-  /**
-   * Quais filiais estão com a lista de reposições aberta.
-   * Fechadas por padrão.
-   */
   const [filiaisAbertas, setFiliaisAbertas] = useState<Record<string, boolean>>({});
   const [cancelando, setCancelando] = useState<string | null>(null);
   const [motivo, setMotivo] = useState("");
   const [salvando, setSalvando] = useState<string | null>(null);
 
-  /** Listas de suprimentos com item — as vazias não são pedido nenhum. */
+  const [cancelandoSup, setCancelandoSup] = useState<string | null>(null);
+  const [motivoSup, setMotivoSup] = useState("");
+  const [salvandoSup, setSalvandoSup] = useState<string | null>(null);
+
   const suprimentosEnviados = pedidosSuprimentos.filter(
-    (p) => p.status === "enviado" && variedadesDoPedidoSuprimentos(p) > 0
+    (p) => p.data === data && p.status === "enviado" && variedadesDoPedidoSuprimentos(p) > 0
   );
 
-  /**
-   * Uma entrada da linha do tempo: a lista de suprimentos que a loja mandou.
-   */
+  async function decidirSup(
+    pedido: PedidoSuprimentos,
+    desfecho: "confirmado" | "cancelado",
+    textoMotivo?: string
+  ) {
+    if (!onDecidirSuprimentos) return;
+    setSalvandoSup(pedido.id);
+    try {
+      await onDecidirSuprimentos(pedido, desfecho, textoMotivo);
+      setCancelandoSup(null);
+      setMotivoSup("");
+    } catch {
+      // Erro tratado no contexto superior
+    } finally {
+      setSalvandoSup(null);
+    }
+  }
+
   function linhaDeSuprimentos(pedido: PedidoSuprimentos) {
+    const desfecho = desfechoDosSuprimentos(pedido);
+    const ocupado = salvandoSup === pedido.id;
+
     return (
-      <div key={pedido.id} className="linha-reposicao suprimentos">
+      <div key={pedido.id} className={`linha-reposicao suprimentos ${desfecho}`}>
         <span className="status-filial">
           {horaDoInstante(pedido.enviadoEm ?? pedido.criadoEm) && (
             <strong className="hora-pedido">
@@ -141,8 +118,19 @@ export function PainelPedidosFiliais({
           </div>
         ))}
 
-        {onImprimirSuprimentos && (
-          <div className="acoes acoes-do-card">
+        {desfecho === "confirmado" && (
+          <span className="selo-reposicao confirmado">
+            <IconeConfere tamanho={14} /> separado
+          </span>
+        )}
+        {desfecho === "cancelado" && (
+          <span className="selo-reposicao cancelado">
+            não enviado — {pedido.atendimento?.motivo}
+          </span>
+        )}
+
+        <div className="acoes acoes-do-card">
+          {onImprimirSuprimentos && (
             <button
               type="button"
               className="secundario"
@@ -150,8 +138,63 @@ export function PainelPedidosFiliais({
             >
               <IconeImpressora tamanho={17} /> Imprimir
             </button>
-          </div>
-        )}
+          )}
+
+          {desfecho === "pendente" && onDecidirSuprimentos && (
+            <>
+              {cancelandoSup === pedido.id ? (
+                <div className="motivo-cancelamento" style={{ width: "100%", marginTop: "10px" }}>
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Motivo do cancelamento para a filial..."
+                    value={motivoSup}
+                    onChange={(e) => setMotivoSup(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="perigo"
+                    disabled={ocupado || motivoSup.trim().length === 0}
+                    onClick={() => decidirSup(pedido, "cancelado", motivoSup)}
+                  >
+                    {ocupado ? "..." : "Cancelar pedido"}
+                  </button>
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => {
+                      setCancelandoSup(null);
+                      setMotivoSup("");
+                    }}
+                  >
+                    voltar
+                  </button>
+                </div>
+              ) : (
+                <div className="acoes-reposicao" style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
+                  <button
+                    type="button"
+                    className="primario"
+                    disabled={ocupado}
+                    onClick={() => decidirSup(pedido, "confirmado")}
+                  >
+                    {ocupado ? "..." : "Confirmar"}
+                  </button>
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => {
+                      setCancelandoSup(pedido.id);
+                      setMotivoSup("");
+                    }}
+                  >
+                    não vai
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     );
   }
@@ -168,7 +211,7 @@ export function PainelPedidosFiliais({
       setCancelando(null);
       setMotivo("");
     } catch {
-      // A faixa de aviso global já explica o que houve.
+      // Erro tratado acima
     } finally {
       setSalvando(null);
     }
@@ -183,7 +226,7 @@ export function PainelPedidosFiliais({
 
   const faltando = situacao.filter((s) => !s.enviado);
 
-  if (somenteReposicoes && reposicoesDeHoje.length === 0) return null;
+  if (somenteReposicoes && reposicoesDeHoje.length === 0 && suprimentosEnviados.length === 0) return null;
 
   return (
     <div className="painel-pedidos">
@@ -245,9 +288,10 @@ export function PainelPedidosFiliais({
                 : []),
             ].sort((a, b) => b.em.localeCompare(a.em));
 
-            const pendentes = daFilial.filter((p) => desfechoDaReposicao(p) === "pendente").length;
+            const pendentesReposicao = daFilial.filter((p) => desfechoDaReposicao(p) === "pendente").length;
+            const pendentesSuprimentos = suprimentosDaFilial && desfechoDosSuprimentos(suprimentosDaFilial) === "pendente" ? 1 : 0;
+            const pendentesTotal = pendentesReposicao + pendentesSuprimentos;
 
-            // SANFONAS SEMPRE FECHADAS POR PADRÃO (false caso não esteja explicitamente marcada no estado)
             const aberta = filiaisAbertas[filial.id] ?? false;
 
             return (
@@ -261,17 +305,12 @@ export function PainelPedidosFiliais({
                   }
                 >
                   <span className="nome-grupo-reposicao">{filial.nomeCurto}</span>
-                  <span className={`resumo-reposicao ${pendentes > 0 ? "pendente" : "ok"}`}>
-                    {pendentes > 0
-                      ? `${pendentes} esperando`
-                      : daFilial.length > 0
-                        ? `${daFilial.length} respondida${daFilial.length > 1 ? "s" : ""}`
+                  <span className={`resumo-reposicao ${pendentesTotal > 0 ? "pendente" : "ok"}`}>
+                    {pendentesTotal > 0
+                      ? `${pendentesTotal} esperando`
+                      : envios.length > 0
+                        ? `${envios.length} respondida${envios.length > 1 ? "s" : ""}`
                         : ""}
-                    {suprimentosDaFilial
-                      ? `${pendentes > 0 || daFilial.length > 0 ? " · " : ""}${variedadesDoPedidoSuprimentos(
-                          suprimentosDaFilial
-                        )} suprimentos`
-                      : ""}
                   </span>
                   <IconeSeta className="seta-sessao" />
                 </button>
