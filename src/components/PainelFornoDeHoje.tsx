@@ -54,10 +54,7 @@ export function PainelFornoDeHoje({
   const [categoriaNova, setCategoriaNova] = useState("");
   const [salvandoNovo, setSalvandoNovo] = useState(false);
 
-  // SANFONAS SEMPRE FECHADAS POR PADRÃO ({})
   const [aberta, setAberta] = useState<Record<string, boolean>>({});
-
-  // Balão informativo do Assistente de Voz
   const [feedbackVoz, setFeedbackVoz] = useState<{ tipo: "sucesso" | "alerta"; texto: string } | null>(null);
 
   const nomeDoProduto = (codigo: number) =>
@@ -98,7 +95,6 @@ export function PainelFornoDeHoje({
       setCadastrando(false);
       setCategoriaNova("");
     } catch {
-      /* o aviso global cuida da mensagem */
     } finally {
       setSalvandoNovo(false);
     }
@@ -118,7 +114,6 @@ export function PainelFornoDeHoje({
             try {
               await onMarcarFornada(codigoPdv);
             } catch {
-              /* o aviso global cuida da mensagem */
             } finally {
               setMarcando(null);
             }
@@ -192,7 +187,7 @@ export function PainelFornoDeHoje({
             </span>
           )}
           {linha.situacao === "encerrado" && (
-            <span className="reposicao-negada">Tirado da vitrine — as filiais não veem mais.</span>
+            <span className="reposicao-negada">Anúncio excluído pela matriz</span>
           )}
 
           <span className="acoes-fornada">
@@ -202,7 +197,7 @@ export function PainelFornoDeHoje({
                 className="botao-fornada pedir"
                 onClick={() => void onReabrirTudo()}
               >
-                Devolver à vitrine
+                Anunciar novamente
               </button>
             ) : (
               <button
@@ -228,7 +223,6 @@ export function PainelFornoDeHoje({
   return (
     <div className="painel-forno">
       <div className="corpo-forno">
-        {/* BOTÃO ANUNCIAR FALANDO NO TOPO */}
         <AssistenteDeVoz
           produtos={produtos}
           modo="anunciar"
@@ -268,7 +262,6 @@ export function PainelFornoDeHoje({
           }}
         />
 
-        {/* BALÃO INFORMATIVO */}
         {feedbackVoz && (
           <div
             style={{
@@ -288,7 +281,6 @@ export function PainelFornoDeHoje({
           </div>
         )}
 
-        {/* CAMPO DE BUSCA */}
         <CampoDeBusca
           className="busca-forno"
           valor={busca}
@@ -364,7 +356,6 @@ export function PainelFornoDeHoje({
           </>
         ) : null}
 
-        {/* SANFONAS NOMEDAS COMO "Pedidos sem resposta" E "Pedidos concluídos" */}
         {sanfona("semResposta", "Pedidos sem resposta", semResposta)}
         {sanfona("concluidos", "Pedidos concluídos", concluidos)}
 
