@@ -112,7 +112,60 @@ async function filiaisDevendo(modulos: ModulosAdmin, app: object, data: string) 
   return FILIAIS.filter((f) => !enviaram.has(f.id));
 }
 
-import { filtrarDestinatarios } from "./manutencao";
+
+/**
+ * FILTRO DA MANUTENÇÃO — CÓPIA LOCAL, DE PROPÓSITO (set/2026).
+ *
+ * Esta lógica também vive em api/manutencao.ts, que é onde ela é testada
+ * (ver scripts/verificar_logica.ts). Aqui ela é REPETIDA em vez de
+ * importada, e a duplicação custou uma noite de produção:
+ *
+ *   Error [ERR_MODULE_NOT_FOUND]: Cannot find module
+ *   '/var/task/api/manutencao' imported from /var/task/api/notificar-fornada.js
+ *
+ * O runtime do Vercel compila CADA arquivo de /api isoladamente, sem
+ * empacotar os vizinhos, e um `import "./manutencao"` sem extensão não
+ * resolve em ESM. A função inteira morre ao carregar — e, do lado do
+ * app, isso aparece como "o aviso não chegou", sem nenhuma pista.
+ *
+ * A regra deste projeto, então: FUNÇÃO DE /api NÃO IMPORTA VIZINHA.
+ * É a mesma razão pela qual entrar-como-loja.ts repete a lista de lojas.
+ */
+function normalizarNome(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .trim();
+}
+
+function ehAparelhoDeTeste(registradoPor: string | undefined, nomesDeTeste: string[]): boolean {
+  if (nomesDeTeste.length === 0) return false;
+  const nome = normalizarNome(registradoPor ?? "");
+  if (nome === "") return false;
+  return nomesDeTeste.some((teste) => nome.includes(teste));
+}
+
+function filtrarDestinatarios(
+  aparelhos: { token?: string; registradoPor?: string }[]
+): { tokens: string[]; silenciados: number; manutencao: boolean } {
+  const todos = aparelhos.map((a) => a.token).filter((t): t is string => Boolean(t));
+
+  const chave = (process.env.MANUTENCAO ?? "").trim().toLowerCase();
+  const ligada = chave !== "" && !["0", "false", "off", "nao", "não"].includes(chave);
+  if (!ligada) return { tokens: todos, silenciados: 0, manutencao: false };
+
+  const nomesDeTeste = (process.env.APARELHOS_DE_TESTE ?? "")
+    .split(",")
+    .map((n) => normalizarNome(n))
+    .filter((n) => n.length > 0);
+
+  const permitidos = aparelhos
+    .filter((a) => Boolean(a.token) && ehAparelhoDeTeste(a.registradoPor, nomesDeTeste))
+    .map((a) => a.token as string);
+
+  return { tokens: permitidos, silenciados: todos.length - permitidos.length, manutencao: true };
+}
 
 async function tokensDasLojas(modulos: ModulosAdmin, app: object, lojaIds: string[]) {
   if (lojaIds.length === 0) return [];

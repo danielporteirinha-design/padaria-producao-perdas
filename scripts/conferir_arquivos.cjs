@@ -199,6 +199,30 @@ const DEVEM_TER_SIDO_APAGADOS = [
   ["api/notificar-desfecho-suprimentos.ts", "endpoint sem autenticação — o aviso voltou para /api/notificar-fornada"],
 ];
 
+/**
+ * FUNÇÃO DE /api NÃO PODE IMPORTAR VIZINHA.
+ *
+ * O runtime do Vercel compila cada arquivo de /api isoladamente. Um
+ * `import "./outra"` sem extensão não resolve em ESM e derruba a função
+ * inteira ao carregar — do lado do app isso aparece como "o aviso não
+ * chegou", sem pista nenhuma. Aconteceu com notificar-fornada e com
+ * interpretar-busca. Esta trava impede a terceira vez.
+ */
+const fsApi = require("fs");
+const pastaApi = path.join(RAIZ, "api");
+let importesProibidos = 0;
+for (const arquivo of fsApi.readdirSync(pastaApi).filter((f) => f.endsWith(".ts"))) {
+  const fonte = fsApi.readFileSync(path.join(pastaApi, arquivo), "utf8");
+  // Só declarações de import de verdade — o texto dentro de um comentário
+  // que EXPLICA o defeito não pode disparar o alarme.
+  for (const m of fonte.matchAll(/^\s*import\s[^;]*?from\s+["'](\.\/[^"']+)["']/gm)) {
+    console.error(
+      `PROIBIDO     - api/${arquivo} importa "${m[1]}" — funções de /api não podem importar vizinhas (ERR_MODULE_NOT_FOUND no Vercel). Copie o trecho para dentro do arquivo.`
+    );
+    importesProibidos++;
+  }
+}
+
 let faltando = 0;
 let desatualizados = 0;
 let sobrando = 0;
@@ -239,7 +263,7 @@ for (const [arquivo, motivo] of DEVEM_TER_SIDO_APAGADOS) {
   }
 }
 
-const problemas = faltando + desatualizados + sobrando;
+const problemas = faltando + desatualizados + sobrando + importesProibidos;
 console.log("");
 if (problemas === 0) {
   console.log(`TODOS OS ${CONFERENCIAS.length} ARQUIVOS CONFERIDOS ESTÃO ATUALIZADOS`);

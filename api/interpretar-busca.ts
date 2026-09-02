@@ -27,7 +27,42 @@
  * fino. Um recurso de conveniência não pode derrubar uma busca.
  */
 
-import { chamarGeminiComRetry } from "./sugestao-producao";
+/**
+ * CÓPIA LOCAL, PELA MESMA RAZÃO DAS OUTRAS FUNÇÕES (set/2026).
+ *
+ * O import `from "./sugestao-producao"` derrubava esta função INTEIRA no
+ * Vercel com ERR_MODULE_NOT_FOUND — cada arquivo de /api é compilado
+ * isolado e um caminho relativo sem extensão não resolve em ESM.
+ *
+ * Isto passou despercebido porque este endpoint DEGRADA EM SILÊNCIO de
+ * propósito: sem ele, a busca por voz usa a transcrição crua e continua
+ * funcionando. O recurso estava morto e ninguém tinha como saber.
+ *
+ * FUNÇÃO DE /api NÃO IMPORTA VIZINHA. É a regra deste projeto.
+ */
+async function chamarGeminiComRetry(
+  url: string,
+  corpoRequisicao: unknown,
+  maxTentativas = 2
+): Promise<Response> {
+  let respostaMaisRecente: Response | undefined;
+  for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
+    const resposta = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corpoRequisicao),
+    });
+    if (resposta.ok) return resposta;
+
+    respostaMaisRecente = resposta;
+    const transitorio = resposta.status === 503 || resposta.status === 429;
+    if (!transitorio || tentativa === maxTentativas) return resposta;
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 800 * tentativa));
+  }
+  return respostaMaisRecente!;
+}
+
 
 const MODELO_GEMINI = "gemini-flash-latest";
 
