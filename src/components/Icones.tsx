@@ -156,3 +156,20 @@ export function IconeChama(props: IconeProps) {
     </Svg>
   );
 }
+
+/**
+ * Sino de aviso — usado no lugar da contagem escrita nas sanfonas da
+ * Reposição (set/2026, pedido do dono do negócio).
+ *
+ * O número sozinho ("3 itens") é informação que precisa ser LIDA. O sino
+ * é reconhecido antes da leitura: quem passa os olhos na tela já sabe que
+ * há coisa esperando resposta, e só então lê quantas.
+ */
+export function IconeSino(props: IconeProps) {
+  return (
+    <Svg {...props}>
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+    </Svg>
+  );
+}

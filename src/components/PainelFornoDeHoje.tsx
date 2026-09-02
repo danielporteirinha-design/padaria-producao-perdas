@@ -17,7 +17,7 @@ import { contemBusca } from "../lib/texto";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
 import { AssistenteDeVoz } from "./AssistenteDeVoz";
-import { IconeConfere, IconeLixeira, IconeSeta } from "./Icones";
+import { IconeConfere, IconeLixeira, IconeSeta, IconeSino } from "./Icones";
 
 const MAXIMO_RESULTADOS = 12;
 
@@ -146,9 +146,17 @@ export function PainelFornoDeHoje({
             onClick={() => setAberta((a) => ({ ...a, [chave]: !a[chave] }))}
           >
             <span className="nome-sessao">{titulo}</span>
-            <span className="contagem-itens">
-              {lista.length > 0 ? `${lista.length} ${lista.length === 1 ? "item" : "itens"}` : ""}
-            </span>
+            {/* O SINO NO LUGAR DA CONTAGEM ESCRITA — mesmo motivo da tela
+                da filial: o número é lido, o sino é reconhecido. */}
+            {lista.length > 0 && (
+              <span
+                className="sino-sessao"
+                aria-label={`${lista.length} ${lista.length === 1 ? "registro" : "registros"}`}
+              >
+                <IconeSino tamanho={22} />
+                <em className="contagem-sino">{lista.length}</em>
+              </span>
+            )}
             <IconeSeta className="seta-sessao" />
           </button>
         </div>

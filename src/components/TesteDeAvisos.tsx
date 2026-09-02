@@ -21,7 +21,24 @@ export function TesteDeAvisos({ destino }: TesteDeAvisosProps) {
     try {
       const r = await testarAvisos(destino);
       if (r.enviados > 0) {
-        setMensagem(`Enviado para ${r.enviados} aparelho${r.enviados > 1 ? "s" : ""}.`);
+        setMensagem(
+          `Enviado para ${r.enviados} aparelho${r.enviados > 1 ? "s" : ""}.` +
+            (r.manutencao ? " (modo de manutenção ligado)" : "")
+        );
+      } else if (r.manutencao) {
+        /**
+         * O MODO DE MANUTENÇÃO VEM ANTES DE TUDO (set/2026).
+         *
+         * Sem esta ramificação, um teste durante a manutenção respondia
+         * "nenhum aparelho registrado" — que é falso e manda a
+         * investigação para o lado errado: a pessoa vai reativar avisos
+         * num aparelho que já estava registrado. A causa real é uma
+         * variável de ambiente, e o teste tem que dizer isso.
+         */
+        setMensagem(
+          `Modo de manutenção LIGADO: ${r.silenciados ?? 0} aparelho(s) foram silenciados. ` +
+            "Só os aparelhos de teste recebem — confira APARELHOS_DE_TESTE na Vercel."
+        );
       } else if (!r.registrados) {
         setMensagem("Nenhum aparelho registrado para receber avisos.");
       } else {

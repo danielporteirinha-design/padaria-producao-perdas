@@ -19,7 +19,7 @@ import type { Loja } from "../lib/lojas";
 import { dataDeHojeIso, horaDoInstante } from "../lib/data";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { contemBusca } from "../lib/texto";
-import { IconeConfere, IconeLixeira, IconeSeta } from "./Icones";
+import { IconeConfere, IconeLixeira, IconeSeta, IconeSino } from "./Icones";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
 import { AssistenteDeVoz } from "./AssistenteDeVoz";
@@ -183,11 +183,25 @@ export function PainelFornadasFilial({
             onClick={() => setAberta((a) => ({ ...a, [chave]: !a[chave] }))}
           >
             <span className="nome-sessao">{titulo}</span>
-            <span className="contagem-itens">
-              {linhasDaLista.length > 0
-                ? `${linhasDaLista.length} ${linhasDaLista.length === 1 ? "item" : "itens"}`
-                : ""}
-            </span>
+            {/* O SINO NO LUGAR DA CONTAGEM ESCRITA (set/2026, pedido do
+                dono do negócio: "não precisa gritar, mas é necessário
+                chamar a atenção").
+
+                "3 itens" é informação que precisa ser LIDA. O sino é
+                reconhecido antes da leitura: quem passa os olhos já sabe
+                que há coisa esperando, e só então lê quantas. O balanço
+                é curto e para sozinho — animação infinita numa tela que
+                fica aberta o dia todo vira ruído, e ruído a pessoa
+                aprende a ignorar. */}
+            {linhasDaLista.length > 0 && (
+              <span
+                className="sino-sessao"
+                aria-label={`${linhasDaLista.length} ${linhasDaLista.length === 1 ? "registro" : "registros"}`}
+              >
+                <IconeSino tamanho={22} />
+                <em className="contagem-sino">{linhasDaLista.length}</em>
+              </span>
+            )}
             <IconeSeta className="seta-sessao" />
           </button>
         </div>

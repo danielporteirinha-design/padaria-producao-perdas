@@ -437,6 +437,86 @@ button.link {
   color: var(--cor-acento);
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------
+   AS SANFONAS DA REPOSIÇÃO COMO BOTÃO GRANDE (set/2026, pedido do dono
+   do negócio).
+
+   Na tela de uma aba só, as duas sanfonas são o corpo da página — e
+   fechadas elas eram duas listras finas que ninguém identificava como
+   clicáveis. Agora são dois blocos altos, com borda e sombra, que se
+   leem como botão: o dedo sabe onde tocar sem ninguém explicar.
+   --------------------------------------------------------------- */
+.corpo-fornadas .acordeao-sessao {
+  margin-bottom: 12px;
+  border: 2px solid var(--cor-borda);
+  border-radius: 14px;
+  background: var(--cor-superficie);
+  box-shadow: 0 1px 3px rgba(36, 31, 24, 0.07);
+  overflow: hidden;
+}
+.corpo-fornadas .acordeao-sessao.aberta {
+  border-color: var(--cor-acento);
+}
+.corpo-fornadas .abrir-sessao {
+  /* Alto como um botão quadrado, não como uma linha de lista. */
+  min-height: 88px;
+  padding: 18px 16px;
+  gap: 12px;
+}
+.corpo-fornadas .abrir-sessao .nome-sessao {
+  font-size: 18px;
+  line-height: 1.25;
+}
+.corpo-fornadas .acordeao-sessao.aberta .abrir-sessao .nome-sessao {
+  color: var(--cor-acento);
+}
+
+/* O SINO. Balança três vezes e para: o objetivo é ser notado, não
+   competir com a tela o dia inteiro. Quem chega depois ainda vê o
+   número — o movimento chama, o número informa. */
+.sino-sessao {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--cor-alerta-fundo);
+  color: var(--cor-alerta);
+  transform-origin: 50% 4px;
+  animation: balanco-sino 2.4s ease-in-out 3;
+}
+.contagem-sino {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 21px;
+  height: 21px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 21px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes balanco-sino {
+  /* O balanço inteiro cabe nos primeiros 20% do ciclo; o resto é pausa.
+     É o que faz o movimento chamar sem virar pisca-pisca. */
+  0%, 20%, 100% { transform: rotate(0deg); }
+  4% { transform: rotate(11deg); }
+  8% { transform: rotate(-9deg); }
+  12% { transform: rotate(6deg); }
+  16% { transform: rotate(-3deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sino-sessao { animation: none; }
+}
 .seta-sessao {
   color: var(--cor-texto-suave);
   flex-shrink: 0;
