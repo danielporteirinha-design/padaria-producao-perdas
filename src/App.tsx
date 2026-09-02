@@ -13,7 +13,6 @@ import { ehFalhaTemporariaDeRede, mensagemDeFalhaAoSalvar } from "./lib/errosFir
 import { dataDeHojeIso, diaDaSemanaDeData, formatarDataBr } from "./lib/data";
 import { incluirItemProduzido, planoDeHojeCom } from "./lib/producaoDeHoje";
 import { gerarId } from "./lib/id";
-import { fraseDaManutencao, lerManutencao, type EstadoDaManutencao } from "./lib/manutencao";
 import { TelaCronograma } from "./components/TelaCronograma";
 import { TelaCadastroProdutos } from "./components/TelaCadastroProdutos";
 import { TelaPerdas } from "./components/TelaPerdas";
@@ -179,19 +178,13 @@ export default function App() {
 
   const [operador, setOperador] = useState("");
   /**
-   * Modo de manutenção — ver api/manutencao.ts e src/lib/manutencao.ts.
+   * Modo de manutenção: o app NÃO consulta mais o estado (set/2026).
    *
-   * Lido uma vez na abertura. A chave mora numa variável de ambiente e só
-   * muda com um deploy novo, então não há o que ficar consultando: um
-   * deploy recarrega o app de qualquer jeito.
+   * A faixa saiu da tela a pedido do dono do negócio, e sem faixa não há
+   * o que fazer com a resposta. O filtro que silencia os aparelhos
+   * continua inteiro no servidor — ver api/manutencao.ts — e o estado se
+   * confere abrindo /api/manutencao no navegador.
    */
-  const [manutencao, setManutencao] = useState<EstadoDaManutencao>({
-    ativa: false,
-    aparelhosDeTeste: [],
-  });
-  useEffect(() => {
-    void lerManutencao().then(setManutencao);
-  }, []);
   const [nomeSugerido, setNomeSugerido] = useState("");
   // Abre na Reposição: é a única aba liberada na fase de implantação,
   // e continua sendo a primeira de todo perfil depois.
@@ -875,17 +868,13 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* A FAIXA DA MANUTENÇÃO VEM ANTES DE TUDO (ago/2026).
+      {/* A FAIXA DA MANUTENÇÃO SAIU DA TELA (set/2026, decisão do dono do
+          negócio). Durante a implantação quem opera é a equipe da padaria,
+          e uma tarja vermelha permanente sobre uma tela que já está sendo
+          aprendida atrapalha mais do que informa.
 
-          A chave mora fora do app, na Vercel — e é justamente por isso
-          que ela precisa aparecer aqui: sem a faixa, os avisos param de
-          chegar e ninguém liga uma coisa à outra. Passa um dia, passa uma
-          semana, e a padaria conclui que o recurso quebrou. */}
-      {manutencao.ativa && (
-        <div className="faixa-manutencao" role="status">
-          {fraseDaManutencao(manutencao)}
-        </div>
-      )}
+          O ESTADO NÃO SE PERDEU: continua em /api/manutencao, que é onde
+          se confere se os avisos estão suspensos. */}
       <header className="cabecalho-app">
         <div><strong className="loja-atual">{loja.nome}</strong></div>
         <div className="operador-atual">
@@ -915,6 +904,12 @@ export default function App() {
 
       {loja.papel === "matriz" && <AtivarAvisos loja={loja} operador={operador} />}
 
+      {/* UMA ABA SÓ NÃO É UMA BARRA DE ABAS (set/2026, decisão do dono do
+          negócio). Enquanto só a Reposição está liberada, o rótulo não
+          oferece escolha nenhuma — só ocupa o alto da tela do celular,
+          que é justamente onde o polegar alcança melhor. A barra volta
+          sozinha assim que a segunda aba for liberada em ABAS_LIBERADAS. */}
+      {abasVisiveis.length > 1 && (
       <nav className="abas-principais">
         {abasVisiveis.map((a) => (
           <button
@@ -930,6 +925,7 @@ export default function App() {
           </button>
         ))}
       </nav>
+      )}
 
       <main className="conteudo-app">
         {suprimentosParaImprimir && (

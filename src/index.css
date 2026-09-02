@@ -113,7 +113,17 @@ button, input, select, textarea { font: inherit; }
 }
 .abas-principais button.ativa { background: var(--cor-acento); color: var(--cor-acento-texto); }
 
-.conteudo-app { padding: 20px; }
+/* UMA ABA SÓ: A TELA É DO CONTEÚDO (set/2026, decisão do dono do
+   negócio). Sem a barra de abas, o padding de 20px vira moldura em volta
+   de uma tela que precisa de alvo grande e linha larga — num celular de
+   390px são 40px de largura útil perdidos, o suficiente para o nome de
+   um produto quebrar em duas linhas. */
+.conteudo-app { padding: 12px; }
+@media (min-width: 560px) {
+  /* No computador o padding maior volta: a linha larga demais cansa de
+     ler, e ali sobra espaço. */
+  .conteudo-app { padding: 20px; }
+}
 
 .tela { display: flex; flex-direction: column; gap: 16px; }
 .tela h2 { margin: 0; font-size: 20px; }
@@ -228,7 +238,14 @@ button.link {
    ele viraria mais um botão na linha, disputando com o "limpar" e
    roubando largura do que a pessoa está digitando.
    --------------------------------------------------------------- */
-.campo-com-voz { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.campo-com-voz { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+/* 16px é o piso: abaixo disso o Safari do iPhone dá zoom sozinho ao
+   focar o campo, e a tela inteira sai do lugar no meio do atendimento. */
+.campo-com-voz input {
+  min-height: 52px;
+  padding: 12px 14px;
+  font-size: 16px;
+}
 .campo-com-voz input { flex: 1; min-width: 0; margin: 0; }
 .campo-com-voz .link { flex-shrink: 0; }
 
@@ -384,7 +401,8 @@ button.link {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px;
+  min-height: 56px;
+  padding: 14px 16px;
   background: none;
   border: none;
   text-align: left;
@@ -968,7 +986,8 @@ button.perigo:hover { background: #822525; }
 .cabecalho-fornadas > svg:first-child { color: var(--cor-acento); flex-shrink: 0; }
 .titulo-fornadas { flex: 1; font-size: 16px; font-weight: 700; }
 .painel-fornadas.aberto .seta-sessao { transform: rotate(180deg); }
-.corpo-fornadas { padding: 14px; }
+.corpo-fornadas { padding: 12px; }
+@media (min-width: 560px) { .corpo-fornadas { padding: 14px; } }
 .painel-fornadas h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; }
 .painel-fornadas h3 svg { color: var(--cor-acento); }
 /* Painel vazio (ago/2026): deixou de ser uma caixa própria e passou a ser
@@ -1535,20 +1554,32 @@ button.perigo:hover { background: #822525; }
    sempre logo abaixo — é ela que ensina que dá para dizer produto e
    quantidade de uma vez.
    --------------------------------------------------------------- */
-.assistente-voz { margin-bottom: 14px; }
+/* ---------------------------------------------------------------
+   ALVOS DE DEDO NA TELA ÚNICA (set/2026, decisão do dono do negócio:
+   "comandos e campos de fácil acesso, com toque simples e de fácil
+   leitura").
+
+   O contexto manda: quem usa isto está de pé, atrás do balcão, com a mão
+   ocupada e o celular na outra. Alvo pequeno erra, e errar aqui é pedir
+   o produto errado. Todo elemento clicável desta aba passou a ter no
+   mínimo 52px de altura — acima dos 44px que é o mínimo confortável —, e
+   os textos que se leem de relance subiram de tamanho.
+   --------------------------------------------------------------- */
+.assistente-voz { margin-bottom: 12px; }
 .botao-assistente {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   width: 100%;
-  min-height: 60px;
-  padding: 14px 16px;
+  /* O maior alvo da tela, e de longe: é o caminho principal. */
+  min-height: 72px;
+  padding: 16px;
   border: none;
   border-radius: var(--raio);
   background: var(--cor-acento);
   color: var(--cor-acento-texto);
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -1568,17 +1599,31 @@ button.perigo:hover { background: #822525; }
 /* A lista de reposição EM MONTAGEM, antes de virar pedido. Fica em
    destaque porque é trabalho não gravado: quem está olhando precisa ver,
    de relance, que ainda falta enviar. */
-/* A faixa do modo de manutenção. Vermelha e no topo de tudo, de
-   propósito: ela existe para ninguém esquecer que os avisos estão
-   suspensos, e uma faixa discreta não cumpriria isso. */
-.faixa-manutencao {
-  padding: 8px 12px;
-  background: #9b2c2c;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 600;
-  text-align: center;
-  line-height: 1.35;
+/* As linhas da Reposição na tela única: nome maior, quantidade em
+   destaque e botões com alvo de dedo. É a lista que a pessoa confere de
+   relance antes de enviar — se ela precisa aproximar o rosto para ler, a
+   conferência não acontece. */
+.linha-reposicao .nome-reposicao strong { font-size: 16px; }
+.qtd-reposicao { font-size: 17px; }
+.linha-montagem { padding: 8px 0; }
+.nome-montagem { font-size: 16px; }
+.linha-montagem .qtd-conferencia,
+.editor-quantidade input {
+  min-height: 52px;
+  font-size: 17px;
+}
+.tirar-da-lista {
+  min-width: 48px;
+  min-height: 48px;
+}
+.botao-fornada {
+  min-height: 48px;
+  padding: 10px 16px;
+  font-size: 15px;
+}
+.acoes-montagem button {
+  min-height: 54px;
+  font-size: 16px;
 }
 
 .pedido-em-montagem {

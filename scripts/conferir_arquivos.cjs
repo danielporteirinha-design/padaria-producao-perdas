@@ -75,8 +75,8 @@ const CONFERENCIAS = [
   ["api/manutencao.ts", "filtrarDestinatarios", "Manutenção: filtro dos avisos"],
   ["api/notificar-fornada.ts", "filtrarDestinatarios", "Manutenção: aplicada no aviso de fornada"],
   ["api/lembretes.ts", "filtrarDestinatarios", "Manutenção: aplicada nos lembretes"],
-  ["src/lib/manutencao.ts", "fraseDaManutencao", "Manutenção: faixa no topo do app"],
-  ["src/App.tsx", "faixa-manutencao", "Manutenção: faixa ligada no App"],
+  // A faixa saiu da tela em set/2026 — a manutenção virou só do servidor.
+  ["src/App.tsx", "ABAS_LIBERADAS", "Implantacao gradual: abas liberadas"],
 
   // --- Sugestão por IA
   ["src/lib/sugestaoProducao.ts", "montarHistoricoDaFilial", "IA: sugestão para a filial"],
