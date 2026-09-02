@@ -49,6 +49,7 @@ interface PainelFornoDeHojeProps {
    */
   onDecidirReposicao?: (
     pedido: PedidoFilial,
+    codigoPdv: number,
     desfecho: "confirmado" | "cancelado",
     motivo?: string
   ) => Promise<void>;
@@ -109,7 +110,7 @@ export function PainelFornoDeHoje({
     if (!onDecidirReposicao || !linha.pedido) return;
     setDecidindo(linha.chave);
     try {
-      await onDecidirReposicao(linha.pedido, desfecho, motivo);
+      await onDecidirReposicao(linha.pedido, linha.codigoPdv, desfecho, motivo);
       setRecusa(null);
     } finally {
       setDecidindo(null);

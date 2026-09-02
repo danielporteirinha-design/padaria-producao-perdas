@@ -32,7 +32,7 @@
 
 import type { FornadaPronta } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
-import { desfechoDaReposicao, ehReposicao } from "../types/pedido";
+import { desfechoDoItem, ehReposicao, motivoDoItem } from "../types/pedido";
 
 export type OrigemDaLinha = "filial" | "matriz";
 
@@ -89,9 +89,11 @@ export function montarLinhasDoDia({
   // ---- o que a FILIAL pediu ----
   for (const pedido of pedidos) {
     if (pedido.data !== hoje || pedido.lojaId !== lojaId || !ehReposicao(pedido)) continue;
-    const desfecho = desfechoDaReposicao(pedido);
     const quando = pedido.enviadoEm ?? pedido.criadoEm ?? "";
     for (const item of pedido.itens) {
+      // O DESFECHO É DO ITEM, e não do documento: um pedido com dez
+      // produtos pode ter nove confirmados e um recusado.
+      const desfecho = desfechoDoItem(pedido, item.codigoPdv);
       pedidosMeus.add(item.codigoPdv);
       linhas.push({
         chave: `p-${pedido.id}-${item.codigoPdv}`,
@@ -104,7 +106,7 @@ export function montarLinhasDoDia({
         situacao: desfecho === "pendente" ? "pendente" : desfecho,
         motivo:
           desfecho === "cancelado"
-            ? pedido.atendimento?.motivo || "sem motivo informado"
+            ? motivoDoItem(pedido, item.codigoPdv) || "sem motivo informado"
             : undefined,
       });
     }
@@ -204,9 +206,11 @@ export interface EntradaDaMatriz {
 
 /** Uma reposição pedida por uma filial, do ponto de vista da matriz. */
 function linhaDoPedidoDaFilial(pedido: PedidoFilial): LinhaDaMatriz[] {
-  const desfecho = desfechoDaReposicao(pedido);
   const quando = pedido.enviadoEm ?? pedido.criadoEm ?? "";
-  return pedido.itens.map((item, indice) => ({
+  return pedido.itens.map((item, indice) => {
+    // Cada item tem o próprio desfecho — ver `decidirItemDaReposicao`.
+    const desfecho = desfechoDoItem(pedido, item.codigoPdv);
+    return {
     chave: `pf-${pedido.id}-${item.codigoPdv}-${indice}`,
     tipo: "pedido" as const,
     lojaId: pedido.lojaId,
@@ -216,10 +220,14 @@ function linhaDoPedidoDaFilial(pedido: PedidoFilial): LinhaDaMatriz[] {
     quando,
     vezes: 1,
     lojasQuePediram: 1,
-    situacao:
-      desfecho === "confirmado" ? "pedido" : desfecho === "cancelado" ? "encerrado" : "pendente",
-    motivo: desfecho === "cancelado" ? pedido.atendimento?.motivo : undefined,
-  }));
+      situacao: (desfecho === "confirmado"
+        ? "pedido"
+        : desfecho === "cancelado"
+          ? "encerrado"
+          : "pendente") as LinhaDaMatriz["situacao"],
+      motivo: desfecho === "cancelado" ? motivoDoItem(pedido, item.codigoPdv) : undefined,
+    };
+  });
 }
 
 export function montarLinhasDaMatriz({

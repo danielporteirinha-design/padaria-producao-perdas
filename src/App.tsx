@@ -21,7 +21,7 @@ import { BannerInstalar } from "./components/BannerInstalar";
 import { AvisoPerdaPendente } from "./components/AvisoPerdaPendente";
 import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
 import {
-  decidirReposicao,
+  decidirItemDaReposicao,
   diferencasDoAjuste,
   ehReposicao,
   type PedidoFilial,
@@ -641,21 +641,38 @@ export default function App() {
     }
   }
 
+  /**
+   * A DECISÃO É DE UM ITEM, não do pedido inteiro (set/2026).
+   *
+   * Uma fala da filial vira um documento com vários produtos. Recusar um
+   * deles cancelava todos — ver o comentário em `atendimentoPorItem`, em
+   * src/types/pedido.ts.
+   */
   async function handleDecidirReposicao(
     pedido: PedidoFilial,
+    codigoPdv: number,
     desfecho: "confirmado" | "cancelado",
     motivo?: string
   ) {
-    const decidido = decidirReposicao(pedido, desfecho, operador, motivo);
+    const decidido = decidirItemDaReposicao(pedido, codigoPdv, desfecho, operador, motivo);
     await comRetorno(
       () => repositorio!.salvarPedido(decidido),
       desfecho === "confirmado" ? "Reposição confirmada." : "Reposição cancelada."
     );
     setPedidos((atual) => [...atual.filter((p) => p.id !== decidido.id), decidido]);
 
+    /**
+     * SÓ O ITEM DECIDIDO entra na produção e vira aviso. Mandar o pedido
+     * inteiro faria os outros nove produtos entrarem na produção junto
+     * com o único que foi confirmado.
+     */
+    const soOItem: PedidoFilial = {
+      ...decidido,
+      itens: decidido.itens.filter((i) => i.codigoPdv === codigoPdv),
+    };
     await Promise.allSettled([
-      registrarReposicaoNaProducao(decidido, desfecho),
-      avisarFilialDoDesfecho(decidido, desfecho, motivo),
+      registrarReposicaoNaProducao(soOItem, desfecho),
+      avisarFilialDoDesfecho(soOItem, desfecho, motivo),
     ]);
   }
 

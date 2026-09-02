@@ -40,7 +40,7 @@ import { afinarComIA, ErroDeVoz, ouvirUmaFrase, vozDisponivel } from "../lib/voz
 import { interpretarFrase, type ItemFalado } from "../lib/interpretarPedidoFalado";
 import { paraBusca } from "../lib/texto";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
-import { IconeLixeira, IconeMicrofone } from "./Icones";
+import { IconeConfere, IconeErro, IconeLixeira, IconeMicrofone } from "./Icones";
 
 export interface ItemDitado {
   produto: Produto;
@@ -81,6 +81,30 @@ export function AssistenteDeVoz({
   const [sobras, setSobras] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  /**
+   * O BOTÃO VIRA O SINALIZADOR (set/2026, pedido do dono do negócio).
+   *
+   * Quem fala está olhando para o botão — foi nele que tocou — e a
+   * resposta estava dois blocos abaixo, na lista de conferência. Com o
+   * celular na mão e a outra ocupada, isso é longe demais: a pessoa
+   * falava e não sabia se tinha dado certo até procurar.
+   *
+   * Agora a resposta acontece onde o olho já está: verde com tique
+   * quando o produto e a quantidade foram entendidos, vermelho com X
+   * quando não. Dois segundos — o suficiente para ler, curto o bastante
+   * para não travar quem quer falar de novo.
+   */
+  const [sinal, setSinal] = useState<"" | "certo" | "errado">("");
+  const relogioDoSinal = useRef<number | null>(null);
+
+  function sinalizar(resultado: "certo" | "errado") {
+    if (relogioDoSinal.current !== null) window.clearTimeout(relogioDoSinal.current);
+    setSinal(resultado);
+    relogioDoSinal.current = window.setTimeout(() => {
+      if (montado.current) setSinal("");
+      relogioDoSinal.current = null;
+    }, 2000);
+  }
 
   const cancelarEscuta = useRef<(() => void) | null>(null);
   const montado = useRef(true);
@@ -89,6 +113,7 @@ export function AssistenteDeVoz({
     return () => {
       montado.current = false;
       cancelarEscuta.current?.();
+      if (relogioDoSinal.current !== null) window.clearTimeout(relogioDoSinal.current);
     };
   }, []);
 
@@ -137,7 +162,12 @@ export function AssistenteDeVoz({
       const dito = await sessao.promessa;
       if (!montado.current) return;
       setOuvindo(false);
-      if (!dito) return;
+      if (!dito) {
+        // Microfone abriu e não veio nada: silêncio, ruído, ou a pessoa
+        // desistiu. Para quem está olhando o botão, é a mesma coisa.
+        sinalizar("errado");
+        return;
+      }
       setFrase(dito);
       await interpretar(dito);
     } catch (falha) {
@@ -203,8 +233,17 @@ export function AssistenteDeVoz({
       return lista;
     });
     setSobras(sobrando);
+    /**
+     * O sinal é sobre ESTA fala, e não sobre a lista acumulada: quem
+     * acabou de falar quer saber se o que ele disse agora foi entendido.
+     * Sobra reconhecida pela metade também é erro — o item que não
+     * entrou é o que vai faltar na entrega.
+     */
     if (encontrados.length === 0) {
       setErro(`Não achei nenhum produto em "${dito}".`);
+      sinalizar("errado");
+    } else {
+      sinalizar(sobrando.length === 0 ? "certo" : "errado");
     }
   }
 
@@ -245,18 +284,32 @@ export function AssistenteDeVoz({
     <div className="assistente-voz">
       <button
         type="button"
-        className={`botao-assistente ${ouvindo ? "ouvindo" : ""}`}
+        className={`botao-assistente ${ouvindo ? "ouvindo" : ""} ${sinal ? `sinal-${sinal}` : ""}`}
         aria-label={ouvindo ? "Ouvindo" : "Falar"}
-        disabled={pensando || enviando}
+        disabled={pensando || enviando || sinal !== ""}
         onClick={() => void ditar()}
       >
-        <IconeMicrofone tamanho={26} />
+        {sinal === "certo" ? (
+          <IconeConfere tamanho={26} />
+        ) : sinal === "errado" ? (
+          <IconeErro tamanho={26} />
+        ) : (
+          <IconeMicrofone tamanho={26} />
+        )}
         {/* SEM "toque para parar" (ago/2026, decisão do dono do negócio:
             "isso não faz sentido algum"). E ele tem razão: o
             reconhecedor trabalha com `continuous = false` e FECHA
             SOZINHO quando a pessoa para de falar — o convite a tocar
             pedia um passo que o navegador já dá. */}
-        {ouvindo ? "Ouvindo..." : pedindo ? "Pedir falando" : "Anunciar falando"}
+        {sinal === "certo"
+          ? "Entendi"
+          : sinal === "errado"
+            ? "Não entendi"
+            : ouvindo
+              ? "Ouvindo..."
+              : pedindo
+                ? "Pedir falando"
+                : "Anunciar falando"}
       </button>
 
       {/* A instrução escrita e o exemplo saíram (ago/2026, decisão do

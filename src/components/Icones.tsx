@@ -173,3 +173,20 @@ export function IconeSino(props: IconeProps) {
     </Svg>
   );
 }
+
+/**
+ * X — o sinal de que o microfone não entendeu (set/2026).
+ *
+ * Par do IconeConfere: os dois aparecem no MESMO botão, logo depois da
+ * fala, e a diferença entre eles tem de ser legível de relance, com o
+ * celular a meio metro do rosto. Um X e um tique são as duas formas mais
+ * reconhecíveis que existem para isso.
+ */
+export function IconeErro(props: IconeProps) {
+  return (
+    <Svg {...props}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </Svg>
+  );
+}

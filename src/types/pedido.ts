@@ -96,6 +96,21 @@ export interface PedidoFilial {
    * aparecem como pendentes.
    */
   atendimento?: AtendimentoReposicao;
+  /**
+   * A DECISÃO É POR ITEM (set/2026 — defeito relatado em produção).
+   *
+   * Uma fala da filial vira UM documento com vários itens: "20 pão
+   * francês, 10 broa e 6 sonho" é um pedido só. A decisão da matriz,
+   * porém, era gravada no documento inteiro — recusar a broa porque a
+   * fornada não deu certo cancelava também o pão e o sonho, que estavam
+   * prontos. A filial ficava sem nove itens por causa de um.
+   *
+   * Agora cada produto guarda o próprio desfecho, na chave do código do
+   * PDV. O campo `atendimento` acima continua existindo e valendo como
+   * padrão: pedidos decididos antes desta mudança continuam sendo lidos
+   * do jeito que foram gravados.
+   */
+  atendimentoPorItem?: Record<string, AtendimentoReposicao>;
 
   /**
    * Presente só quando a matriz mexeu na lista. Ausente = o que está em
@@ -181,6 +196,67 @@ export function reposicaoEstaPendente(pedido: PedidoFilial): boolean {
  * só desabilitando o botão na tela: a regra é do domínio, e uma tela nova
  * amanhã não pode conseguir contornar.
  */
+/**
+ * O desfecho de UM item — o do item, quando existe; senão o do documento.
+ *
+ * A ordem importa: um pedido antigo tem só a decisão do documento, e um
+ * pedido novo pode ter os dois (o documento por uma decisão anterior, o
+ * item pela mais recente). Vale sempre a mais específica.
+ */
+export function desfechoDoItem(
+  pedido: PedidoFilial,
+  codigoPdv: number
+): DesfechoReposicao {
+  return pedido.atendimentoPorItem?.[String(codigoPdv)]?.desfecho ?? desfechoDaReposicao(pedido);
+}
+
+/** O motivo da recusa de UM item, pela mesma regra. */
+export function motivoDoItem(pedido: PedidoFilial, codigoPdv: number): string | undefined {
+  const doItem = pedido.atendimentoPorItem?.[String(codigoPdv)];
+  if (doItem) return doItem.motivo;
+  return pedido.atendimento?.motivo;
+}
+
+/**
+ * Aplica a decisão da matriz a UM item, sem tocar nos outros.
+ *
+ * Cancelar sem motivo é recusado aqui, e não só desabilitando o botão na
+ * tela: a regra é do domínio, e uma tela nova amanhã não pode conseguir
+ * contornar.
+ */
+export function decidirItemDaReposicao(
+  pedido: PedidoFilial,
+  codigoPdv: number,
+  desfecho: "confirmado" | "cancelado",
+  decididoPor: string,
+  motivo?: string
+): PedidoFilial {
+  const limpo = (motivo ?? "").trim();
+  if (desfecho === "cancelado" && limpo.length === 0) {
+    throw new Error("Recusar um item exige o motivo.");
+  }
+  return {
+    ...pedido,
+    atendimentoPorItem: {
+      ...(pedido.atendimentoPorItem ?? {}),
+      [String(codigoPdv)]: {
+        desfecho,
+        decididoPor,
+        decididoEm: new Date().toISOString(),
+        ...(desfecho === "cancelado" ? { motivo: limpo } : {}),
+      },
+    },
+  };
+}
+
+/**
+ * Todo item do pedido já foi decidido? É o que diz se o pedido, como um
+ * todo, saiu da fila da matriz.
+ */
+export function reposicaoTotalmenteDecidida(pedido: PedidoFilial): boolean {
+  return pedido.itens.every((i) => desfechoDoItem(pedido, i.codigoPdv) !== "pendente");
+}
+
 export function decidirReposicao(
   pedido: PedidoFilial,
   desfecho: "confirmado" | "cancelado",

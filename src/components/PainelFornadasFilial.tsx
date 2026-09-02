@@ -302,8 +302,14 @@ export function PainelFornadasFilial({
               <IconeConfere tamanho={14} /> Você já pediu este produto hoje.
             </span>
           )}
+          {/* RECUSOU, e não "dispensou" (set/2026, decisão do dono do
+              negócio). A palavra importa no histórico: quem lê amanhã
+              precisa saber que a loja VIU a fornada e decidiu não pedir —
+              e não que um aviso sumiu da tela por acaso. */}
           {linha.situacao === "dispensado" && (
-            <span className="reposicao-aguardando">Aviso dispensado por esta loja.</span>
+            <span className="reposicao-negada">
+              Esta loja RECUSOU a fornada — não precisava do produto.
+            </span>
           )}
 
           {daMatriz && linha.situacao === "pendente" && (

@@ -80,6 +80,8 @@ const CONFERENCIAS = [
   ["api/notificar-fornada.ts", "webpush: {", "Aviso com bloco notification"],
   ["src/lib/concluidosVistos.ts", "marcarConcluidosVistos", "Sino nos concluidos nao lidos"],
   ["src/lib/somDeAviso.ts", "REPETICOES_DA_CAMPAINHA", "Campainha para sozinha"],
+  ["src/types/pedido.ts", "decidirItemDaReposicao", "Matriz decide item por item"],
+  ["src/components/AssistenteDeVoz.tsx", "sinal-", "Botao do microfone sinaliza acerto/erro"],
 
   // --- Avisos e impressão
   ["src/App.tsx", "avisarMatrizDoPedido", "Aviso e impressão em paralelo"],

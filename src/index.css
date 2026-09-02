@@ -1669,6 +1669,21 @@ button.perigo:hover { background: #822525; }
   cursor: pointer;
 }
 .botao-assistente:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* O BOTÃO COMO SINALIZADOR (set/2026). Dois segundos de resposta no
+   lugar para onde o olho já está olhando — ver AssistenteDeVoz.tsx.
+   A opacidade do :disabled é anulada de propósito: durante o sinal o
+   botão está inativo, mas precisa estar MAIS visível, não menos. */
+.botao-assistente.sinal-certo,
+.botao-assistente.sinal-certo:disabled {
+  background: #2f7a4a;
+  opacity: 1;
+}
+.botao-assistente.sinal-errado,
+.botao-assistente.sinal-errado:disabled {
+  background: #9b2c2c;
+  opacity: 1;
+}
 /* Enquanto ouve, o botão muda de cor E de texto: o mesmo alvo que abriu
    o microfone é o que fecha, e precisa ficar óbvio que ele está ativo. */
 /* Ouvindo: só a cor muda. A PULSAÇÃO SAIU (ago/2026, decisão do dono do
