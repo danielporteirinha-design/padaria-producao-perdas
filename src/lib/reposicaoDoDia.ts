@@ -164,6 +164,24 @@ export function estaPendente(linha: LinhaDoDia): boolean {
  */
 export interface LinhaDaMatriz {
   chave: string;
+  /**
+   * De onde veio a linha (set/2026).
+   *
+   * "anuncio"     — fornada que a MATRIZ anunciou; espera as lojas pedirem
+   * "pedido"      — reposição que uma FILIAL pediu; espera a matriz responder
+   * "suprimentos" — lista de embalagens/limpeza de uma filial
+   *
+   * As três esperam decisão de alguém, e é por isso que dividem as duas
+   * mesmas sanfonas. Sem a origem na linha, a matriz não saberia de quem
+   * é a vez — e é ela quem responde duas das três.
+   */
+  tipo: "anuncio" | "pedido" | "suprimentos";
+  /** Loja que pediu (linhas de filial). */
+  lojaId?: string;
+  /** O documento a decidir — devolvido inteiro para a tela responder. */
+  pedido?: PedidoFilial;
+  /** Unidades pedidas por uma filial. */
+  pedidoUnidades?: number;
   codigoPdv: number;
   /** Instante da fornada mais recente do produto hoje. */
   quando: string;
@@ -171,6 +189,8 @@ export interface LinhaDaMatriz {
   /** Unidades anunciadas na fornada mais recente, quando informadas. */
   unidades?: number;
   situacao: "pendente" | "pedido" | "encerrado";
+  /** Motivo da recusa, quando a matriz recusou um pedido de filial. */
+  motivo?: string;
   /** Quantas lojas já pediram este produto hoje. */
   lojasQuePediram: number;
 }
@@ -180,6 +200,26 @@ export interface EntradaDaMatriz {
   pedidos: PedidoFilial[];
   hoje: string;
   encerrados: Set<number>;
+}
+
+/** Uma reposição pedida por uma filial, do ponto de vista da matriz. */
+function linhaDoPedidoDaFilial(pedido: PedidoFilial): LinhaDaMatriz[] {
+  const desfecho = desfechoDaReposicao(pedido);
+  const quando = pedido.enviadoEm ?? pedido.criadoEm ?? "";
+  return pedido.itens.map((item, indice) => ({
+    chave: `pf-${pedido.id}-${item.codigoPdv}-${indice}`,
+    tipo: "pedido" as const,
+    lojaId: pedido.lojaId,
+    pedido,
+    pedidoUnidades: item.quantidadeUnidades,
+    codigoPdv: item.codigoPdv,
+    quando,
+    vezes: 1,
+    lojasQuePediram: 1,
+    situacao:
+      desfecho === "confirmado" ? "pedido" : desfecho === "cancelado" ? "encerrado" : "pendente",
+    motivo: desfecho === "cancelado" ? pedido.atendimento?.motivo : undefined,
+  }));
 }
 
 export function montarLinhasDaMatriz({
@@ -206,11 +246,28 @@ export function montarLinhasDaMatriz({
   }
 
   const linhas: LinhaDaMatriz[] = [];
+
+  /**
+   * O QUE AS FILIAIS PEDIRAM ENTRA AQUI (set/2026).
+   *
+   * Antes isto vivia num card separado, acima da tela — o único lugar
+   * onde a matriz confirmava ou recusava uma reposição. O card repetia,
+   * num formato antigo, o que estas sanfonas já mostram, e ter dois
+   * lugares para o mesmo assunto fazia a matriz responder num e conferir
+   * no outro. Agora é um lugar só: o que espera resposta fica junto,
+   * venha de onde vier.
+   */
+  for (const pedido of pedidos) {
+    if (pedido.data !== hoje || !ehReposicao(pedido)) continue;
+    linhas.push(...linhaDoPedidoDaFilial(pedido));
+  }
+
   for (const [codigoPdv, doDia] of porProduto) {
     const ordenadas = [...doDia].sort((a, b) => b.marcadaEm.localeCompare(a.marcadaEm));
     const pediram = lojasPorProduto.get(codigoPdv)?.size ?? 0;
     linhas.push({
       chave: `m-${codigoPdv}`,
+      tipo: "anuncio",
       codigoPdv,
       quando: ordenadas[0].marcadaEm,
       vezes: ordenadas.length,

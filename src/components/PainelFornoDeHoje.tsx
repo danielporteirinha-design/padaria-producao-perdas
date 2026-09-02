@@ -12,6 +12,7 @@ import type { PedidoFilial } from "../types/pedido";
 import type { LinhaDaMatriz } from "../lib/reposicaoDoDia";
 import { anuncioPendente, montarLinhasDaMatriz } from "../lib/reposicaoDoDia";
 import { horaDoInstante } from "../lib/data";
+import { LOJAS } from "../lib/lojas";
 import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
 import { TesteDeAvisos } from "./TesteDeAvisos";
@@ -35,6 +36,17 @@ interface PainelFornoDeHojeProps {
     quantidade?: number
   ) => Promise<void>;
   onCadastrarProduto: (input: NovoProdutoInput) => Promise<Produto | undefined>;
+  /**
+   * A resposta da matriz ao pedido de uma filial (set/2026).
+   *
+   * Chegou aqui junto com os pedidos das filiais nas sanfonas — antes
+   * vivia num card separado, que saiu.
+   */
+  onDecidirReposicao?: (
+    pedido: PedidoFilial,
+    desfecho: "confirmado" | "cancelado",
+    motivo?: string
+  ) => Promise<void>;
 }
 
 export function PainelFornoDeHoje({
@@ -47,6 +59,7 @@ export function PainelFornoDeHoje({
   onReabrirTudo,
   onMarcarFornada,
   onCadastrarProduto,
+  onDecidirReposicao,
 }: PainelFornoDeHojeProps) {
   const [marcando, setMarcando] = useState<number | null>(null);
   const [busca, setBusca] = useState("");
@@ -55,6 +68,28 @@ export function PainelFornoDeHoje({
   const [salvandoNovo, setSalvandoNovo] = useState(false);
 
   const [aberta, setAberta] = useState<Record<string, boolean>>({});
+  /** Qual linha está sendo respondida agora, e o motivo em digitação. */
+  const [decidindo, setDecidindo] = useState<string | null>(null);
+  const [recusa, setRecusa] = useState<{ chave: string; motivo: string } | null>(null);
+
+  const nomeDaLoja = (lojaId: string | undefined) =>
+    LOJAS.find((l) => l.id === lojaId)?.nomeCurto ?? "Filial";
+
+  /** Grava a decisão e devolve a tela ao estado normal. */
+  async function responder(
+    linha: LinhaDaMatriz,
+    desfecho: "confirmado" | "cancelado",
+    motivo?: string
+  ) {
+    if (!onDecidirReposicao || !linha.pedido) return;
+    setDecidindo(linha.chave);
+    try {
+      await onDecidirReposicao(linha.pedido, desfecho, motivo);
+      setRecusa(null);
+    } finally {
+      setDecidindo(null);
+    }
+  }
   const [feedbackVoz, setFeedbackVoz] = useState<{ tipo: "sucesso" | "alerta"; texto: string } | null>(null);
 
   const nomeDoProduto = (codigo: number) =>
@@ -184,7 +219,94 @@ export function PainelFornoDeHoje({
     );
   }
 
+  /**
+   * A linha de um pedido de REPOSIÇÃO feito por uma filial (set/2026).
+   *
+   * É aqui que a matriz responde — o card que fazia isso antes saiu, e
+   * ter a resposta no mesmo lugar onde ela já está olhando é o motivo de
+   * a mudança valer a pena. Recusar EXIGE motivo: a filial está sem o
+   * produto no balcão, e "não vem" sem explicação não deixa ninguém
+   * decidir o que fazer em seguida.
+   */
+  function linhaDePedido(linha: LinhaDaMatriz) {
+    const nome = nomeDoProduto(linha.codigoPdv);
+    const recusando = recusa?.chave === linha.chave;
+    return (
+      <div key={linha.chave} className="linha-reposicao">
+        <span className="nome-reposicao">
+          <span className="topo-reposicao">
+            <em className="etiqueta-origem filial">{nomeDaLoja(linha.lojaId)}</em>
+            <strong>{nome}</strong>
+            <em className="hora-reposicao">{horaDoInstante(linha.quando)}</em>
+          </span>
+
+          {linha.situacao === "pendente" && (
+            <span className="reposicao-aguardando">Esperando sua resposta</span>
+          )}
+          {linha.situacao === "pedido" && (
+            <span className="reposicao-confirmada">
+              <IconeConfere tamanho={14} /> Confirmado — separar para a entrega.
+            </span>
+          )}
+          {linha.situacao === "encerrado" && (
+            <span className="reposicao-negada">
+              Recusado: {linha.motivo || "sem motivo informado"}
+            </span>
+          )}
+
+          {linha.situacao === "pendente" && onDecidirReposicao && linha.pedido && (
+            recusando ? (
+              <span className="editor-quantidade">
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Por quê? (a filial vê este texto)"
+                  value={recusa.motivo}
+                  onChange={(e) => setRecusa({ chave: linha.chave, motivo: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="primario"
+                  disabled={recusa.motivo.trim().length === 0 || decidindo === linha.chave}
+                  onClick={() => void responder(linha, "cancelado", recusa.motivo.trim())}
+                >
+                  Enviar recusa
+                </button>
+                <button type="button" className="link" onClick={() => setRecusa(null)}>
+                  cancelar
+                </button>
+              </span>
+            ) : (
+              <span className="acoes-fornada">
+                <button
+                  type="button"
+                  className="botao-fornada pedir"
+                  disabled={decidindo === linha.chave}
+                  onClick={() => void responder(linha, "confirmado")}
+                >
+                  {decidindo === linha.chave ? "..." : "Confirmar"}
+                </button>
+                <button
+                  type="button"
+                  className="botao-fornada excluir"
+                  onClick={() => setRecusa({ chave: linha.chave, motivo: "" })}
+                >
+                  Recusar
+                </button>
+              </span>
+            )
+          )}
+        </span>
+
+        {linha.pedidoUnidades !== undefined && (
+          <span className="qtd-reposicao">{linha.pedidoUnidades} un</span>
+        )}
+      </div>
+    );
+  }
+
   function linhaAnunciada(linha: LinhaDaMatriz) {
+    if (linha.tipo === "pedido") return linhaDePedido(linha);
     return (
       <div key={linha.chave} className="linha-reposicao">
         <span className="nome-reposicao">

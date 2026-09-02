@@ -20,7 +20,6 @@ import { dataDeHojeIso, horaDoInstante } from "../lib/data";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { contemBusca } from "../lib/texto";
 import { IconeConfere, IconeLixeira, IconeSeta, IconeSino } from "./Icones";
-import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
 import { AssistenteDeVoz } from "./AssistenteDeVoz";
 import {
@@ -548,7 +547,6 @@ export function PainelFornadasFilial({
         {sanfona("semResposta", "Pedidos sem resposta", semResposta, { cobraResposta: true })}
         {sanfona("concluidos", "Pedidos concluídos", concluidos)}
 
-        <TesteDeAvisos destino="matriz" />
       </div>
     </div>
   );

@@ -27,7 +27,7 @@ import {
   type PedidoFilial,
 } from "./types/pedido";
 import { base64DoDataUrl, resumoDaImpressao, type TrabalhoImpressao } from "./types/impressao";
-import { codigosComFornadaNoDia, idDaFornada, type FornadaPronta } from "./types/fornada";
+import { idDaFornada, type FornadaPronta } from "./types/fornada";
 import { codigosEncerrados, idDoEncerramento, type AnuncioEncerrado } from "./types/anuncio";
 import {
   agruparPorSegmento,
@@ -37,7 +37,6 @@ import {
 } from "./types/suprimento";
 import {
   avisarDesfechoReposicao,
-  avisarDesfechoSuprimentos,
   avisarFiliais,
   avisarListaAjustada,
   avisarListaDeSuprimentos,
@@ -50,7 +49,6 @@ import { ouvirAvisosEmPrimeiroPlano, registrarAparelhoSePermitido } from "./lib/
 import { AtivarAvisos } from "./components/AtivarAvisos";
 import { PainelFornoDeHoje } from "./components/PainelFornoDeHoje";
 import { PainelFornadasFilial } from "./components/PainelFornadasFilial";
-import { PainelPedidosFiliais } from "./components/PainelPedidosFiliais";
 import { TelaSuprimentos } from "./components/TelaSuprimentos";
 import { ExportarFita } from "./components/ExportarFita";
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "./lib/fornadasVistas";
@@ -671,33 +669,16 @@ export default function App() {
     ]);
   }
 
-  async function handleDecidirSuprimentos(
-    pedido: PedidoSuprimentos,
-    desfecho: "confirmado" | "cancelado",
-    motivo?: string
-  ) {
-    const agora = new Date().toISOString();
-    const atualizado: PedidoSuprimentos = {
-      ...pedido,
-      atendimento: {
-        desfecho,
-        por: operador,
-        em: agora,
-        ...(motivo ? { motivo } : {}),
-      },
-    };
-    await comRetorno(
-      () => repositorio!.salvarPedidoSuprimentos(atualizado),
-      desfecho === "confirmado" ? "Suprimentos confirmados." : "Suprimentos cancelados."
-    );
-    setPedidosSuprimentos((atual) => [...atual.filter((p) => p.id !== atualizado.id), atualizado]);
-
-    try {
-      await avisarDesfechoSuprimentos(pedido.lojaId, desfecho, motivo);
-    } catch (erro) {
-      console.warn("Decisão de suprimentos gravada, mas o aviso à filial não saiu:", erro);
-    }
-  }
+  /**
+   * A RESPOSTA À LISTA DE SUPRIMENTOS SAIU JUNTO COM O CARD (set/2026).
+   *
+   * Ela vivia só naquele card. A aba Suprimentos está fechada na
+   * implantação gradual (ver ABAS_LIBERADAS), então nenhuma lista nova
+   * chega enquanto isso — e quando a aba for liberada, a resposta entra
+   * na sanfona "Pedidos sem resposta", do mesmo jeito que a da
+   * reposição. Nada foi perdido no banco: as listas pendentes continuam
+   * gravadas esperando decisão.
+   */
 
   async function registrarReposicaoNaProducao(
     pedido: PedidoFilial,
@@ -996,20 +977,15 @@ export default function App() {
         {abaAtual === "fornada" &&
           (loja.papel === "matriz" ? (
             <>
-              <PainelPedidosFiliais
-                pedidos={pedidos}
-                data={diaCorrente}
-                somenteReposicoes
-                reposicoesDeHoje={pedidos.filter((p) => p.data === diaCorrente && p.tipo === "reposicao")}
-                onDecidirReposicao={handleDecidirReposicao}
-                pedidosSuprimentos={pedidosSuprimentos}
-                catalogoSuprimentos={suprimentos}
-                onDecidirSuprimentos={handleDecidirSuprimentos}
-                onImprimirReposicao={setReposicaoParaImprimir}
-                nomeDoProduto={(codigo) => produtos.find((p) => p.codigoPdv === codigo)?.nome ?? `#${codigo}`}
-                saiuDoForno={(codigo) => codigosComFornadaNoDia(fornadas, diaCorrente).has(codigo)}
-                onImprimirSuprimentos={setSuprimentosParaImprimir}
-              />
+              {/* O CARD "PEDIDOS DAS FILIAIS HOJE" SAIU (set/2026, decisão
+                  do dono do negócio). Ele repetia, num formato antigo, o
+                  que as sanfonas do painel abaixo já mostram — e ter dois
+                  lugares para o mesmo assunto fazia a matriz responder num
+                  e conferir no outro.
+
+                  A RESPOSTA NÃO SE PERDEU: `onDecidirReposicao` foi para
+                  dentro da sanfona "Pedidos sem resposta", que é onde a
+                  matriz já está olhando quando decide. */}
               <PainelFornoDeHoje
                 produtos={produtos}
                 fornadas={fornadas}
@@ -1020,6 +996,7 @@ export default function App() {
                 onReabrirTudo={handleReabrirTudo}
                 onMarcarFornada={handleMarcarFornada}
                 onCadastrarProduto={handleCadastroRelampago}
+                onDecidirReposicao={handleDecidirReposicao}
               />
             </>
           ) : (

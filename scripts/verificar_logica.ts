@@ -3425,10 +3425,51 @@ const perdas: RegistroPerda[] = [
       }),
     ],
   });
-  const pedido7 = comPedido.find((l) => l.codigoPdv === 7);
-  afirmar(pedido7?.situacao === "pedido", "loja pediu: o anuncio sai de 'sem resposta'");
-  afirmar(pedido7?.lojasQuePediram === 2, `duas lojas contam duas (obtido: ${pedido7?.lojasQuePediram})`);
-  afirmar(comPedido.filter(anuncioPendente).length === 1, "sobra o anuncio que ninguem pediu");
+  const anuncio7 = comPedido.find((l) => l.tipo === "anuncio" && l.codigoPdv === 7);
+  afirmar(anuncio7?.situacao === "pedido", "loja pediu: o anuncio sai de 'sem resposta'");
+  afirmar(
+    anuncio7?.lojasQuePediram === 2,
+    `duas lojas contam duas (obtido: ${anuncio7?.lojasQuePediram})`
+  );
+  afirmar(
+    comPedido.filter((l) => l.tipo === "anuncio" && anuncioPendente(l)).length === 1,
+    "sobra o anuncio que ninguem pediu"
+  );
+
+  /**
+   * O QUE AS FILIAIS PEDIRAM APARECE PARA A MATRIZ (set/2026), na mesma
+   * sanfona: é ali que ela responde, desde que o card separado saiu.
+   */
+  const daFilial = comPedido.filter((l) => l.tipo === "pedido");
+  afirmar(daFilial.length === 2, `os dois pedidos das filiais entram (obtido: ${daFilial.length})`);
+  afirmar(daFilial.every(anuncioPendente), "pedido sem decisao fica em 'sem resposta'");
+  afirmar(
+    daFilial.every((l) => l.pedido !== undefined),
+    "a linha carrega o documento — e a matriz responde a partir dele"
+  );
+  afirmar(
+    daFilial.some((l) => l.lojaId === "FILIAL_BENJAMIN_CONSTANT" && l.pedidoUnidades === 4),
+    "a linha diz qual loja pediu e quanto"
+  );
+
+  const pedidoRespondido = montarLinhasDaMatriz({
+    fornadas: [],
+    hoje: HOJE,
+    encerrados: vazio,
+    pedidos: [
+      rep("m4", `${HOJE}T11:00:00.000Z`, [{ codigoPdv: 7, quantidadeUnidades: 10 }], {
+        atendimento: {
+          desfecho: "cancelado",
+          motivo: "acabou a farinha",
+          decididoPor: "Matriz",
+          decididoEm: `${HOJE}T11:30:00.000Z`,
+        },
+      } as Partial<PedidoFilial>),
+    ],
+  });
+  afirmar(pedidoRespondido.length === 1, "pedido respondido continua visivel para a matriz");
+  afirmar(pedidoRespondido[0].situacao === "encerrado", "recusado sai de 'sem resposta'");
+  afirmar(pedidoRespondido[0].motivo === "acabou a farinha", "e leva o motivo junto");
 
   const encerradoNaMatriz = daMatriz({ encerrados: new Set([7]) });
   afirmar(
@@ -3436,7 +3477,7 @@ const perdas: RegistroPerda[] = [
     "tirado da vitrine vira 'encerrado' — e continua visivel para a matriz"
   );
   afirmar(
-    encerradoNaMatriz.length === 2,
+    encerradoNaMatriz.filter((l) => l.tipo === "anuncio").length === 2,
     "encerrar NAO some da tela da matriz: vai para os concluidos"
   );
   const encerradoEPedido = daMatriz({
@@ -3444,7 +3485,7 @@ const perdas: RegistroPerda[] = [
     pedidos: [rep("m3", `${HOJE}T11:00:00.000Z`, [{ codigoPdv: 7, quantidadeUnidades: 10 }])],
   });
   afirmar(
-    encerradoEPedido.find((l) => l.codigoPdv === 7)?.situacao === "encerrado",
+    encerradoEPedido.find((l) => l.tipo === "anuncio" && l.codigoPdv === 7)?.situacao === "encerrado",
     "encerrar e a decisao mais recente e ganha de 'pedido'"
   );
 
