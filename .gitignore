@@ -3,3 +3,9 @@ dist/
 .env
 .env.local
 *.log
+
+# Bancada de teste temporaria e arquivos de sincronizacao (nao pertencem ao app)
+harness-tmp/
+verificar-repo.mjs
+_to_delete/
+_sync_tmp.tgz
