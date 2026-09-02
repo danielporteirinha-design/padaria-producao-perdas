@@ -62,6 +62,8 @@ export function PainelFornadasFilial({
 }: PainelFornadasFilialProps) {
   const hoje = dataDeHojeIso();
   const [busca, setBusca] = useState("");
+  /** O microfone está aberto? Enquanto estiver, a busca some da tela. */
+  const [ouvindoVoz, setOuvindoVoz] = useState(false);
   const [codigoPedindo, setCodigoPedindo] = useState<number | null>(null);
   const [quantidade, setQuantidade] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -427,6 +429,7 @@ export function PainelFornadasFilial({
           produtos={produtos}
           modo="pedir"
           acao="adicionar"
+          onOuvindoMudou={setOuvindoVoz}
           onConfirmar={async (ditados) =>
             acrescentar(
               ditados
@@ -439,16 +442,23 @@ export function PainelFornadasFilial({
           }
         />
 
-        <CampoDeBusca
-          className="busca-forno"
-          valor={busca}
-          onMudar={(v) => {
-            setBusca(v);
-            setCodigoPedindo(null);
-          }}
-          placeholder="Buscar produto para pedir..."
-          rotulo="Buscar produto pelo nome"
-        />
+        {/* A BUSCA SOME ENQUANTO O MICROFONE ESTÁ ABERTO (set/2026,
+            pedido do dono do negócio). Quem está falando não vai digitar
+            ao mesmo tempo, e o campo logo abaixo do botão disputa espaço
+            e atenção justamente no momento em que a pessoa precisa se
+            concentrar na frase. */}
+        {!ouvindoVoz && (
+          <CampoDeBusca
+            className="busca-forno"
+            valor={busca}
+            onMudar={(v) => {
+              setBusca(v);
+              setCodigoPedindo(null);
+            }}
+            placeholder="Buscar produto para pedir..."
+            rotulo="Buscar produto pelo nome"
+          />
+        )}
 
         {busca.trim().length > 0 &&
           (resultados.length === 0 ? (

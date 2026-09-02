@@ -68,6 +68,8 @@ export function PainelFornoDeHoje({
 }: PainelFornoDeHojeProps) {
   const [marcando, setMarcando] = useState<number | null>(null);
   const [busca, setBusca] = useState("");
+  /** O microfone está aberto? Enquanto estiver, a busca some da tela. */
+  const [ouvindoVoz, setOuvindoVoz] = useState(false);
   const [cadastrando, setCadastrando] = useState(false);
   const [categoriaNova, setCategoriaNova] = useState("");
   const [salvandoNovo, setSalvandoNovo] = useState(false);
@@ -418,6 +420,7 @@ export function PainelFornoDeHoje({
         <AssistenteDeVoz
           produtos={produtos}
           modo="anunciar"
+          onOuvindoMudou={setOuvindoVoz}
           onConfirmar={async (itens) => {
             if (!itens || itens.length === 0) {
               setFeedbackVoz({
@@ -473,19 +476,26 @@ export function PainelFornoDeHoje({
           </div>
         )}
 
-        <CampoDeBusca
-          className="busca-forno"
-          valor={busca}
-          onMudar={setBusca}
-          placeholder="Buscar produto para anunciar..."
-          rotulo="Buscar produto no catálogo para anunciar a fornada"
-        >
-          {buscando && (
-            <button type="button" className="link" onClick={() => setBusca("")}>
-              limpar
-            </button>
-          )}
-        </CampoDeBusca>
+        {/* A BUSCA SOME ENQUANTO O MICROFONE ESTÁ ABERTO (set/2026,
+            pedido do dono do negócio). Quem está falando não vai digitar
+            ao mesmo tempo, e o campo logo abaixo do botão disputa espaço
+            e atenção justamente no momento em que a pessoa precisa se
+            concentrar na frase. */}
+        {!ouvindoVoz && (
+          <CampoDeBusca
+            className="busca-forno"
+            valor={busca}
+            onMudar={setBusca}
+            placeholder="Buscar produto para anunciar..."
+            rotulo="Buscar produto no catálogo para anunciar a fornada"
+          >
+            {buscando && (
+              <button type="button" className="link" onClick={() => setBusca("")}>
+                limpar
+              </button>
+            )}
+          </CampoDeBusca>
+        )}
 
         {buscando ? (
           <>

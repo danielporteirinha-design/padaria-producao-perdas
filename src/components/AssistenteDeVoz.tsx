@@ -67,6 +67,15 @@ interface AssistenteDeVozProps {
    */
   acao?: "enviar" | "adicionar";
   onConfirmar: (itens: ItemDitado[]) => Promise<void>;
+  /**
+   * Avisa a tela que o microfone abriu ou fechou (set/2026).
+   *
+   * Quem está falando não vai digitar ao mesmo tempo, e a barra de busca
+   * logo abaixo do botão só disputa espaço e atenção no momento em que a
+   * pessoa precisa se concentrar na frase. Quem esconde é a tela, não
+   * este componente: ele não conhece o que está em volta dele.
+   */
+  onOuvindoMudou?: (ouvindo: boolean) => void;
 }
 
 export function AssistenteDeVoz({
@@ -74,8 +83,13 @@ export function AssistenteDeVoz({
   modo,
   acao = "enviar",
   onConfirmar,
+  onOuvindoMudou,
 }: AssistenteDeVozProps) {
   const [ouvindo, setOuvindo] = useState(false);
+  useEffect(() => {
+    onOuvindoMudou?.(ouvindo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ouvindo]);
   const [pensando, setPensando] = useState(false);
   const [frase, setFrase] = useState("");
   const [itens, setItens] = useState<ItemDitado[]>([]);
@@ -324,6 +338,46 @@ export function AssistenteDeVoz({
       {pensando && <p className="nota-rodape">Entendendo o que você disse...</p>}
       {erro && <p className="erro-conversao">{erro}</p>}
 
+      {/* O BLOCO VERMELHO VEM ANTES DA CONFERÊNCIA, E FORA DELA
+          (set/2026, pedido do dono do negócio).
+
+          Ele vivia DENTRO do cartão de conferência, que só existe quando
+          algum item foi reconhecido. Quando o microfone não entendia
+          NADA — o caso mais comum na matriz, que anuncia um produto por
+          vez — o cartão não aparecia, e com ele sumia justamente o aviso
+          que dizia o que tinha sido ouvido. Sobrava a frase genérica
+          "não achei nenhum produto", sem o texto para corrigir.
+
+          Fora do cartão, ele vale para os dois casos: nada reconhecido,
+          e parte reconhecida. */}
+          {/* O QUE NÃO ENTROU NA LISTA, EM VERMELHO E NEGRITO (set/2026,
+          pedido do dono do negócio).
+
+          Sumir em silêncio faria a pessoa achar que pediu dez itens
+          quando pediu oito — e o item que faltou é o que vai faltar
+          na entrega. Antes isto era uma nota de rodapé cinza, do
+          mesmo tamanho e peso de "informe a quantidade": duas
+          mensagens com urgências muito diferentes, escritas igual.
+
+          Agora tem bloco próprio, borda vermelha e o texto do jeito
+          que o microfone ouviu — porque é ele que a pessoa precisa
+          repetir diferente, ou corrigir na busca. */}
+      {sobras.length > 0 && (
+        <div className="fora-da-lista">
+          <strong className="titulo-fora-da-lista">
+        {sobras.length === 1 ? "Não entrou na lista:" : "Não entraram na lista:"}
+          </strong>
+      {sobras.map((sobra, indice) => (
+            <span key={`${sobra}-${indice}`} className="trecho-fora-da-lista">
+              {sobra}
+            </span>
+          ))}
+          <span className="dica-fora-da-lista">
+            Fale de novo só este item, ou procure pelo nome na busca.
+          </span>
+        </div>
+      )}
+
       {itens.length > 0 && (
         <div className="conferencia-voz">
           <strong className="pergunta-conferencia">{pergunta}</strong>
@@ -378,33 +432,6 @@ export function AssistenteDeVoz({
             </div>
           ))}
 
-          {/* O QUE NÃO ENTROU NA LISTA, EM VERMELHO E NEGRITO (set/2026,
-              pedido do dono do negócio).
-
-              Sumir em silêncio faria a pessoa achar que pediu dez itens
-              quando pediu oito — e o item que faltou é o que vai faltar
-              na entrega. Antes isto era uma nota de rodapé cinza, do
-              mesmo tamanho e peso de "informe a quantidade": duas
-              mensagens com urgências muito diferentes, escritas igual.
-
-              Agora tem bloco próprio, borda vermelha e o texto do jeito
-              que o microfone ouviu — porque é ele que a pessoa precisa
-              repetir diferente, ou corrigir na busca. */}
-          {sobras.length > 0 && (
-            <div className="fora-da-lista">
-              <strong className="titulo-fora-da-lista">
-                {sobras.length === 1 ? "Não entrou na lista:" : "Não entraram na lista:"}
-              </strong>
-              {sobras.map((sobra, indice) => (
-                <span key={`${sobra}-${indice}`} className="trecho-fora-da-lista">
-                  {sobra}
-                </span>
-              ))}
-              <span className="dica-fora-da-lista">
-                Fale de novo só este item, ou procure pelo nome na busca.
-              </span>
-            </div>
-          )}
           {faltaQuantidade && (
             <p className="nota-rodape">Informe a quantidade dos itens em branco.</p>
           )}
