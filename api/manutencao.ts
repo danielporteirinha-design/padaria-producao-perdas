@@ -206,9 +206,67 @@ async function aparelhosRegistrados(nomesDeTeste: string[], ativa: boolean) {
   }
 }
 
+/**
+ * LIMPEZA DOS REGISTROS ANTIGOS — /api/manutencao?limpar=1
+ *
+ * A lista de aparelhos acumula lixo: cada teste com um nome digitado às
+ * pressas ("q", "a", "sasas") deixa um registro, e cada envio gasta uma
+ * tentativa em celular que não existe mais. Isto apaga TODOS os
+ * registros que NÃO são aparelho de teste.
+ *
+ * DUAS TRAVAS, porque isto apaga dado:
+ * 1. Só funciona com a MANUTENÇÃO LIGADA — fora dela, apagar registro
+ *    deixaria a equipe sem aviso no meio do expediente, sem ninguém
+ *    entender por quê.
+ * 2. Nunca apaga um aparelho de teste: quem está testando não pode se
+ *    desconectar sozinho no meio do teste.
+ *
+ * NINGUÉM FICA SEM AVISO PARA SEMPRE: o registro volta na primeira vez
+ * que a pessoa abre o app naquele aparelho — é automático, ver
+ * `registrarAparelhoSePermitido` em src/lib/notificacoes.ts.
+ */
+async function limparRegistrosAntigos(nomesDeTeste: string[]) {
+  const bruto = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!bruto) return { erro: "Sem credencial para limpar." };
+  try {
+    const [app, firestore] = await Promise.all([
+      import("firebase-admin/app"),
+      import("firebase-admin/firestore"),
+    ]);
+    const { cert, getApp, getApps, initializeApp } = app;
+    const aplicativo =
+      getApps().length > 0
+        ? getApp()
+        : initializeApp({
+            credential: cert(JSON.parse(bruto) as import("firebase-admin/app").ServiceAccount),
+          });
+    const colecao = firestore.getFirestore(aplicativo).collection("dispositivos");
+    const snapshot = await colecao.get();
+
+    let apagados = 0;
+    for (const documento of snapshot.docs) {
+      const operador = (documento.get("registradoPor") as string) ?? "";
+      if (ehAparelhoDeTeste(operador, nomesDeTeste)) continue;
+      await documento.ref.delete();
+      apagados++;
+    }
+    return { apagados, restantes: snapshot.size - apagados };
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message.slice(0, 300) : String(e).slice(0, 300) };
+  }
+}
+
 export default async function handler(req: any, res: any) {
   const ativa = manutencaoAtiva(process.env.MANUTENCAO);
   const nomes = operadoresDeTeste(process.env.APARELHOS_DE_TESTE);
+
+  let limpeza: unknown;
+  if (req.query?.limpar) {
+    limpeza = ativa
+      ? await limparRegistrosAntigos(nomes)
+      : { erro: "Ligue MANUTENCAO antes de limpar — fora dela isso deixaria a equipe sem aviso." };
+  }
+
   const aparelhos = await aparelhosRegistrados(nomes, ativa);
 
   res.status(200).json({
@@ -217,6 +275,7 @@ export default async function handler(req: any, res: any) {
     // vê-los é o que permite descobrir por que um aparelho não recebe.
     aparelhosDeTeste: nomes,
     aparelhosRegistrados: aparelhos,
+    limpeza,
     aviso:
       ativa && nomes.length === 0
         ? "Manutenção LIGADA sem APARELHOS_DE_TESTE: NINGUÉM está recebendo aviso."

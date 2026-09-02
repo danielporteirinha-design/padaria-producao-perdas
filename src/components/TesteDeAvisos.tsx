@@ -97,8 +97,9 @@ export function TesteDeAvisos({ destino }: TesteDeAvisosProps) {
           (r.removidos ? ` · ${r.removidos} token(s) vencido(s) removido(s)` : "") +
           ((r.motivos ?? []).length ? ` · FCM: ${(r.motivos ?? []).join(", ")}` : "")
       );
-    } catch {
-      setMensagem("Falha ao enviar aviso de teste.");
+    } catch (erro) {
+      // A causa vem junto: sem ela, todas as falhas se parecem.
+      setMensagem(erro instanceof Error ? erro.message : "Falha ao enviar aviso de teste.");
     } finally {
       setTestando(false);
     }

@@ -82,11 +82,32 @@ async function dispararAviso(corpo: Record<string, unknown>): Promise<ResultadoD
       body: JSON.stringify(corpo),
       signal: relogio.signal,
     });
-    if (!resposta.ok) throw new Error(`Servidor respondeu ${resposta.status}`);
+    if (!resposta.ok) {
+      /**
+       * O MOTIVO DO SERVIDOR VAI PARA A TELA (set/2026).
+       *
+       * "Falha ao enviar aviso de teste" já custou várias rodadas de
+       * investigação: ela é idêntica para credencial expirada (401),
+       * função quebrada (500) e endereço errado (404), que pedem
+       * providências completamente diferentes. O servidor sempre disse
+       * qual era — a mensagem é que jogava fora.
+       */
+      const detalhe = await resposta.text().catch(() => "");
+      let motivo = detalhe.slice(0, 200);
+      try {
+        motivo = (JSON.parse(detalhe) as { erro?: string }).erro ?? motivo;
+      } catch {
+        /* corpo não é JSON — vale o texto cru */
+      }
+      throw new ErroAviso(`Servidor recusou (${resposta.status}): ${motivo || "sem detalhe"}`);
+    }
     return (await resposta.json()) as ResultadoDoAviso;
   } catch (erro) {
     console.warn("Falha ao enviar aviso:", erro);
-    throw new ErroAviso("Não foi possível enviar o aviso agora.");
+    if (erro instanceof ErroAviso) throw erro;
+    throw new ErroAviso(
+      erro instanceof Error ? `Não consegui falar com o servidor: ${erro.message}` : "Falha no aviso."
+    );
   } finally {
     clearTimeout(prazo);
   }
