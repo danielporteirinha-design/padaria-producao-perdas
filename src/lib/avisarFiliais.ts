@@ -47,6 +47,10 @@ export const SEGUNDOS_ATE_DESISTIR_DO_AVISO = 12;
 export interface ResultadoDoAviso {
   enviados: number;
   registrados: number;
+  /** Quantos o FCM recusou, e por quê — a tela mostra os dois. */
+  falharam?: number;
+  /** Tokens vencidos que o servidor removeu neste envio. */
+  removidos?: number;
   motivos?: string[];
   /** Modo de manutenção ligado — ver api/manutencao.ts. */
   manutencao?: boolean;

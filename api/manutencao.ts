@@ -86,9 +86,21 @@ export function ehAparelhoDeTeste(
   if (nomesDeTeste.length === 0) return false;
   const nome = normalizar(registradoPor ?? "");
   if (nome === "") return false;
-  // `includes` dos dois lados: "Daniel" casa com "Daniel Sarmento", e
-  // quem cadastrou o nome completo na variável também é encontrado.
-  return nomesDeTeste.some((teste) => nome.includes(teste) || teste.includes(nome));
+  /**
+   * A COMPARAÇÃO É DE UM LADO SÓ, e isso é uma correção (set/2026).
+   *
+   * Antes ela valia nos dois sentidos, e o diagnóstico ao vivo mostrou o
+   * estrago: um aparelho registrado com o nome "a" passava pelo filtro,
+   * porque "DANIEL".includes("A") é verdadeiro. Qualquer letra solta que
+   * aparecesse no nome configurado — a, d, e, i, l, n — furava a
+   * manutenção, e o celular de quem digitou uma letra por engano tocava
+   * durante os testes.
+   *
+   * Agora só vale o sentido que interessa: o nome GRAVADO NO APARELHO
+   * precisa conter o nome configurado. "Daniel Sarmento" casa com
+   * "Daniel"; "a" não casa com nada.
+   */
+  return nomesDeTeste.some((teste) => nome.includes(teste));
 }
 
 export interface AparelhoRegistrado {
