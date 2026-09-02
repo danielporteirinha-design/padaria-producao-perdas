@@ -43,6 +43,12 @@ interface TelaSuprimentosProps {
   hoje: string;
   onCadastrarSuprimento: (suprimento: Suprimento) => Promise<void>;
   onEnviarLista: (pedido: PedidoSuprimentos) => Promise<void>;
+  /**
+   * Manda a lista para a impressão (set/2026, pedido do dono do
+   * negócio). A loja separa o material com o papel na mão, andando pelo
+   * estoque — ler do celular enquanto se carrega caixa não funciona.
+   */
+  onImprimir?: (pedido: PedidoSuprimentos) => void;
 }
 
 export function TelaSuprimentos({
@@ -53,6 +59,7 @@ export function TelaSuprimentos({
   hoje,
   onCadastrarSuprimento,
   onEnviarLista,
+  onImprimir,
 }: TelaSuprimentosProps) {
   const [expandido, setExpandido] = useState<Record<string, boolean>>({});
   const [itemAtivo, setItemAtivo] = useState<string | null>(null);
@@ -448,6 +455,30 @@ export function TelaSuprimentos({
       >
         {enviando ? "Enviando..." : jaEnviado ? "Atualizar" : `Enviar (${totalItens})`}
       </button>
+
+      {/* IMPRIMIR A LISTA (set/2026). Imprime o que está montado agora —
+          enviado ou não —, porque quem vai separar o material precisa do
+          papel na mão antes de a matriz responder qualquer coisa. */}
+      {onImprimir && totalItens > 0 && (
+        <button
+          type="button"
+          className="secundario largura-cheia"
+          onClick={() =>
+            onImprimir({
+              id: idDoPedidoSuprimentos(hoje, loja.id),
+              lojaId: loja.id,
+              data: hoje,
+              itens: itens.filter((i) => i.quantidade > 0),
+              status: pedidoDeHoje?.status ?? "rascunho",
+              criadoPor: pedidoDeHoje?.criadoPor ?? operador,
+              criadoEm: pedidoDeHoje?.criadoEm ?? new Date().toISOString(),
+              enviadoEm: pedidoDeHoje?.enviadoEm,
+            })
+          }
+        >
+          Imprimir lista ({totalItens})
+        </button>
+      )}
       <p className="nota-rodape">Enviando como {operador}, pela {loja.nome}.</p>
     </div>
   );

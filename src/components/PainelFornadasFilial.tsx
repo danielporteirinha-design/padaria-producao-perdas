@@ -47,6 +47,12 @@ interface PainelFornadasFilialProps {
   operador: string;
   encerrados: Set<number>;
   onSalvarPedido: (pedido: PedidoFilial) => Promise<void>;
+  /**
+   * Manda a lista em montagem para a impressão (set/2026, pedido do dono
+   * do negócio). Quem vai buscar a mercadoria na matriz anda com o papel
+   * na mão — conferir pelo celular com as mãos ocupadas não funciona.
+   */
+  onImprimir?: (pedido: PedidoFilial) => void;
 }
 
 export function PainelFornadasFilial({
@@ -59,6 +65,7 @@ export function PainelFornadasFilial({
   operador,
   encerrados,
   onSalvarPedido,
+  onImprimir,
 }: PainelFornadasFilialProps) {
   const hoje = dataDeHojeIso();
   const [busca, setBusca] = useState("");
@@ -607,6 +614,29 @@ export function PainelFornadasFilial({
                 </button>
               )}
 
+              {/* IMPRIMIR O QUE ESTÁ MONTADO, enviado ou não: quem vai
+                  buscar a mercadoria precisa do papel antes de a matriz
+                  responder. */}
+              {onImprimir && (
+                <button
+                  type="button"
+                  className="secundario"
+                  onClick={() =>
+                    onImprimir({
+                      id: idDaReposicao(hoje, loja.id, new Date().toISOString()),
+                      lojaId: loja.id,
+                      data: hoje,
+                      itens: itens.filter((i) => i.quantidadeUnidades > 0),
+                      status: "rascunho",
+                      tipo: "reposicao",
+                      criadoPor: operador,
+                      criadoEm: new Date().toISOString(),
+                    })
+                  }
+                >
+                  Imprimir
+                </button>
+              )}
               <button
                 type="button"
                 className="primario"

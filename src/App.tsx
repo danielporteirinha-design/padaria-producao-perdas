@@ -84,8 +84,10 @@ interface DefinicaoAba {
  */
 const ABAS_LIBERADAS: Aba[] = [
   "fornada",
+  // Suprimentos voltou em set/2026: a Reposição já rodou no balcão, e a
+  // lista de embalagens é a segunda coisa que a filial pede todo dia.
+  "suprimentos",
   // "perdas",
-  // "suprimentos",
   // "cronograma",   (matriz — Lista de Produção)
   // "pedido",       (filial — Lista de Produção)
   // "cadastro",     (matriz — Produtos)
@@ -1017,6 +1019,7 @@ export default function App() {
               operador={operador}
               encerrados={codigosEncerrados(anunciosEncerrados, diaCorrente)}
               onSalvarPedido={handleSalvarPedido}
+              onImprimir={setReposicaoParaImprimir}
             />
           ))}
 
@@ -1029,6 +1032,7 @@ export default function App() {
             hoje={diaCorrente}
             onCadastrarSuprimento={handleCadastrarSuprimento}
             onEnviarLista={handleEnviarSuprimentos}
+            onImprimir={setSuprimentosParaImprimir}
           />
         )}
 
