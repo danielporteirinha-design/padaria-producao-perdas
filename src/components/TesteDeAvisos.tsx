@@ -20,6 +20,12 @@ export function TesteDeAvisos({ destino }: TesteDeAvisosProps) {
     setMensagem(null);
     try {
       const r = await testarAvisos(destino);
+      if (r.conferencia) {
+        // Conferência, não disparo: o servidor conta e responde.
+        setMensagem(r.aviso ?? `${r.registrados} aparelho(s) prontos para receber.`);
+        setDetalhe(null);
+        return;
+      }
       if (r.enviados > 0) {
         setMensagem(`Enviado para ${r.enviados} aparelho${r.enviados > 1 ? "s" : ""}.`);
       } else if (!r.registrados) {

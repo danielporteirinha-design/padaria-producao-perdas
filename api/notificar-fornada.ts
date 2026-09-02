@@ -282,6 +282,30 @@ export default async function handler(req: any, res: any) {
       .map((documento) => documento.get("token") as string)
       .filter((token): token is string => Boolean(token));
 
+    /**
+     * O TESTE NÃO ENTREGA MAIS AVISO (set/2026, decisão do dono do
+     * negócio: "somente a mensagem de status já é suficiente").
+     *
+     * O botão existe para responder uma pergunta de configuração — há
+     * aparelho registrado do outro lado? —, e ele respondia tocando a
+     * campainha em todas as filiais. Cada conferência custava uma
+     * interrupção no balcão de três lojas, e o operador aprende rápido a
+     * ignorar um aviso que às vezes é só teste. Agora conta e responde,
+     * sem tocar em ninguém.
+     */
+    if (teste) {
+      res.status(200).json({
+        enviados: 0,
+        registrados: tokens.length,
+        conferencia: true,
+        aviso:
+          tokens.length > 0
+            ? `${tokens.length} aparelho(s) prontos para receber. Nenhum aviso foi disparado.`
+            : "Nenhum aparelho registrado do outro lado.",
+      });
+      return;
+    }
+
     if (tokens.length === 0) {
       res.status(200).json({
         enviados: 0,

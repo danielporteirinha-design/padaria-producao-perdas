@@ -447,7 +447,8 @@ button.link {
    clicáveis. Agora são dois blocos altos, com borda e sombra, que se
    leem como botão: o dedo sabe onde tocar sem ninguém explicar.
    --------------------------------------------------------------- */
-.corpo-fornadas .acordeao-sessao {
+.corpo-fornadas .acordeao-sessao,
+.corpo-forno .acordeao-sessao {
   margin-bottom: 12px;
   border: 2px solid var(--cor-borda);
   border-radius: 14px;
@@ -455,20 +456,24 @@ button.link {
   box-shadow: 0 1px 3px rgba(36, 31, 24, 0.07);
   overflow: hidden;
 }
-.corpo-fornadas .acordeao-sessao.aberta {
+.corpo-fornadas .acordeao-sessao.aberta,
+.corpo-forno .acordeao-sessao.aberta {
   border-color: var(--cor-acento);
 }
-.corpo-fornadas .abrir-sessao {
+.corpo-fornadas .abrir-sessao,
+.corpo-forno .abrir-sessao {
   /* Alto como um botão quadrado, não como uma linha de lista. */
   min-height: 88px;
   padding: 18px 16px;
   gap: 12px;
 }
-.corpo-fornadas .abrir-sessao .nome-sessao {
+.corpo-fornadas .abrir-sessao .nome-sessao,
+.corpo-forno .abrir-sessao .nome-sessao {
   font-size: 18px;
   line-height: 1.25;
 }
-.corpo-fornadas .acordeao-sessao.aberta .abrir-sessao .nome-sessao {
+.corpo-fornadas .acordeao-sessao.aberta .abrir-sessao .nome-sessao,
+.corpo-forno .acordeao-sessao.aberta .abrir-sessao .nome-sessao {
   color: var(--cor-acento);
 }
 

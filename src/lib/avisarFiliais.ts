@@ -52,6 +52,8 @@ export interface ResultadoDoAviso {
   /** Tokens vencidos que o servidor removeu neste envio. */
   removidos?: number;
   motivos?: string[];
+  /** Resposta do botão de teste: conta os aparelhos e não dispara nada. */
+  conferencia?: boolean;
   aviso?: string;
 }
 

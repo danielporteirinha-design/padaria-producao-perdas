@@ -4,7 +4,7 @@
  * Marcação de fornada pronta, ao longo do expediente.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
@@ -12,6 +12,12 @@ import type { PedidoFilial } from "../types/pedido";
 import type { LinhaDaMatriz } from "../lib/reposicaoDoDia";
 import { anuncioPendente, montarLinhasDaMatriz } from "../lib/reposicaoDoDia";
 import { horaDoInstante } from "../lib/data";
+import {
+  lerConcluidosVistos,
+  limparConcluidosVistosAntigos,
+  marcarConcluidosVistos,
+  naoVistos,
+} from "../lib/concluidosVistos";
 import { LOJAS } from "../lib/lojas";
 import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
@@ -29,7 +35,6 @@ interface PainelFornoDeHojeProps {
   dataHoje: string;
   encerrados: Set<number>;
   onEncerrarAnuncio: (codigoPdv: number) => Promise<void>;
-  onReabrirTudo: () => Promise<void>;
   onMarcarFornada: (
     codigoPdv: number,
     nomeConhecido?: string,
@@ -56,7 +61,6 @@ export function PainelFornoDeHoje({
   dataHoje,
   encerrados,
   onEncerrarAnuncio,
-  onReabrirTudo,
   onMarcarFornada,
   onCadastrarProduto,
   onDecidirReposicao,
@@ -68,6 +72,27 @@ export function PainelFornoDeHoje({
   const [salvandoNovo, setSalvandoNovo] = useState(false);
 
   const [aberta, setAberta] = useState<Record<string, boolean>>({});
+  /**
+   * O SINO TAMBÉM VALE PARA OS CONCLUÍDOS (set/2026, pedido do dono do
+   * negócio): a confirmação que chegou e ainda não foi lida precisa
+   * chamar, senão cai numa sanfona fechada e ninguém descobre.
+   *
+   * "Lido" é abrir a sanfona, e é informação DESTE aparelho — ver
+   * src/lib/concluidosVistos.ts.
+   */
+  const [vistos, setVistos] = useState(() => lerConcluidosVistos("MATRIZ", dataHoje));
+  useEffect(() => {
+    limparConcluidosVistosAntigos(dataHoje);
+  }, [dataHoje]);
+
+  function alternarSanfona(chave: string, lista: { chave: string }[]) {
+    const vaiAbrir = !aberta[chave];
+    setAberta((a) => ({ ...a, [chave]: vaiAbrir }));
+    if (vaiAbrir && chave === "concluidos") {
+      setVistos(marcarConcluidosVistos("MATRIZ", dataHoje, lista.map((l) => l.chave)));
+    }
+  }
+
   /** Qual linha está sendo respondida agora, e o motivo em digitação. */
   const [decidindo, setDecidindo] = useState<string | null>(null);
   const [recusa, setRecusa] = useState<{ chave: string; motivo: string } | null>(null);
@@ -177,6 +202,7 @@ export function PainelFornoDeHoje({
     { cobraResposta = false }: { cobraResposta?: boolean } = {}
   ) {
     const abertaAgora = !!aberta[chave];
+    const novidades = cobraResposta ? 0 : naoVistos(lista, vistos);
     return (
       <div className={`acordeao-sessao ${abertaAgora ? "aberta" : ""}`}>
         <div className="cabecalho-sessao">
@@ -184,23 +210,25 @@ export function PainelFornoDeHoje({
             type="button"
             className="abrir-sessao"
             aria-expanded={abertaAgora}
-            onClick={() => setAberta((a) => ({ ...a, [chave]: !a[chave] }))}
+            onClick={() => alternarSanfona(chave, lista)}
           >
             <span className="nome-sessao">{titulo}</span>
             {/* O SINO NO LUGAR DA CONTAGEM ESCRITA — mesmo motivo da tela
                 da filial: o número é lido, o sino é reconhecido. */}
-            {lista.length > 0 && !cobraResposta && (
+            {lista.length > 0 && !cobraResposta && novidades === 0 && (
               <span className="contagem-itens">
                 {lista.length} {lista.length === 1 ? "item" : "itens"}
               </span>
             )}
-            {lista.length > 0 && cobraResposta && (
+            {(cobraResposta ? lista.length > 0 : novidades > 0) && (
               <span
                 className="sino-sessao"
-                aria-label={`${lista.length} ${lista.length === 1 ? "registro" : "registros"}`}
+                aria-label={`${cobraResposta ? lista.length : novidades} ${
+                  (cobraResposta ? lista.length : novidades) === 1 ? "registro" : "registros"
+                }`}
               >
                 <IconeSino tamanho={22} />
-                <em className="contagem-sino">{lista.length}</em>
+                <em className="contagem-sino">{cobraResposta ? lista.length : novidades}</em>
               </span>
             )}
             <IconeSeta className="seta-sessao" />
@@ -331,16 +359,16 @@ export function PainelFornoDeHoje({
             <span className="reposicao-negada">Anúncio excluído pela matriz</span>
           )}
 
-          <span className="acoes-fornada">
-            {linha.situacao === "encerrado" ? (
-              <button
-                type="button"
-                className="botao-fornada pedir"
-                onClick={() => void onReabrirTudo()}
-              >
-                Anunciar novamente
-              </button>
-            ) : (
+          {/* AÇÃO SÓ NO QUE AINDA ESPERA RESPOSTA (set/2026, decisão do
+              dono do negócio: "está gerando ruído").
+
+              Em "Pedidos concluídos" a linha é histórico — já foi
+              decidida. A lixeira e o "anunciar novamente" ali ofereciam
+              ação sobre coisa resolvida, e cada botão a mais numa lista
+              de leitura rápida é uma decisão a mais para tomar. Quem
+              ainda pode ser tirado da vitrine é o anúncio pendente. */}
+          {linha.situacao === "pendente" && (
+            <span className="acoes-fornada">
               <button
                 type="button"
                 className="botao-fornada excluir"
@@ -350,8 +378,8 @@ export function PainelFornoDeHoje({
               >
                 <IconeLixeira tamanho={15} />
               </button>
-            )}
-          </span>
+            </span>
+          )}
         </span>
 
         {linha.unidades !== undefined && (

@@ -487,15 +487,13 @@ export default function App() {
     setAnunciosEncerrados((atual) => atual.filter((a) => a.id !== id));
   }
 
-  async function handleReabrirTudo() {
-    const hoje = dataDeHojeIso();
-    const doDia = anunciosEncerrados.filter((a) => a.data === hoje);
-    if (doDia.length === 0) return;
-    await comRetorno(async () => {
-      for (const anuncio of doDia) await repositorio!.reabrirAnuncio(anuncio.id);
-    }, "Itens de volta na lista.");
-    setAnunciosEncerrados((atual) => atual.filter((a) => a.data !== hoje));
-  }
+  /**
+   * "Anunciar novamente" saiu da tela (set/2026): em "Pedidos
+   * concluídos" a linha é histórico, e oferecer ação sobre coisa já
+   * decidida virou ruído. `reabrirAnuncio` continua no repositório —
+   * é ele que devolve o produto à vitrine quando a matriz anuncia de
+   * novo pela busca ou pela voz.
+   */
 
   const carregarFornadasDoPeriodo = useCallback(
     (dataInicio: string, dataFim: string): Promise<FornadaPronta[]> =>
@@ -986,7 +984,6 @@ export default function App() {
                 dataHoje={diaCorrente}
                 encerrados={codigosEncerrados(anunciosEncerrados, diaCorrente)}
                 onEncerrarAnuncio={handleEncerrarAnuncio}
-                onReabrirTudo={handleReabrirTudo}
                 onMarcarFornada={handleMarcarFornada}
                 onCadastrarProduto={handleCadastroRelampago}
                 onDecidirReposicao={handleDecidirReposicao}

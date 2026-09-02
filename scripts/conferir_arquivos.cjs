@@ -78,6 +78,8 @@ const CONFERENCIAS = [
 
   // --- O aviso é desenhado pelo NAVEGADOR, e não pelo service worker
   ["api/notificar-fornada.ts", "webpush: {", "Aviso com bloco notification"],
+  ["src/lib/concluidosVistos.ts", "marcarConcluidosVistos", "Sino nos concluidos nao lidos"],
+  ["src/lib/somDeAviso.ts", "REPETICOES_DA_CAMPAINHA", "Campainha para sozinha"],
 
   // --- Avisos e impressão
   ["src/App.tsx", "avisarMatrizDoPedido", "Aviso e impressão em paralelo"],

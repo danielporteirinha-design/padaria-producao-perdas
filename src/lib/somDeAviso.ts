@@ -68,8 +68,21 @@ export function pararAvisoSonoro(): void {
 /**
  * Uma badalada de campainha, e não dois bipes (ago/2026, pedido do dono
  * do negócio: no PC do balcão o aviso precisa soar como campainha).
- * Agora tocando em loop até ser explicitamente interrompida.
+ *
+ * TOCA EM LOOP, MAS COM FIM (set/2026 — defeito relatado no celular).
+ *
+ * A versão anterior repetia até alguém tocar na notificação. No PC isso
+ * funcionava, porque a janela está à vista e a pessoa fecha o aviso em
+ * segundos. No celular, não: o app fica em segundo plano, a campainha
+ * repetia indefinidamente, e a única forma de calar era abrir a
+ * notificação. Um alarme que não para sozinho deixa de ser aviso e vira
+ * castigo — e o operador acaba desligando o som do app inteiro.
+ *
+ * Agora o loop tem teto. Chamou a atenção nos primeiros segundos ou não
+ * chamou; insistir além disso não melhora nada, e a notificação
+ * continua na barra esperando, que é o lugar dela.
  */
+const REPETICOES_DA_CAMPAINHA = 4;
 export function tocarAvisoSonoro(): void {
   try {
     prepararSom();
@@ -84,10 +97,17 @@ export function tocarAvisoSonoro(): void {
       // Toca a primeira vez imediatamente
       badaladas(contexto);
       
-      // Continua tocando a cada 3 segundos (tempo suficiente para o som decair)
+      // A cada 3 segundos (tempo suficiente para o som decair), e para
+      // sozinha depois de REPETICOES_DA_CAMPAINHA — ver o comentário acima.
+      let tocadas = 1;
       loopToque = window.setInterval(() => {
+        if (tocadas >= REPETICOES_DA_CAMPAINHA) {
+          pararAvisoSonoro();
+          return;
+        }
         if (contexto && contexto.state === "running") {
           badaladas(contexto);
+          tocadas++;
         }
       }, 3000);
     };

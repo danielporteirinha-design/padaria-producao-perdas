@@ -17,6 +17,12 @@ import { estaPendente, montarLinhasDoDia } from "../lib/reposicaoDoDia";
 import { dispensarFornada, fornadasDispensadas } from "../lib/fornadasDispensadas";
 import type { Loja } from "../lib/lojas";
 import { dataDeHojeIso, horaDoInstante } from "../lib/data";
+import {
+  lerConcluidosVistos,
+  limparConcluidosVistosAntigos,
+  marcarConcluidosVistos,
+  naoVistos,
+} from "../lib/concluidosVistos";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { contemBusca } from "../lib/texto";
 import { IconeConfere, IconeLixeira, IconeSeta, IconeSino } from "./Icones";
@@ -61,6 +67,28 @@ export function PainelFornadasFilial({
   const [enviando, setEnviando] = useState(false);
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false);
   const [aberta, setAberta] = useState<Record<string, boolean>>({});
+  /**
+   * O SINO TAMBÉM VALE PARA OS CONCLUÍDOS (set/2026, pedido do dono do
+   * negócio): a resposta que chegou e ainda não foi lida precisa chamar,
+   * senão ela cai numa sanfona fechada e ninguém descobre que existe.
+   *
+   * "Lido" é abrir a sanfona — e é uma informação DESTE aparelho, não do
+   * banco. Ver src/lib/concluidosVistos.ts.
+   */
+  const [vistos, setVistos] = useState(() => lerConcluidosVistos(loja.id, hoje));
+  useEffect(() => {
+    limparConcluidosVistosAntigos(hoje);
+  }, [hoje]);
+
+  /** Abrir a sanfona é o gesto de ler: marca tudo o que está nela. */
+  function alternarSanfona(chave: string, linhasDaLista: { chave: string }[]) {
+    const vaiAbrir = !aberta[chave];
+    setAberta((a) => ({ ...a, [chave]: vaiAbrir }));
+    if (vaiAbrir && chave === "concluidos") {
+      setVistos(marcarConcluidosVistos(loja.id, hoje, linhasDaLista.map((l) => l.chave)));
+    }
+  }
+
 
   const pedidoSuprimentosHoje = useMemo(
     () => pedidosSuprimentos.find((p) => p.data === hoje && p.lojaId === loja.id),
@@ -186,6 +214,8 @@ export function PainelFornadasFilial({
     { cobraResposta = false }: { cobraResposta?: boolean } = {}
   ) {
     const abertaAgora = !!aberta[chave];
+    // Novidade = concluído que ainda não foi lido neste aparelho.
+    const novidades = cobraResposta ? 0 : naoVistos(linhasDaLista, vistos);
     return (
       <div className={`acordeao-sessao ${abertaAgora ? "aberta" : ""}`}>
         <div className="cabecalho-sessao">
@@ -193,7 +223,7 @@ export function PainelFornadasFilial({
             type="button"
             className="abrir-sessao"
             aria-expanded={abertaAgora}
-            onClick={() => setAberta((a) => ({ ...a, [chave]: !a[chave] }))}
+            onClick={() => alternarSanfona(chave, linhasDaLista)}
           >
             <span className="nome-sessao">{titulo}</span>
             {/* O SINO NO LUGAR DA CONTAGEM ESCRITA (set/2026, pedido do
@@ -206,18 +236,20 @@ export function PainelFornadasFilial({
                 é curto e para sozinho — animação infinita numa tela que
                 fica aberta o dia todo vira ruído, e ruído a pessoa
                 aprende a ignorar. */}
-            {linhasDaLista.length > 0 && !cobraResposta && (
+            {linhasDaLista.length > 0 && !cobraResposta && novidades === 0 && (
               <span className="contagem-itens">
                 {linhasDaLista.length} {linhasDaLista.length === 1 ? "item" : "itens"}
               </span>
             )}
-            {linhasDaLista.length > 0 && cobraResposta && (
+            {(cobraResposta ? linhasDaLista.length > 0 : novidades > 0) && (
               <span
                 className="sino-sessao"
-                aria-label={`${linhasDaLista.length} ${linhasDaLista.length === 1 ? "registro" : "registros"}`}
+                aria-label={`${cobraResposta ? linhasDaLista.length : novidades} ${
+                  (cobraResposta ? linhasDaLista.length : novidades) === 1 ? "registro" : "registros"
+                }`}
               >
                 <IconeSino tamanho={22} />
-                <em className="contagem-sino">{linhasDaLista.length}</em>
+                <em className="contagem-sino">{cobraResposta ? linhasDaLista.length : novidades}</em>
               </span>
             )}
             <IconeSeta className="seta-sessao" />
