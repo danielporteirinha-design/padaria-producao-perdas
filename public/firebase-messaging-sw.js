@@ -29,6 +29,18 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+/**
+ * A EXIBIÇÃO PASSOU A SER DO NAVEGADOR (set/2026).
+ *
+ * O servidor agora manda o bloco `notification` (ver api/notificar-fornada.ts),
+ * então o próprio navegador desenha o aviso — com ícone, badge, tag e som
+ * do sistema — sem depender deste arquivo acordar. Quando isso acontece,
+ * `onBackgroundMessage` NÃO é chamado, e é assim que se evita aviso
+ * duplicado.
+ *
+ * Este bloco fica como REDE DE SEGURANÇA: se algum dia voltar a chegar um
+ * aviso só de dados, ele ainda é exibido em vez de sumir em silêncio.
+ */
 messaging.onBackgroundMessage((payload) => {
   const dados = payload.data || {};
   self.registration.showNotification(dados.titulo || "Padaria Pão de Mel", {

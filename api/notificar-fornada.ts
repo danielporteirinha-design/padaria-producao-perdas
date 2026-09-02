@@ -132,60 +132,6 @@ function aplicativoAdmin(modulos: ModulosAdmin) {
  * pergunta se refere. Quem prova a identidade é o token de quem chamou.
  */
 
-/**
- * FILTRO DA MANUTENÇÃO — CÓPIA LOCAL, DE PROPÓSITO (set/2026).
- *
- * Esta lógica também vive em api/manutencao.ts, que é onde ela é testada
- * (ver scripts/verificar_logica.ts). Aqui ela é REPETIDA em vez de
- * importada, e a duplicação custou uma noite de produção:
- *
- *   Error [ERR_MODULE_NOT_FOUND]: Cannot find module
- *   '/var/task/api/manutencao' imported from /var/task/api/notificar-fornada.js
- *
- * O runtime do Vercel compila CADA arquivo de /api isoladamente, sem
- * empacotar os vizinhos, e um `import "./manutencao"` sem extensão não
- * resolve em ESM. A função inteira morre ao carregar — e, do lado do
- * app, isso aparece como "o aviso não chegou", sem nenhuma pista.
- *
- * A regra deste projeto, então: FUNÇÃO DE /api NÃO IMPORTA VIZINHA.
- * É a mesma razão pela qual entrar-como-loja.ts repete a lista de lojas.
- */
-function normalizarNome(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .trim();
-}
-
-function ehAparelhoDeTeste(registradoPor: string | undefined, nomesDeTeste: string[]): boolean {
-  if (nomesDeTeste.length === 0) return false;
-  const nome = normalizarNome(registradoPor ?? "");
-  if (nome === "") return false;
-  return nomesDeTeste.some((teste) => nome.includes(teste));
-}
-
-function filtrarDestinatarios(
-  aparelhos: { token?: string; registradoPor?: string }[]
-): { tokens: string[]; silenciados: number; manutencao: boolean } {
-  const todos = aparelhos.map((a) => a.token).filter((t): t is string => Boolean(t));
-
-  const chave = (process.env.MANUTENCAO ?? "").trim().toLowerCase();
-  const ligada = chave !== "" && !["0", "false", "off", "nao", "não"].includes(chave);
-  if (!ligada) return { tokens: todos, silenciados: 0, manutencao: false };
-
-  const nomesDeTeste = (process.env.APARELHOS_DE_TESTE ?? "")
-    .split(",")
-    .map((n) => normalizarNome(n))
-    .filter((n) => n.length > 0);
-
-  const permitidos = aparelhos
-    .filter((a) => Boolean(a.token) && ehAparelhoDeTeste(a.registradoPor, nomesDeTeste))
-    .map((a) => a.token as string);
-
-  return { tokens: permitidos, silenciados: todos.length - permitidos.length, manutencao: true };
-}
-
 const CHAVE_WEB = "AIzaSyAWQq1TVzd9ycS8tpwl-lxmj7SPek0Pyuc";
 
 /**
@@ -332,29 +278,17 @@ export default async function handler(req: any, res: any) {
         ? await colecao.where("lojaId", "!=", "MATRIZ").get()
         : await colecao.where("lojaId", "==", "MATRIZ").get();
 
-    /**
-     * MODO DE MANUTENÇÃO — ver api/manutencao.ts. Fora dele o filtro
-     * devolve todo mundo e nada muda; ligado, só os aparelhos de teste
-     * passam, e o celular do colaborador não toca durante um teste.
-     */
-    const destinatarios = filtrarDestinatarios(
-      snapshot.docs.map((documento) => ({
-        token: documento.get("token") as string | undefined,
-        registradoPor: documento.get("registradoPor") as string | undefined,
-      }))
-    );
-    const tokens = destinatarios.tokens;
+    const tokens = snapshot.docs
+      .map((documento) => documento.get("token") as string)
+      .filter((token): token is string => Boolean(token));
 
     if (tokens.length === 0) {
       res.status(200).json({
         enviados: 0,
         registrados: 0,
-        manutencao: destinatarios.manutencao,
-        aviso: destinatarios.manutencao
-          ? `Modo de manutenção ligado: ${destinatarios.silenciados} aparelho(s) não foram avisados.`
-          : ehDaMatriz
-            ? "Nenhuma filial ativou os avisos ainda."
-            : "A matriz ainda não ativou os avisos neste computador.",
+        aviso: ehDaMatriz
+          ? "Nenhuma filial ativou os avisos ainda."
+          : "A matriz ainda não ativou os avisos neste computador.",
       });
       return;
     }
@@ -507,14 +441,31 @@ export default async function handler(req: any, res: any) {
     }
 
     /**
-     * Payload só de `data`, sem o bloco `notification`: assim o service
-     * worker monta a notificação e consegue aplicar a `tag`, que faz o
-     * aviso do MESMO produto substituir o anterior. Pão francês sai seis
-     * vezes por dia — sem isso seriam seis avisos empilhados do mesmo
-     * item, e a filial aprenderia a ignorar todos.
+     * O AVISO AGORA VEM COM BLOCO `notification` (set/2026) — e isso é a
+     * correção do defeito que mais custou nesta implantação.
+     *
+     * A versão anterior mandava SÓ `data`, para que o service worker
+     * montasse a notificação e pudesse aplicar a `tag`. A ideia estava
+     * certa e o custo apareceu em produção: com payload só de dados, a
+     * exibição depende inteiramente do nosso service worker acordar e
+     * rodar `showNotification`. Se ele não estiver registrado, se o
+     * navegador matar o worker, se o escopo conflitar com o do PWA —
+     * nada aparece, e NÃO HÁ ERRO em lugar nenhum. O envio responde
+     * "enviado com sucesso" e o celular fica mudo. Foi exatamente o que
+     * aconteceu: comandos funcionando, mensagens chegando, notificação
+     * nenhuma.
+     *
+     * Com `notification` + `webpush.notification`, quem desenha o aviso é
+     * o NAVEGADOR, sem passar pelo nosso código. E a `tag` não se perde:
+     * ela existe dentro de `webpush.notification`, junto com ícone,
+     * badge e `renotify` — os mesmos valores que o service worker usava.
+     *
+     * O `data` continua indo junto, porque é dele que sai o destino no
+     * app quando alguém toca no aviso.
      */
     const resultado = await modulos.messaging.getMessaging(app).sendEachForMulticast({
       tokens,
+      notification: { title: titulo, body: corpo },
       /**
        * `url` leva ao destino DENTRO do app (ago/2026). Tocar no aviso
        * abria o app na última aba usada, e quem recebeu "PÃO FRANCÊS
@@ -535,6 +486,31 @@ export default async function handler(req: any, res: any) {
        */
       webpush: {
         headers: { Urgency: "high" },
+        notification: {
+          title: titulo,
+          body: corpo,
+          icon: "/pwa-192x192.png",
+          /**
+           * O badge é a silhueta na barra de status do Android; o sistema
+           * descarta as cores e usa só o formato — por isso é um desenho
+           * em branco sobre transparente (ver scripts/gerar_icones.py).
+           */
+          badge: "/badge-96x96.png",
+          /**
+           * A tag faz o aviso do MESMO produto substituir o anterior em
+           * vez de empilhar. Pão francês sai seis vezes por dia; sem
+           * isso a filial receberia seis avisos do mesmo item e
+           * aprenderia a ignorar todos.
+           */
+          tag: etiqueta,
+          renotify: true,
+          /**
+           * Explícito: `silent: true` herdado de alguma configuração
+           * deixaria o aviso mudo sem erro nenhum. Quem escolhe o som é o
+           * canal padrão do sistema, e é ele que toca.
+           */
+          silent: false,
+        },
       },
     });
 
@@ -573,10 +549,6 @@ export default async function handler(req: any, res: any) {
       removidos: invalidos.length,
       registrados: tokens.length,
       motivos,
-      // A tela mostra a faixa de manutenção a partir daqui: quem acabou
-      // de disparar precisa saber que o aviso não saiu para a equipe.
-      manutencao: destinatarios.manutencao,
-      silenciados: destinatarios.silenciados,
     });
   } catch (erro) {
     if (erro instanceof ErroNotificacao) {

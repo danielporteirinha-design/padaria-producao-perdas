@@ -175,14 +175,6 @@ export default function App() {
   }, []);
 
   const [operador, setOperador] = useState("");
-  /**
-   * Modo de manutenção: o app NÃO consulta mais o estado (set/2026).
-   *
-   * A faixa saiu da tela a pedido do dono do negócio, e sem faixa não há
-   * o que fazer com a resposta. O filtro que silencia os aparelhos
-   * continua inteiro no servidor — ver api/manutencao.ts — e o estado se
-   * confere abrindo /api/manutencao no navegador.
-   */
   const [nomeSugerido, setNomeSugerido] = useState("");
   // Abre na Reposição: é a única aba liberada na fase de implantação,
   // e continua sendo a primeira de todo perfil depois.
@@ -849,13 +841,14 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* A FAIXA DA MANUTENÇÃO SAIU DA TELA (set/2026, decisão do dono do
-          negócio). Durante a implantação quem opera é a equipe da padaria,
-          e uma tarja vermelha permanente sobre uma tela que já está sendo
-          aprendida atrapalha mais do que informa.
+      {/* O MODO DE MANUTENÇÃO FOI RETIRADO POR INTEIRO (set/2026, decisão
+          do dono do negócio: "elimine essa variável, reduza todas as
+          possibilidades de erro").
 
-          O ESTADO NÃO SE PERDEU: continua em /api/manutencao, que é onde
-          se confere se os avisos estão suspensos. */}
+          Ele silenciava aparelhos por nome de operador, e cada aviso que
+          não chegava passou a ter duas explicações possíveis — a de
+          verdade e ele. Numa implantação, uma causa a menos vale mais que
+          a conveniência que ele dava. Os avisos vão para todos. */}
       <header className="cabecalho-app">
         <div><strong className="loja-atual">{loja.nome}</strong></div>
         <div className="operador-atual">

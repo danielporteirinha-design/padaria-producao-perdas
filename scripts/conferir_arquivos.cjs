@@ -71,17 +71,13 @@ const CONFERENCIAS = [
   ["src/components/AssistenteDeVoz.tsx", "NÃO LIMPA A LISTA", "Voz: falar de novo acrescenta"],
   ["api/entrar-como-loja.ts", "diagnostico", "Entrada sem senha: diagnóstico"],
 
-  // --- Modo de manutenção: testar sem tocar o celular da equipe
-  ["api/manutencao.ts", "filtrarDestinatarios", "Manutenção: filtro dos avisos"],
-  ["api/notificar-fornada.ts", "filtrarDestinatarios", "Manutenção: aplicada no aviso de fornada"],
-  ["api/lembretes.ts", "filtrarDestinatarios", "Manutenção: aplicada nos lembretes"],
-  // A faixa saiu da tela em set/2026 — a manutenção virou só do servidor.
-  ["src/App.tsx", "ABAS_LIBERADAS", "Implantacao gradual: abas liberadas"],
-
   // --- Sugestão por IA
   ["src/lib/sugestaoProducao.ts", "montarHistoricoDaFilial", "IA: sugestão para a filial"],
   ["src/components/TelaPedidoFilial.tsx", "gerarSugestaoIA", "Filial: botão de sugerir com IA"],
   ["src/components/TelaCronograma.tsx", "gerarSugestaoIA", "Matriz: botão de sugerir com IA"],
+
+  // --- O aviso é desenhado pelo NAVEGADOR, e não pelo service worker
+  ["api/notificar-fornada.ts", "webpush: {", "Aviso com bloco notification"],
 
   // --- Avisos e impressão
   ["src/App.tsx", "avisarMatrizDoPedido", "Aviso e impressão em paralelo"],
@@ -196,6 +192,8 @@ const DEVEM_TER_SIDO_APAGADOS = [
   ["src/components/AnuncioPorVoz.tsx", "diálogo de voz antigo — virou AssistenteDeVoz.tsx"],
   ["src/lib/falar.ts", "síntese de voz — o app não fala mais"],
   ["src/components/PainelSuprimentos.tsx", "card de suprimentos — virou linha na sanfona da loja"],
+  ["api/manutencao.ts", "modo de manutenção retirado — os avisos vão para todos"],
+  ["src/lib/manutencao.ts", "modo de manutenção retirado — os avisos vão para todos"],
   ["api/notificar-desfecho-suprimentos.ts", "endpoint sem autenticação — o aviso voltou para /api/notificar-fornada"],
 ];
 

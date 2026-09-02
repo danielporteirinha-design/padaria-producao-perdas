@@ -52,9 +52,6 @@ export interface ResultadoDoAviso {
   /** Tokens vencidos que o servidor removeu neste envio. */
   removidos?: number;
   motivos?: string[];
-  /** Modo de manutenção ligado — ver api/manutencao.ts. */
-  manutencao?: boolean;
-  silenciados?: number;
   aviso?: string;
 }
 

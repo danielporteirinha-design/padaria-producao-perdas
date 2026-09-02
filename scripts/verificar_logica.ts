@@ -57,7 +57,6 @@ import {
   montarLinhasDaMatriz,
   montarLinhasDoDia,
 } from "../src/lib/reposicaoDoDia";
-import { filtrarDestinatarios } from "../api/manutencao";
 import {
   CONTAS_DAS_LOJAS,
   IDS_DAS_LOJAS,
@@ -3502,93 +3501,6 @@ const perdas: RegistroPerda[] = [
   );
 }
 
-// ===================================================================
-// MODO DE MANUTENÇÃO — api/manutencao.ts
-// ===================================================================
-{
-  console.log("\n--- Modo de manutencao: quem recebe e quem fica mudo ---");
-
-  const aparelhos = [
-    { token: "t-daniel-celular", registradoPor: "Daniel" },
-    { token: "t-daniel-pc", registradoPor: "daniel sarmento" },
-    { token: "t-balcao-arthur", registradoPor: "Joana" },
-    { token: "t-balcao-benjamin", registradoPor: "Marcos" },
-    { token: undefined, registradoPor: "Sem token" },
-  ];
-
-  /** DESLIGADO É O ESTADO NORMAL, e nele nada pode mudar. */
-  const normal = filtrarDestinatarios(aparelhos, {});
-  afirmar(normal.tokens.length === 4, "sem manutencao, todo aparelho com token recebe");
-  afirmar(normal.manutencao === false, "sem a variavel, a manutencao esta desligada");
-  afirmar(normal.silenciados === 0, "sem manutencao, ninguem e silenciado");
-  afirmar(
-    filtrarDestinatarios(aparelhos, { MANUTENCAO: "0" }).tokens.length === 4,
-    "MANUTENCAO=0 e desligado"
-  );
-  afirmar(
-    filtrarDestinatarios(aparelhos, { MANUTENCAO: "false" }).tokens.length === 4,
-    "MANUTENCAO=false e desligado"
-  );
-  afirmar(
-    filtrarDestinatarios(aparelhos, { MANUTENCAO: "   " }).tokens.length === 4,
-    "variavel so com espaco e desligado"
-  );
-
-  /** LIGADO: só os aparelhos de teste recebem. */
-  const ligado = filtrarDestinatarios(aparelhos, {
-    MANUTENCAO: "1",
-    APARELHOS_DE_TESTE: "Daniel",
-  });
-  afirmar(ligado.manutencao === true, "MANUTENCAO=1 liga");
-  afirmar(ligado.tokens.length === 2, `so os dois aparelhos do Daniel recebem (obtido: ${ligado.tokens.length})`);
-  afirmar(
-    ligado.tokens.includes("t-daniel-celular") && ligado.tokens.includes("t-daniel-pc"),
-    "o nome completo tambem casa com o primeiro nome"
-  );
-  afirmar(
-    !ligado.tokens.includes("t-balcao-arthur") && !ligado.tokens.includes("t-balcao-benjamin"),
-    "o celular do colaborador NAO toca durante a manutencao"
-  );
-  afirmar(ligado.silenciados === 2, `a resposta diz quantos ficaram mudos (obtido: ${ligado.silenciados})`);
-
-  afirmar(
-    filtrarDestinatarios(aparelhos, { MANUTENCAO: "sim", APARELHOS_DE_TESTE: "DANIEL" })
-      .tokens.length === 2,
-    "a comparacao do nome ignora a caixa"
-  );
-  afirmar(
-    filtrarDestinatarios(
-      [{ token: "t", registradoPor: "Antônio" }],
-      { MANUTENCAO: "1", APARELHOS_DE_TESTE: "antonio" }
-    ).tokens.length === 1,
-    "a comparacao do nome ignora acento"
-  );
-  afirmar(
-    filtrarDestinatarios(aparelhos, { MANUTENCAO: "1", APARELHOS_DE_TESTE: "Daniel, Joana" })
-      .tokens.length === 3,
-    "mais de um nome, separados por virgula"
-  );
-
-  /**
-   * ESQUECER A LISTA SILENCIA TUDO. É o lado seguro do erro: o pior que
-   * acontece e ninguem receber, nunca o contrario.
-   */
-  const semLista = filtrarDestinatarios(aparelhos, { MANUTENCAO: "1" });
-  afirmar(semLista.tokens.length === 0, "manutencao sem APARELHOS_DE_TESTE silencia todos");
-  afirmar(semLista.silenciados === 4, "e diz quantos ficaram mudos");
-
-  afirmar(
-    filtrarDestinatarios(
-      [{ token: "t", registradoPor: "" }],
-      { MANUTENCAO: "1", APARELHOS_DE_TESTE: "Daniel" }
-    ).tokens.length === 0,
-    "aparelho sem nome de operador nao vira aparelho de teste por acidente"
-  );
-  afirmar(
-    filtrarDestinatarios([], { MANUTENCAO: "1", APARELHOS_DE_TESTE: "Daniel" }).tokens.length === 0,
-    "sem aparelho nenhum, nada quebra"
-  );
-}
 
 console.log(`\n${falhas === 0 ? "TODOS OS CASOS PASSARAM" : `${falhas} CASO(S) FALHARAM`}`);
 process.exit(falhas === 0 ? 0 : 1);
