@@ -3305,7 +3305,7 @@ const perdas: RegistroPerda[] = [
   const montar = (entrada: Partial<Parameters<typeof montarLinhasDoDia>[0]>) =>
     montarLinhasDoDia({
       fornadas: [], pedidos: [], hoje: HOJE, lojaId: LOJA,
-      encerrados: vazio, dispensadas: vazio, ...entrada,
+      encerrados: vazio, dispensadas: new Map<number, string>(), ...entrada,
     });
 
   const doisEnvios = [
@@ -3378,7 +3378,7 @@ const perdas: RegistroPerda[] = [
     "sobra o aviso nao respondido e o meu pedido sem resposta"
   );
 
-  const dispensado = montar({ fornadas: avisos, dispensadas: new Set([8]) });
+  const dispensado = montar({ fornadas: avisos, dispensadas: new Map([[8, `${HOJE}T23:00:00.000Z`]]) });
   afirmar(
     dispensado.find((l) => l.codigoPdv === 8)?.situacao === "dispensado",
     "dispensar o aviso tambem e uma resposta"
@@ -3399,6 +3399,55 @@ const perdas: RegistroPerda[] = [
   ];
   afirmar(montar({ pedidos: ruido }).length === 5, "outra loja, outro dia e o pedido diario ficam de fora");
   afirmar(montar({}).length === 0, "sem nada, as duas sanfonas ficam vazias");
+
+  /**
+   * O MESMO PRODUTO ANUNCIADO DE NOVO PEDE DECISÃO DE NOVO (set/2026 —
+   * defeito relatado em produção). Recusar a fornada das 8h não pode
+   * fazer a das 10h nascer recusada: são duas fornadas e duas decisões.
+   */
+  const duasFornadas = [forno(7, `${HOJE}T08:00:00.000Z`), forno(7, `${HOJE}T10:00:00.000Z`)];
+  const recusouAPrimeira = montar({
+    fornadas: duasFornadas,
+    dispensadas: new Map([[7, `${HOJE}T09:00:00.000Z`]]),
+  });
+  afirmar(
+    recusouAPrimeira.find((l) => l.origem === "matriz")?.situacao === "pendente",
+    "fornada mais nova que a recusa volta a pedir decisao"
+  );
+  const recusouDepois = montar({
+    fornadas: duasFornadas,
+    dispensadas: new Map([[7, `${HOJE}T11:00:00.000Z`]]),
+  });
+  afirmar(
+    recusouDepois.find((l) => l.origem === "matriz")?.situacao === "dispensado",
+    "recusa mais nova que a fornada continua valendo"
+  );
+
+  /** O mesmo vale para PEDIR: pedir às 9h não responde a fornada das 10h. */
+  const pediuAntes = montar({
+    fornadas: duasFornadas,
+    pedidos: [rep("x1", `${HOJE}T09:00:00.000Z`, [{ codigoPdv: 7, quantidadeUnidades: 5 }])],
+  });
+  afirmar(
+    pediuAntes.find((l) => l.origem === "matriz")?.situacao === "pendente",
+    "fornada nova depois do pedido volta a pedir decisao"
+  );
+  const pediuDepois = montar({
+    fornadas: duasFornadas,
+    pedidos: [rep("x2", `${HOJE}T11:00:00.000Z`, [{ codigoPdv: 7, quantidadeUnidades: 5 }])],
+  });
+  afirmar(
+    pediuDepois.find((l) => l.origem === "matriz")?.situacao === "atendido",
+    "pedido depois da ultima fornada responde o anuncio"
+  );
+
+  /** Dispensa do formato antigo (sem hora) não segura anúncio nenhum. */
+  afirmar(
+    montar({ fornadas: duasFornadas, dispensadas: new Map([[7, ""]]) }).find(
+      (l) => l.origem === "matriz"
+    )?.situacao === "pendente",
+    "marca antiga, sem hora, nao esconde a fornada"
+  );
 
   console.log("\n--- Reposicao: as duas sanfonas da matriz ---");
 

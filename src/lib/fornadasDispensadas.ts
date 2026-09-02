@@ -25,37 +25,75 @@
  * permanente por acidente.
  */
 
-function chave(lojaId: string, data: string): string {
-  return `padaria:fornadas-dispensadas:${lojaId}:${data}`;
+/**
+ * A DISPENSA GUARDA A HORA (set/2026 — defeito relatado em produção:
+ * "quando um item é anunciado mais de uma vez, as filiais não recebem
+ * corretamente, impossibilitando pedir ou recusar").
+ *
+ * A versão anterior guardava só o código do produto. Pão francês sai
+ * seis vezes por dia: a loja recusava a fornada das 7h — o produto
+ * entrava na lista de dispensados — e a fornada das 11h, que é OUTRA
+ * fornada e OUTRA decisão, nascia dispensada. O aviso chegava no
+ * celular, a linha aparecia em "concluídos" com a recusa da manhã, e não
+ * havia como pedir nem recusar. Para quem estava olhando, o app tinha
+ * perdido o anúncio.
+ *
+ * Agora a marca leva o INSTANTE. A dispensa vale para o que já tinha
+ * sido anunciado até ali; fornada mais nova que a marca volta a pedir
+ * decisão, como tem que ser.
+ *
+ * COMPATÍVEL COM O QUE JÁ ESTÁ GRAVADO: o formato antigo (uma lista de
+ * números) é lido como dispensa sem hora, e uma dispensa sem hora não
+ * segura anúncio nenhum. Errar para o lado de MOSTRAR é o certo aqui:
+ * mostrar de novo custa um toque, esconder custa uma entrega.
+ */
+function chave(lojaId: string, data: string): string {  return `padaria:fornadas-dispensadas:${lojaId}:${data}`;
 }
 
-function ler(lojaId: string, data: string): number[] {
+/** Código do produto -> instante ISO em que a loja dispensou. */
+export type Dispensas = Map<number, string>;
+
+function ler(lojaId: string, data: string): Dispensas {
+  const mapa: Dispensas = new Map();
   try {
     const bruto = localStorage.getItem(chave(lojaId, data));
-    if (!bruto) return [];
-    const lista = JSON.parse(bruto);
-    return Array.isArray(lista) ? lista.filter((n) => typeof n === "number") : [];
+    if (!bruto) return mapa;
+    const lido = JSON.parse(bruto);
+
+    // Formato antigo: lista de códigos, sem hora. Vira dispensa vazia —
+    // que não segura anúncio nenhum. Ver o comentário do topo.
+    if (Array.isArray(lido)) {
+      for (const codigo of lido) if (typeof codigo === "number") mapa.set(codigo, "");
+      return mapa;
+    }
+    if (lido && typeof lido === "object") {
+      for (const [codigo, quando] of Object.entries(lido as Record<string, unknown>)) {
+        const numero = Number(codigo);
+        if (Number.isFinite(numero) && typeof quando === "string") mapa.set(numero, quando);
+      }
+    }
+    return mapa;
   } catch {
-    return [];
+    return mapa;
   }
 }
 
-/** Códigos que esta loja tirou da lista hoje. */
-export function fornadasDispensadas(lojaId: string, data: string): Set<number> {
-  return new Set(ler(lojaId, data));
+/** O que esta loja tirou da lista hoje, com a hora de cada dispensa. */
+export function fornadasDispensadas(lojaId: string, data: string): Dispensas {
+  return ler(lojaId, data);
 }
 
 /** Tira um produto da lista de avisos desta loja, neste aparelho, hoje. */
-export function dispensarFornada(lojaId: string, data: string, codigoPdv: number): Set<number> {
+export function dispensarFornada(lojaId: string, data: string, codigoPdv: number): Dispensas {
   const atual = ler(lojaId, data);
-  if (!atual.includes(codigoPdv)) atual.push(codigoPdv);
+  atual.set(codigoPdv, new Date().toISOString());
   try {
-    localStorage.setItem(chave(lojaId, data), JSON.stringify(atual));
+    localStorage.setItem(chave(lojaId, data), JSON.stringify(Object.fromEntries(atual)));
   } catch {
     // Armazenamento bloqueado: o aviso continua na tela. Errar para o
     // lado de mostrar demais é melhor que esconder o que não deveria.
   }
-  return new Set(atual);
+  return new Map(atual);
 }
 
 /**
@@ -67,23 +105,24 @@ export function dispensarFornada(lojaId: string, data: string, codigoPdv: number
  * anunciou, ela voltou a trabalhar com ele — e a linha volta com a
  * contagem de fornadas e a hora da última, que nunca saíram do banco.
  */
-export function devolverFornada(lojaId: string, data: string, codigoPdv: number): Set<number> {
-  const restante = ler(lojaId, data).filter((codigo) => codigo !== codigoPdv);
+export function devolverFornada(lojaId: string, data: string, codigoPdv: number): Dispensas {
+  const restante = ler(lojaId, data);
+  restante.delete(codigoPdv);
   try {
-    if (restante.length === 0) localStorage.removeItem(chave(lojaId, data));
-    else localStorage.setItem(chave(lojaId, data), JSON.stringify(restante));
+    if (restante.size === 0) localStorage.removeItem(chave(lojaId, data));
+    else localStorage.setItem(chave(lojaId, data), JSON.stringify(Object.fromEntries(restante)));
   } catch {
     /* nada a fazer */
   }
-  return new Set(restante);
+  return new Map(restante);
 }
 
 /** Devolve todos os avisos dispensados hoje — o desfazer da dispensa. */
-export function restaurarFornadas(lojaId: string, data: string): Set<number> {
+export function restaurarFornadas(lojaId: string, data: string): Dispensas {
   try {
     localStorage.removeItem(chave(lojaId, data));
   } catch {
     /* nada a fazer */
   }
-  return new Set();
+  return new Map();
 }

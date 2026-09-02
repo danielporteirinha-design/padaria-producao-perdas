@@ -181,3 +181,41 @@ function badalada(ctx: AudioContext, quando: number): void {
     oscilador.stop(quando + duracao + 0.05);
   }
 }
+
+/**
+ * O SOM DE ERRO DO MICROFONE (set/2026, pedido do dono do negócio).
+ *
+ * Duas notas DESCENDO, curtas e graves — o oposto da campainha, que
+ * sobe. A diferença tem de ser audível sem prestar atenção: quem fala
+ * está de costas para a tela metade das vezes, e o som é a única
+ * resposta que chega. Uma nota só seria confundida com a campainha; duas
+ * descendo, não.
+ *
+ * Não repete e não usa o loop da campainha: é resposta a um gesto, não
+ * um chamado. Some em meio segundo.
+ */
+export function tocarErroSonoro(): void {
+  try {
+    prepararSom();
+    if (!contexto || contexto.state !== "running") return;
+
+    const agora = contexto.currentTime;
+    // 440 Hz depois 330 Hz — uma quarta abaixo, o intervalo que o ouvido
+    // lê como "não" sem precisar de aprendizado.
+    for (const [indice, frequencia] of [440, 330].entries()) {
+      const inicio = agora + indice * 0.14;
+      const oscilador = contexto.createOscillator();
+      const volume = contexto.createGain();
+      oscilador.type = "triangle";
+      oscilador.frequency.setValueAtTime(frequencia, inicio);
+      volume.gain.setValueAtTime(0.0001, inicio);
+      volume.gain.exponentialRampToValueAtTime(0.28, inicio + 0.02);
+      volume.gain.exponentialRampToValueAtTime(0.0001, inicio + 0.13);
+      oscilador.connect(volume).connect(contexto.destination);
+      oscilador.start(inicio);
+      oscilador.stop(inicio + 0.15);
+    }
+  } catch {
+    // Sem áudio disponível: a cor e o ícone do botão continuam dizendo.
+  }
+}

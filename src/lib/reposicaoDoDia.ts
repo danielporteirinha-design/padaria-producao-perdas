@@ -71,8 +71,12 @@ export interface EntradaDoDia {
   lojaId: string;
   /** Produtos que a matriz tirou da vitrine — o aviso deixa de valer. */
   encerrados: Set<number>;
-  /** Avisos que ESTA loja tirou da própria tela. */
-  dispensadas: Set<number>;
+  /**
+   * Avisos que ESTA loja tirou da própria tela, com a hora de cada um.
+   * A hora é o que permite uma fornada NOVA do mesmo produto voltar a
+   * pedir decisão — ver src/lib/fornadasDispensadas.ts.
+   */
+  dispensadas: Map<number, string>;
 }
 
 export function montarLinhasDoDia({
@@ -84,7 +88,8 @@ export function montarLinhasDoDia({
   dispensadas,
 }: EntradaDoDia): LinhaDoDia[] {
   const linhas: LinhaDoDia[] = [];
-  const pedidosMeus = new Set<number>();
+  /** Produto -> instante do pedido MAIS RECENTE que esta loja fez hoje. */
+  const pedidosMeus = new Map<number, string>();
 
   // ---- o que a FILIAL pediu ----
   for (const pedido of pedidos) {
@@ -94,7 +99,8 @@ export function montarLinhasDoDia({
       // O DESFECHO É DO ITEM, e não do documento: um pedido com dez
       // produtos pode ter nove confirmados e um recusado.
       const desfecho = desfechoDoItem(pedido, item.codigoPdv);
-      pedidosMeus.add(item.codigoPdv);
+      const jaPedido = pedidosMeus.get(item.codigoPdv);
+      if (!jaPedido || quando > jaPedido) pedidosMeus.set(item.codigoPdv, quando);
       linhas.push({
         chave: `p-${pedido.id}-${item.codigoPdv}`,
         origem: "filial",
@@ -130,11 +136,26 @@ export function montarLinhasDoDia({
       codigoPdv,
       quando: ordenadas[0].marcadaEm,
       vezes: ordenadas.length,
-      situacao: pedidosMeus.has(codigoPdv)
-        ? "atendido"
-        : dispensadas.has(codigoPdv)
-          ? "dispensado"
-          : "pendente",
+      /**
+       * A DECISÃO VALE ATÉ A PRÓXIMA FORNADA (set/2026).
+       *
+       * Pedir ou recusar responde o anúncio que estava na tela naquele
+       * momento — não o produto para sempre. Pão francês sai seis vezes
+       * por dia, e cada saída é uma decisão nova: recusar a das 7h não
+       * pode fazer a das 11h nascer recusada, com o aviso chegando no
+       * celular e a linha já em "concluídos", sem como pedir.
+       *
+       * Por isso a comparação é de HORA: a resposta só vale enquanto for
+       * mais recente que a última fornada.
+       */
+      situacao: (() => {
+        const ultimaFornada = ordenadas[0].marcadaEm;
+        const meuPedido = pedidosMeus.get(codigoPdv);
+        if (meuPedido && meuPedido > ultimaFornada) return "atendido";
+        const dispensa = dispensadas.get(codigoPdv);
+        if (dispensa && dispensa > ultimaFornada) return "dispensado";
+        return "pendente";
+      })(),
     });
   }
 

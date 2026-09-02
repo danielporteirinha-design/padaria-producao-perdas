@@ -82,6 +82,8 @@ const CONFERENCIAS = [
   ["src/lib/somDeAviso.ts", "REPETICOES_DA_CAMPAINHA", "Campainha para sozinha"],
   ["src/types/pedido.ts", "decidirItemDaReposicao", "Matriz decide item por item"],
   ["src/components/AssistenteDeVoz.tsx", "sinal-", "Botao do microfone sinaliza acerto/erro"],
+  ["src/lib/somDeAviso.ts", "tocarErroSonoro", "Som de erro do microfone"],
+  ["src/lib/fornadasDispensadas.ts", "Dispensas", "Dispensa com hora: fornada nova pede decisao"],
 
   // --- Avisos e impressão
   ["src/App.tsx", "avisarMatrizDoPedido", "Aviso e impressão em paralelo"],

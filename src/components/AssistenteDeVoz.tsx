@@ -40,6 +40,7 @@ import { afinarComIA, ErroDeVoz, ouvirUmaFrase, vozDisponivel } from "../lib/voz
 import { interpretarFrase, type ItemFalado } from "../lib/interpretarPedidoFalado";
 import { paraBusca } from "../lib/texto";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
+import { tocarErroSonoro } from "../lib/somDeAviso";
 import { IconeConfere, IconeErro, IconeLixeira, IconeMicrofone } from "./Icones";
 
 export interface ItemDitado {
@@ -98,6 +99,9 @@ export function AssistenteDeVoz({
   const relogioDoSinal = useRef<number | null>(null);
 
   function sinalizar(resultado: "certo" | "errado") {
+    // O erro também SOA: quem fala está de costas para a tela metade
+    // das vezes, e a cor sozinha não chega até lá.
+    if (resultado === "errado") tocarErroSonoro();
     if (relogioDoSinal.current !== null) window.clearTimeout(relogioDoSinal.current);
     setSinal(resultado);
     relogioDoSinal.current = window.setTimeout(() => {
