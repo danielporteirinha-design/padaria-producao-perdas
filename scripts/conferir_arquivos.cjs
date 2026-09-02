@@ -84,6 +84,7 @@ const CONFERENCIAS = [
   ["src/App.tsx", "handleDecidirSuprimentos", "Matriz responde a lista de suprimentos"],
   ["firestore.rules", "A MATRIZ RESPONDE À LISTA DE SUPRIMENTOS", "Regra: matriz responde suprimentos (COLAR NO CONSOLE!)"],
   ["src/components/TelaSuprimentos.tsx", "Imprimir lista", "Filial imprime a lista de suprimentos"],
+  ["src/components/TelaSuprimentos.tsx", "AssistenteDeVoz", "Suprimentos por voz"],
   ["src/components/AssistenteDeVoz.tsx", "sinal-", "Botao do microfone sinaliza acerto/erro"],
   ["src/lib/somDeAviso.ts", "tocarErroSonoro", "Som de erro do microfone"],
   ["src/lib/fornadasDispensadas.ts", "Dispensas", "Dispensa com hora: fornada nova pede decisao"],

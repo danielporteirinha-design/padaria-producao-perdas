@@ -32,6 +32,8 @@ import { formatarDataBr, horaDoInstante } from "../lib/data";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { contemBusca } from "../lib/texto";
 import { CampoDeBusca } from "./CampoDeBusca";
+import { AssistenteDeVoz } from "./AssistenteDeVoz";
+import type { Produto } from "../types/produto";
 import { IconeCalendario, IconeConfere, IconeSeta } from "./Icones";
 
 interface TelaSuprimentosProps {
@@ -99,6 +101,8 @@ export function TelaSuprimentos({
   );
 
   const [itens, setItens] = useState<ItemPedidoSuprimento[]>(() => pedidoDeHoje?.itens ?? []);
+  /** O microfone está aberto? Enquanto estiver, a busca some da tela. */
+  const [ouvindoVoz, setOuvindoVoz] = useState(false);
   const [dataCarregada, setDataCarregada] = useState(hoje);
   if (dataCarregada !== hoje) {
     setDataCarregada(hoje);
@@ -191,7 +195,7 @@ export function TelaSuprimentos({
       await onCadastrarSuprimento(novo);
       setSegmentoCadastrando(null);
       setNomeNovo("");
-      setExpandido((a) => ({ ...a, [segmento]: true }));
+      setExpandido({ [segmento]: true });
       // O item entra aberto para digitar a quantidade: quem cadastrou
       // veio pedir aquilo, não organizar catálogo.
       setItemAtivo(novo.id);
@@ -293,6 +297,46 @@ export function TelaSuprimentos({
         </div>
       </div>
 
+      {/* PEDIR SUPRIMENTO FALANDO (set/2026, pedido do dono do negócio).
+          O mesmo assistente da Reposição, com o catálogo de suprimentos
+          no lugar do de produtos.
+
+          O ASSISTENTE FALA A LÍNGUA DE `Produto`, e suprimento não é
+          produto — tem `id` de texto, não código de PDV. Em vez de
+          generalizar o componente (e mexer nas três telas que já o
+          usam), o catálogo é traduzido aqui: cada suprimento ganha um
+          número de linha, e o número volta a ser suprimento na
+          confirmação. A tradução é local e morre nesta tela. */}
+      <AssistenteDeVoz
+        produtos={ativos.map(
+          (s, indice) =>
+            ({ codigoPdv: indice, nome: s.nome, ativoNaProducao: true }) as unknown as Produto
+        )}
+        modo="pedir"
+        acao="adicionar"
+        onOuvindoMudou={setOuvindoVoz}
+        onConfirmar={async (ditados) => {
+          for (const ditado of ditados) {
+            const suprimento = ativos[ditado.produto.codigoPdv];
+            if (!suprimento || !ditado.quantidade || ditado.quantidade <= 0) continue;
+            // Mesma regra da digitação: o falado SOMA ao que já está na
+            // lista, e a linha continua editável antes do envio.
+            setItens((atual) => {
+              const existe = atual.find((i) => i.suprimentoId === suprimento.id);
+              return existe
+                ? atual.map((i) =>
+                    i.suprimentoId === suprimento.id
+                      ? { ...i, quantidade: i.quantidade + ditado.quantidade! }
+                      : i
+                  )
+                : [...atual, { suprimentoId: suprimento.id, quantidade: ditado.quantidade! }];
+            });
+            setExpandido({ [suprimento.segmento]: true });
+          }
+        }}
+      />
+
+      {!ouvindoVoz && (
       <CampoDeBusca
         valor={busca}
         onMudar={setBusca}
@@ -305,6 +349,7 @@ export function TelaSuprimentos({
           </button>
         )}
       </CampoDeBusca>
+      )}
 
       {buscando ? (
         <>
@@ -354,7 +399,12 @@ export function TelaSuprimentos({
                   type="button"
                   className="abrir-sessao"
                   aria-expanded={aberto}
-                  onClick={() => setExpandido((a) => ({ ...a, [segmento.chave]: !a[segmento.chave] }))}
+                  onClick={() =>
+                    /* Uma sanfona aberta por vez, como no resto do app
+                       (set/2026): duas listas abertas juntas empurram a
+                       de baixo para fora da tela do celular. */
+                    setExpandido((a) => (a[segmento.chave] ? {} : { [segmento.chave]: true }))
+                  }
                 >
                   <span className="nome-sessao">{segmento.rotulo}</span>
                   <span className="contagem-itens">
