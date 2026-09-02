@@ -83,7 +83,15 @@ export function PainelFornadasFilial({
   /** Abrir a sanfona é o gesto de ler: marca tudo o que está nela. */
   function alternarSanfona(chave: string, linhasDaLista: { chave: string }[]) {
     const vaiAbrir = !aberta[chave];
-    setAberta((a) => ({ ...a, [chave]: vaiAbrir }));
+    /**
+     * UMA SANFONA ABERTA POR VEZ (set/2026, decisão do dono do negócio).
+     *
+     * Abrir substitui em vez de somar: as duas listas abertas juntas
+     * empurram a de baixo para fora da tela do celular, e a pessoa rola
+     * procurando o que já estava vendo. Abrir uma é dizer "é nesta que
+     * eu estou" — e fechar a outra é o que torna isso verdade.
+     */
+    setAberta(vaiAbrir ? { [chave]: true } : {});
     if (vaiAbrir && chave === "concluidos") {
       setVistos(marcarConcluidosVistos(loja.id, hoje, linhasDaLista.map((l) => l.chave)));
     }
@@ -189,7 +197,7 @@ export function PainelFornadasFilial({
       setItens([]);
       setBusca("");
       setCodigoPedindo(null);
-      setAberta((a) => ({ ...a, semResposta: true }));
+      setAberta({ semResposta: true });
     } finally {
       setEnviando(false);
     }
