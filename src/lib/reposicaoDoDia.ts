@@ -32,6 +32,8 @@
 
 import type { FornadaPronta } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
+import type { PedidoSuprimentos } from "../types/suprimento";
+import { desfechoDosSuprimentos } from "../types/suprimento";
 import { desfechoDoItem, ehReposicao, motivoDoItem } from "../types/pedido";
 
 export type OrigemDaLinha = "filial" | "matriz";
@@ -232,6 +234,10 @@ export interface LinhaDaMatriz {
   vezes: number;
   /** Unidades anunciadas na fornada mais recente, quando informadas. */
   unidades?: number;
+  /** A lista de suprimentos a decidir (linhas de tipo "suprimentos"). */
+  suprimentos?: PedidoSuprimentos;
+  /** Quantas variedades a lista de suprimentos tem. */
+  variedades?: number;
   situacao: "pendente" | "pedido" | "encerrado";
   /** Motivo da recusa, quando a matriz recusou um pedido de filial. */
   motivo?: string;
@@ -244,6 +250,8 @@ export interface EntradaDaMatriz {
   pedidos: PedidoFilial[];
   hoje: string;
   encerrados: Set<number>;
+  /** Listas de embalagens e limpeza que as filiais mandaram hoje. */
+  pedidosSuprimentos?: PedidoSuprimentos[];
 }
 
 /** Uma reposição pedida por uma filial, do ponto de vista da matriz. */
@@ -277,6 +285,7 @@ export function montarLinhasDaMatriz({
   pedidos,
   hoje,
   encerrados,
+  pedidosSuprimentos = [],
 }: EntradaDaMatriz): LinhaDaMatriz[] {
   /** Quantas lojas diferentes pediram cada produto hoje. */
   const lojasPorProduto = new Map<number, Set<string>>();
@@ -310,6 +319,32 @@ export function montarLinhasDaMatriz({
   for (const pedido of pedidos) {
     if (pedido.data !== hoje || !ehReposicao(pedido)) continue;
     linhas.push(...linhaDoPedidoDaFilial(pedido));
+  }
+
+  /**
+   * A LISTA DE SUPRIMENTOS TAMBÉM ESPERA RESPOSTA (set/2026).
+   *
+   * Uma linha por LISTA, e não por item: embalagem e material de limpeza
+   * se separam de uma vez, e a matriz decide o conjunto. Quebrar em
+   * itens criaria vinte decisões para uma única ida ao estoque.
+   */
+  for (const lista of pedidosSuprimentos) {
+    if (lista.data !== hoje || lista.status !== "enviado") continue;
+    const desfecho = desfechoDosSuprimentos(lista);
+    linhas.push({
+      chave: `sup-${lista.id}`,
+      tipo: "suprimentos",
+      lojaId: lista.lojaId,
+      suprimentos: lista,
+      variedades: lista.itens.filter((i) => i.quantidade > 0).length,
+      codigoPdv: -1,
+      quando: lista.enviadoEm ?? lista.criadoEm ?? "",
+      vezes: 1,
+      lojasQuePediram: 1,
+      situacao:
+        desfecho === "confirmado" ? "pedido" : desfecho === "cancelado" ? "encerrado" : "pendente",
+      motivo: desfecho === "cancelado" ? lista.atendimento?.motivo : undefined,
+    });
   }
 
   for (const [codigoPdv, doDia] of porProduto) {

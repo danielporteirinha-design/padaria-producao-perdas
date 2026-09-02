@@ -80,6 +80,7 @@ import {
   agruparPorSegmento,
   idDoPedidoSuprimentos,
   idDoSuprimento,
+  type PedidoSuprimentos,
   variedadesDoPedidoSuprimentos,
   type Suprimento,
 } from "../src/types/suprimento";
@@ -3564,6 +3565,57 @@ const perdas: RegistroPerda[] = [
   afirmar(
     montarLinhasDaMatriz({ fornadas: [], pedidos: [], hoje: HOJE, encerrados: vazio }).length === 0,
     "sem fornada nenhuma, a matriz ve as duas sanfonas vazias"
+  );
+
+  /**
+   * A LISTA DE SUPRIMENTOS ESPERA RESPOSTA COMO QUALQUER PEDIDO
+   * (set/2026): ela entra na mesma sanfona, e é ali que a matriz decide.
+   */
+  const listaSup = {
+    id: "sup-1",
+    lojaId: "FILIAL_ARTHUR_BERNARDES",
+    data: HOJE,
+    itens: [
+      { suprimentoId: "SACO", quantidade: 10 },
+      { suprimentoId: "VAZIO", quantidade: 0 },
+    ],
+    status: "enviado",
+    criadoPor: "Joana",
+    criadoEm: `${HOJE}T09:00:00.000Z`,
+    enviadoEm: `${HOJE}T09:00:00.000Z`,
+  } as PedidoSuprimentos;
+
+  const comSuprimentos = montarLinhasDaMatriz({
+    fornadas: [], pedidos: [], hoje: HOJE, encerrados: vazio,
+    pedidosSuprimentos: [listaSup],
+  });
+  afirmar(comSuprimentos.length === 1, "a lista de suprimentos vira UMA linha, e nao uma por item");
+  afirmar(comSuprimentos[0].tipo === "suprimentos", "a linha se identifica como suprimentos");
+  afirmar(comSuprimentos[0].variedades === 1, "conta so o que tem quantidade");
+  afirmar(anuncioPendente(comSuprimentos[0]), "lista sem decisao fica em 'sem resposta'");
+  afirmar(
+    comSuprimentos[0].suprimentos?.id === "sup-1",
+    "a linha carrega o documento — e a matriz responde a partir dele"
+  );
+
+  const supRecusada = montarLinhasDaMatriz({
+    fornadas: [], pedidos: [], hoje: HOJE, encerrados: vazio,
+    pedidosSuprimentos: [
+      {
+        ...listaSup,
+        atendimento: { desfecho: "cancelado", motivo: "acabou o saco kraft", por: "Matriz", em: `${HOJE}T10:00:00.000Z` },
+      } as PedidoSuprimentos,
+    ],
+  });
+  afirmar(supRecusada[0].situacao === "encerrado", "recusada sai de 'sem resposta'");
+  afirmar(supRecusada[0].motivo === "acabou o saco kraft", "e leva o motivo junto");
+
+  afirmar(
+    montarLinhasDaMatriz({
+      fornadas: [], pedidos: [], hoje: HOJE, encerrados: vazio,
+      pedidosSuprimentos: [{ ...listaSup, status: "rascunho" } as PedidoSuprimentos],
+    }).length === 0,
+    "lista ainda em rascunho na filial nao aparece para a matriz"
   );
   afirmar(
     montarLinhasDaMatriz({

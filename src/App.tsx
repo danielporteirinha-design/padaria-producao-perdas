@@ -40,6 +40,7 @@ import {
   avisarFiliais,
   avisarListaAjustada,
   avisarListaDeSuprimentos,
+  avisarDesfechoSuprimentos,
   avisarListaEnviada,
   avisarMatriz,
   ErroAviso,
@@ -679,15 +680,45 @@ export default function App() {
   }
 
   /**
-   * A RESPOSTA À LISTA DE SUPRIMENTOS SAIU JUNTO COM O CARD (set/2026).
+   * A RESPOSTA DA MATRIZ À LISTA DE SUPRIMENTOS (set/2026).
    *
-   * Ela vivia só naquele card. A aba Suprimentos está fechada na
-   * implantação gradual (ver ABAS_LIBERADAS), então nenhuma lista nova
-   * chega enquanto isso — e quando a aba for liberada, a resposta entra
-   * na sanfona "Pedidos sem resposta", do mesmo jeito que a da
-   * reposição. Nada foi perdido no banco: as listas pendentes continuam
-   * gravadas esperando decisão.
+   * Voltou junto com a aba Suprimentos, e agora mora na sanfona "Pedidos
+   * sem resposta" — no mesmo lugar e no mesmo formato da reposição.
+   * Antes vivia num card separado, e ter dois lugares para o mesmo tipo
+   * de decisão fazia a matriz responder num e conferir no outro.
+   *
+   * Recusar EXIGE motivo, aqui e na regra do Firestore: a loja está sem
+   * embalagem e precisa saber o que fazer em seguida.
    */
+  async function handleDecidirSuprimentos(
+    pedido: PedidoSuprimentos,
+    desfecho: "confirmado" | "cancelado",
+    motivo?: string
+  ) {
+    const atualizado: PedidoSuprimentos = {
+      ...pedido,
+      atendimento: {
+        desfecho,
+        por: operador,
+        em: new Date().toISOString(),
+        ...(motivo ? { motivo } : {}),
+      },
+    };
+    await comRetorno(
+      () => repositorio!.salvarPedidoSuprimentos(atualizado),
+      desfecho === "confirmado" ? "Suprimentos confirmados." : "Suprimentos recusados."
+    );
+    setPedidosSuprimentos((atual) => [
+      ...atual.filter((p) => p.id !== atualizado.id),
+      atualizado,
+    ]);
+
+    try {
+      await avisarDesfechoSuprimentos(pedido.lojaId, desfecho, motivo);
+    } catch (erro) {
+      console.warn("Decisão gravada, mas o aviso à filial não saiu:", erro);
+    }
+  }
 
   async function registrarReposicaoNaProducao(
     pedido: PedidoFilial,
@@ -1006,6 +1037,8 @@ export default function App() {
                 onMarcarFornada={handleMarcarFornada}
                 onCadastrarProduto={handleCadastroRelampago}
                 onDecidirReposicao={handleDecidirReposicao}
+                pedidosSuprimentos={pedidosSuprimentos}
+                onDecidirSuprimentos={handleDecidirSuprimentos}
               />
             </>
           ) : (

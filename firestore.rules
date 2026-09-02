@@ -225,6 +225,24 @@ service cloud.firestore {
       allow read: if ehMatriz() || (lojaConhecida() && resource.data.lojaId == lojaDoUsuario());
       allow create, update: if lojaConhecida()
                             && request.resource.data.lojaId == lojaDoUsuario();
+
+      // A MATRIZ RESPONDE À LISTA DE SUPRIMENTOS (set/2026).
+      //
+      // A resposta vivia num card que saiu da tela; ela voltou para a
+      // sanfona "Pedidos sem resposta", junto das reposições. Sem esta
+      // regra a lista chegava e ficava sem desfecho para sempre — a
+      // filial esperando, a matriz sem botão.
+      //
+      // Estrita no que importa: só `atendimento` pode mudar, e recusar
+      // exige motivo, porque a loja precisa saber o que fazer em
+      // seguida. A matriz continua sem poder tocar em `itens`.
+      allow update: if ehMatriz()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['atendimento'])
+                    && request.resource.data.atendimento.desfecho in ['confirmado', 'cancelado']
+                    && (request.resource.data.atendimento.desfecho == 'confirmado'
+                        || request.resource.data.atendimento.motivo is string);
+
       // Lista enviada não some: se a loja desistir, ela zera os itens.
       allow delete: if false;
     }

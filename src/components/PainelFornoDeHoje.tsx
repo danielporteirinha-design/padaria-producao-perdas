@@ -9,6 +9,7 @@ import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
+import type { PedidoSuprimentos } from "../types/suprimento";
 import type { LinhaDaMatriz } from "../lib/reposicaoDoDia";
 import { anuncioPendente, montarLinhasDaMatriz } from "../lib/reposicaoDoDia";
 import { horaDoInstante } from "../lib/data";
@@ -32,6 +33,8 @@ interface PainelFornoDeHojeProps {
   produtos: Produto[];
   fornadas: FornadaPronta[];
   pedidos: PedidoFilial[];
+  /** Listas de suprimentos que as filiais mandaram hoje. */
+  pedidosSuprimentos?: PedidoSuprimentos[];
   dataHoje: string;
   encerrados: Set<number>;
   onEncerrarAnuncio: (codigoPdv: number) => Promise<void>;
@@ -53,18 +56,26 @@ interface PainelFornoDeHojeProps {
     desfecho: "confirmado" | "cancelado",
     motivo?: string
   ) => Promise<void>;
+  /** A resposta da matriz à lista de suprimentos de uma filial. */
+  onDecidirSuprimentos?: (
+    pedido: PedidoSuprimentos,
+    desfecho: "confirmado" | "cancelado",
+    motivo?: string
+  ) => Promise<void>;
 }
 
 export function PainelFornoDeHoje({
   produtos,
   fornadas,
   pedidos,
+  pedidosSuprimentos = [],
   dataHoje,
   encerrados,
   onEncerrarAnuncio,
   onMarcarFornada,
   onCadastrarProduto,
   onDecidirReposicao,
+  onDecidirSuprimentos,
 }: PainelFornoDeHojeProps) {
   const [marcando, setMarcando] = useState<number | null>(null);
   const [busca, setBusca] = useState("");
@@ -117,10 +128,13 @@ export function PainelFornoDeHoje({
     desfecho: "confirmado" | "cancelado",
     motivo?: string
   ) {
-    if (!onDecidirReposicao || !linha.pedido) return;
     setDecidindo(linha.chave);
     try {
-      await onDecidirReposicao(linha.pedido, linha.codigoPdv, desfecho, motivo);
+      if (linha.tipo === "suprimentos" && onDecidirSuprimentos && linha.suprimentos) {
+        await onDecidirSuprimentos(linha.suprimentos, desfecho, motivo);
+      } else if (onDecidirReposicao && linha.pedido) {
+        await onDecidirReposicao(linha.pedido, linha.codigoPdv, desfecho, motivo);
+      }
       setRecusa(null);
     } finally {
       setDecidindo(null);
@@ -143,8 +157,9 @@ export function PainelFornoDeHoje({
   const buscando = busca.trim().length > 0;
 
   const linhas = useMemo(
-    () => montarLinhasDaMatriz({ fornadas, pedidos, hoje: dataHoje, encerrados }),
-    [fornadas, pedidos, dataHoje, encerrados]
+    () =>
+      montarLinhasDaMatriz({ fornadas, pedidos, hoje: dataHoje, encerrados, pedidosSuprimentos }),
+    [fornadas, pedidos, dataHoje, encerrados, pedidosSuprimentos]
   );
   const semResposta = useMemo(() => linhas.filter(anuncioPendente), [linhas]);
   /**
@@ -159,7 +174,7 @@ export function PainelFornoDeHoje({
    * enterrado no meio de linhas que só informam.
    */
   const concluidos = useMemo(
-    () => linhas.filter((l) => !anuncioPendente(l) && l.tipo === "pedido"),
+    () => linhas.filter((l) => !anuncioPendente(l) && l.tipo !== "anuncio"),
     [linhas]
   );
 
@@ -284,7 +299,15 @@ export function PainelFornoDeHoje({
    * decidir o que fazer em seguida.
    */
   function linhaDePedido(linha: LinhaDaMatriz) {
-    const nome = nomeDoProduto(linha.codigoPdv);
+    /**
+     * Uma LISTA de suprimentos no lugar de um produto: o desenho é o
+     * mesmo — quem pediu, o quê, e os dois botões —, porque a decisão da
+     * matriz é a mesma decisão. O que muda é o nome da coisa.
+     */
+    const ehSuprimentos = linha.tipo === "suprimentos";
+    const nome = ehSuprimentos
+      ? `Suprimentos · ${linha.variedades ?? 0} ${(linha.variedades ?? 0) === 1 ? "item" : "itens"}`
+      : nomeDoProduto(linha.codigoPdv);
     const recusando = recusa?.chave === linha.chave;
     return (
       <div key={linha.chave} className="linha-reposicao">
@@ -309,7 +332,9 @@ export function PainelFornoDeHoje({
             </span>
           )}
 
-          {linha.situacao === "pendente" && onDecidirReposicao && linha.pedido && (
+          {linha.situacao === "pendente" &&
+            ((ehSuprimentos && onDecidirSuprimentos && linha.suprimentos) ||
+              (!ehSuprimentos && onDecidirReposicao && linha.pedido)) && (
             recusando ? (
               <span className="editor-quantidade">
                 <input
@@ -386,7 +411,9 @@ export function PainelFornoDeHoje({
         {doGrupo.map((linha) => (
           <div key={linha.chave} className="linha-historico">
             <span className="produto-historico">
-              {nomeDoProduto(linha.codigoPdv)}
+              {linha.tipo === "suprimentos"
+                ? `Suprimentos · ${linha.variedades ?? 0} ${(linha.variedades ?? 0) === 1 ? "item" : "itens"}`
+                : nomeDoProduto(linha.codigoPdv)}
               <em className="hora-historico">{horaDoInstante(linha.quando)}</em>
             </span>
             <span className="qtd-historico">
@@ -407,7 +434,7 @@ export function PainelFornoDeHoje({
   }
 
   function linhaAnunciada(linha: LinhaDaMatriz) {
-    if (linha.tipo === "pedido") return linhaDePedido(linha);
+    if (linha.tipo === "pedido" || linha.tipo === "suprimentos") return linhaDePedido(linha);
     return (
       <div key={linha.chave} className="linha-reposicao">
         <span className="nome-reposicao">
