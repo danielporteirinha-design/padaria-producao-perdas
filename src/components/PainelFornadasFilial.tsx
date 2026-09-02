@@ -133,8 +133,18 @@ export function PainelFornadasFilial({
   const [dispensadas, setDispensadas] = useState(() => fornadasDispensadas(loja.id, hoje));
 
   const linhas = useMemo(
-    () => montarLinhasDoDia({ fornadas, pedidos, hoje, lojaId: loja.id, encerrados, dispensadas }),
-    [fornadas, pedidos, hoje, loja.id, encerrados, dispensadas]
+    () =>
+      montarLinhasDoDia({
+        fornadas,
+        pedidos,
+        hoje,
+        lojaId: loja.id,
+        encerrados,
+        dispensadas,
+        // O que já está na montagem sai de "sem resposta" na hora.
+        naMontagem: new Set(itens.map((i) => i.codigoPdv)),
+      }),
+    [fornadas, pedidos, hoje, loja.id, encerrados, dispensadas, itens]
   );
   const semResposta = useMemo(() => linhas.filter(estaPendente), [linhas]);
   const concluidos = useMemo(() => linhas.filter((l) => !estaPendente(l)), [linhas]);
@@ -292,19 +302,20 @@ export function PainelFornadasFilial({
             <em className="hora-reposicao">{horaDoInstante(linha.quando)}</em>
           </span>
 
-          {/* JÁ ESTÁ NA LISTA, MAS AINDA NÃO FOI ENVIADO (set/2026).
-              Tocar em "Pedir" põe o item na montagem — e a linha do
-              anúncio continuava dizendo "peça se precisar", como se o
-              toque não tivesse feito nada. A pessoa clicava de novo, e a
-              quantidade dobrava. O aviso só sai de "sem resposta" quando
-              o pedido é ENVIADO; até lá, a linha diz onde ele está. */}
           {linha.situacao === "pendente" && (
             <span className="reposicao-aguardando">
-              {!daMatriz
-                ? "Aguardando a matriz responder"
-                : itens.some((i) => i.codigoPdv === linha.codigoPdv)
-                  ? "Já está na sua lista — falta enviar o pedido"
-                  : `Disponível${linha.vezes && linha.vezes > 1 ? ` · ${linha.vezes} fornadas` : ""} — peça se precisar`}
+              {daMatriz
+                ? `Disponível${linha.vezes && linha.vezes > 1 ? ` · ${linha.vezes} fornadas` : ""} — peça se precisar`
+                : "Aguardando a matriz responder"}
+            </span>
+          )}
+          {/* NA LISTA, AINDA NÃO ENVIADO. Sai de "sem resposta" no
+              instante em que entra na montagem — pôr o item na lista é a
+              resposta ao aviso —, mas o texto avisa que falta o envio,
+              que é o passo que a matriz enxerga. */}
+          {linha.situacao === "na-lista" && (
+            <span className="reposicao-aguardando">
+              Está na sua lista — falta enviar o pedido
             </span>
           )}
           {linha.situacao === "confirmado" && (

@@ -46,7 +46,20 @@ export type SituacaoDaLinha =
   /** Aviso da matriz que eu respondi pedindo o produto. */
   | "atendido"
   /** Aviso da matriz que eu tirei da frente sem pedir. */
-  | "dispensado";
+  | "dispensado"
+  /**
+   * Aviso da matriz que JÁ ESTÁ na lista em montagem, ainda não enviada
+   * (set/2026, decisão do dono do negócio).
+   *
+   * Pôr o item na lista É a resposta ao aviso — daquele momento em
+   * diante ele não espera mais nada de ninguém. Antes ele só saía de
+   * "sem resposta" quando o pedido inteiro era enviado: a filial montava
+   * cinco itens e a sanfona continuava cobrando os cinco, sem distinguir
+   * o que já foi resolvido do que ainda falta decidir. Numa lista de
+   * pendências, item resolvido que continua listado destrói o valor da
+   * lista.
+   */
+  | "na-lista";
 
 export interface LinhaDoDia {
   /** Única na lista — serve de `key` na tela. */
@@ -77,6 +90,11 @@ export interface EntradaDoDia {
    * pedir decisão — ver src/lib/fornadasDispensadas.ts.
    */
   dispensadas: Map<number, string>;
+  /**
+   * Produtos que já estão na lista em montagem desta loja — pedidos, mas
+   * ainda não enviados. Ver a situação "na-lista".
+   */
+  naMontagem?: Set<number>;
 }
 
 export function montarLinhasDoDia({
@@ -86,6 +104,7 @@ export function montarLinhasDoDia({
   lojaId,
   encerrados,
   dispensadas,
+  naMontagem,
 }: EntradaDoDia): LinhaDoDia[] {
   const linhas: LinhaDoDia[] = [];
   /** Produto -> instante do pedido MAIS RECENTE que esta loja fez hoje. */
@@ -149,6 +168,8 @@ export function montarLinhasDoDia({
        * mais recente que a última fornada.
        */
       situacao: (() => {
+        // Já está na lista em montagem: respondido, mesmo sem enviar.
+        if (naMontagem?.has(codigoPdv)) return "na-lista";
         const ultimaFornada = ordenadas[0].marcadaEm;
         const meuPedido = pedidosMeus.get(codigoPdv);
         if (meuPedido && meuPedido > ultimaFornada) return "atendido";

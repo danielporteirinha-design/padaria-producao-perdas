@@ -3441,6 +3441,30 @@ const perdas: RegistroPerda[] = [
     "pedido depois da ultima fornada responde o anuncio"
   );
 
+  /**
+   * PÔR NA LISTA JÁ RESPONDE O AVISO (set/2026, decisão do dono do
+   * negócio). A filial monta cinco itens: cada um sai de "sem resposta"
+   * no instante em que entra na lista, e não só quando o pedido é
+   * enviado — senão a sanfona continua cobrando o que já foi resolvido.
+   */
+  const naLista = montar({
+    fornadas: [forno(7, `${HOJE}T08:00:00.000Z`), forno(8, `${HOJE}T08:30:00.000Z`)],
+    naMontagem: new Set([7]),
+  });
+  afirmar(
+    naLista.find((l) => l.codigoPdv === 7)?.situacao === "na-lista",
+    "produto na montagem sai de 'sem resposta'"
+  );
+  afirmar(
+    naLista.filter(estaPendente).length === 1,
+    "sobra o aviso que ainda nao entrou na lista"
+  );
+  afirmar(
+    montar({ fornadas: [forno(7, `${HOJE}T08:00:00.000Z`)] }).find((l) => l.codigoPdv === 7)
+      ?.situacao === "pendente",
+    "sem montagem, o aviso continua pedindo decisao"
+  );
+
   /** Dispensa do formato antigo (sem hora) não segura anúncio nenhum. */
   afirmar(
     montar({ fornadas: duasFornadas, dispensadas: new Map([[7, ""]]) }).find(
