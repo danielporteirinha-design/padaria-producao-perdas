@@ -327,6 +327,14 @@ export function AssistenteDeVoz({
       {itens.length > 0 && (
         <div className="conferencia-voz">
           <strong className="pergunta-conferencia">{pergunta}</strong>
+          {/* A LEGENDA DO QUE FOI OUVIDO, EM DESTAQUE (set/2026, pedido
+              do dono do negócio).
+
+              Ela era uma linha itálica pequena e cinza, no meio do
+              cartão. Mas é ela que responde a pergunta que a pessoa faz
+              depois de falar — "ele entendeu o que eu disse?" — e é
+              lendo ela que se descobre POR QUE um item não entrou:
+              quase sempre o microfone ouviu outra coisa. */}
           {frase && <p className="frase-ouvida">"{frase}"</p>}
 
           {itens.map((item, indice) => (
@@ -370,10 +378,32 @@ export function AssistenteDeVoz({
             </div>
           ))}
 
-          {/* O que não foi reconhecido aparece: sumir em silêncio faria a
-              pessoa achar que pediu dez itens quando pediu oito. */}
+          {/* O QUE NÃO ENTROU NA LISTA, EM VERMELHO E NEGRITO (set/2026,
+              pedido do dono do negócio).
+
+              Sumir em silêncio faria a pessoa achar que pediu dez itens
+              quando pediu oito — e o item que faltou é o que vai faltar
+              na entrega. Antes isto era uma nota de rodapé cinza, do
+              mesmo tamanho e peso de "informe a quantidade": duas
+              mensagens com urgências muito diferentes, escritas igual.
+
+              Agora tem bloco próprio, borda vermelha e o texto do jeito
+              que o microfone ouviu — porque é ele que a pessoa precisa
+              repetir diferente, ou corrigir na busca. */}
           {sobras.length > 0 && (
-            <p className="nota-rodape">Não reconheci: {sobras.join(", ")}.</p>
+            <div className="fora-da-lista">
+              <strong className="titulo-fora-da-lista">
+                {sobras.length === 1 ? "Não entrou na lista:" : "Não entraram na lista:"}
+              </strong>
+              {sobras.map((sobra, indice) => (
+                <span key={`${sobra}-${indice}`} className="trecho-fora-da-lista">
+                  {sobra}
+                </span>
+              ))}
+              <span className="dica-fora-da-lista">
+                Fale de novo só este item, ou procure pelo nome na busca.
+              </span>
+            </div>
           )}
           {faltaQuantidade && (
             <p className="nota-rodape">Informe a quantidade dos itens em branco.</p>

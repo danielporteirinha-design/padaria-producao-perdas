@@ -145,7 +145,21 @@ export function PainelFornoDeHoje({
     [fornadas, pedidos, dataHoje, encerrados]
   );
   const semResposta = useMemo(() => linhas.filter(anuncioPendente), [linhas]);
-  const concluidos = useMemo(() => linhas.filter((l) => !anuncioPendente(l)), [linhas]);
+  /**
+   * O HISTÓRICO É SÓ DOS PEDIDOS DAS FILIAIS (set/2026, decisão do dono
+   * do negócio: tirar do histórico linhas como "Anunciei BISCOITO
+   * ESPREMIDO · 1 loja pediu").
+   *
+   * O anúncio já respondido não pede nada de ninguém — ele vira número,
+   * e número se lê em Análises. O que a matriz precisa reler aqui é o
+   * que ELA decidiu: quem pediu, o que foi confirmado e o que foi
+   * recusado, com o motivo. Misturado com os anúncios, isso ficava
+   * enterrado no meio de linhas que só informam.
+   */
+  const concluidos = useMemo(
+    () => linhas.filter((l) => !anuncioPendente(l) && l.tipo === "pedido"),
+    [linhas]
+  );
 
   async function cadastrarEAnunciar() {
     const nome = busca.trim();
