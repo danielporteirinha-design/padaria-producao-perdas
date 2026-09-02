@@ -282,11 +282,19 @@ export function PainelFornadasFilial({
             <em className="hora-reposicao">{horaDoInstante(linha.quando)}</em>
           </span>
 
+          {/* JÁ ESTÁ NA LISTA, MAS AINDA NÃO FOI ENVIADO (set/2026).
+              Tocar em "Pedir" põe o item na montagem — e a linha do
+              anúncio continuava dizendo "peça se precisar", como se o
+              toque não tivesse feito nada. A pessoa clicava de novo, e a
+              quantidade dobrava. O aviso só sai de "sem resposta" quando
+              o pedido é ENVIADO; até lá, a linha diz onde ele está. */}
           {linha.situacao === "pendente" && (
             <span className="reposicao-aguardando">
-              {daMatriz
-                ? `Disponível${linha.vezes && linha.vezes > 1 ? ` · ${linha.vezes} fornadas` : ""} — peça se precisar`
-                : "Aguardando a matriz responder"}
+              {!daMatriz
+                ? "Aguardando a matriz responder"
+                : itens.some((i) => i.codigoPdv === linha.codigoPdv)
+                  ? "Já está na sua lista — falta enviar o pedido"
+                  : `Disponível${linha.vezes && linha.vezes > 1 ? ` · ${linha.vezes} fornadas` : ""} — peça se precisar`}
             </span>
           )}
           {linha.situacao === "confirmado" && (

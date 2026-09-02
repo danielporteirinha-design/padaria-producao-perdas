@@ -95,7 +95,7 @@ service cloud.firestore {
       allow read: if ehMatriz() || (lojaConhecida() && resource.data.lojaId == lojaDoUsuario());
       allow create, update: if lojaConhecida()
                             && request.resource.data.lojaId == lojaDoUsuario();
-      // A matriz responde à reposição.
+      // A matriz responde à reposição, no documento inteiro.
       allow update: if ehMatriz()
                     && request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['atendimento'])
@@ -104,6 +104,23 @@ service cloud.firestore {
                     // é exatamente o problema que este campo resolve.
                     && (request.resource.data.atendimento.desfecho == 'confirmado'
                         || request.resource.data.atendimento.motivo is string);
+
+      // A matriz responde ITEM POR ITEM (set/2026).
+      //
+      // Uma fala da filial vira UM documento com vários produtos. Com a
+      // regra acima sozinha, a decisão só cabia no documento inteiro:
+      // recusar a broa porque a fornada não deu certo cancelava também o
+      // pão e o sonho, que estavam prontos. A filial ficava sem nove
+      // itens por causa de um.
+      //
+      // `atendimentoPorItem` guarda um desfecho por código de PDV. A
+      // regra continua sendo estrita no que importa: só esta chave pode
+      // mudar, e a matriz continua sem poder tocar em `itens`, `lojaId`
+      // ou qualquer outro campo do pedido da loja.
+      allow update: if ehMatriz()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['atendimentoPorItem'])
+                    && request.resource.data.atendimentoPorItem is map;
 
       // A matriz confirma a lista da filial, podendo mudar as quantidades
       // (ago/2026, decisão do dono do negócio).
