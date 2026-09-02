@@ -144,15 +144,67 @@ export function filtrarDestinatarios(
  * chave fica ligada por dias e ninguém entende por que parou de chegar
  * aviso.
  */
+/**
+ * QUEM ESTÁ REGISTRADO PARA RECEBER AVISO — e sob qual nome.
+ *
+ * POR QUE ISTO EXISTE (set/2026): "o teste de aviso não funcionou" tem
+ * três causas que se parecem exatamente igual na tela — o aparelho de
+ * destino nunca ativou os avisos, ativou sob outro nome de operador, ou
+ * está silenciado pela manutenção. A coleção `dispositivos` é ilegível
+ * pelo app de propósito (regra do Firestore: `allow read: if false`), e
+ * sem enxergá-la a investigação vira tentativa e erro.
+ *
+ * NÃO DEVOLVE TOKEN. Só a loja, o nome do operador e se aquele aparelho
+ * passa pelo filtro da manutenção — o suficiente para descobrir a causa,
+ * e nada que sirva para mandar aviso a ninguém.
+ */
+async function aparelhosRegistrados(nomesDeTeste: string[], ativa: boolean) {
+  const bruto = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!bruto) return { erro: "Sem FIREBASE_SERVICE_ACCOUNT — não dá para ler o registro." };
+
+  try {
+    const [app, firestore] = await Promise.all([
+      import("firebase-admin/app"),
+      import("firebase-admin/firestore"),
+    ]);
+    const { cert, getApp, getApps, initializeApp } = app;
+    const aplicativo =
+      getApps().length > 0
+        ? getApp()
+        : initializeApp({
+            credential: cert(JSON.parse(bruto) as import("firebase-admin/app").ServiceAccount),
+          });
+
+    const snapshot = await firestore.getFirestore(aplicativo).collection("dispositivos").get();
+    const porLoja: Record<string, { operador: string; recebeAgora: boolean }[]> = {};
+
+    for (const documento of snapshot.docs) {
+      const loja = (documento.get("lojaId") as string) ?? "(sem loja)";
+      const operador = (documento.get("registradoPor") as string) ?? "(sem nome)";
+      porLoja[loja] = porLoja[loja] ?? [];
+      porLoja[loja].push({
+        operador,
+        recebeAgora: !ativa || ehAparelhoDeTeste(operador, nomesDeTeste),
+      });
+    }
+
+    return { total: snapshot.size, porLoja };
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message.slice(0, 300) : String(e).slice(0, 300) };
+  }
+}
+
 export default async function handler(req: any, res: any) {
   const ativa = manutencaoAtiva(process.env.MANUTENCAO);
   const nomes = operadoresDeTeste(process.env.APARELHOS_DE_TESTE);
+  const aparelhos = await aparelhosRegistrados(nomes, ativa);
 
   res.status(200).json({
     manutencao: ativa,
     // Os nomes não são segredo: são o primeiro nome de quem testa, e
     // vê-los é o que permite descobrir por que um aparelho não recebe.
     aparelhosDeTeste: nomes,
+    aparelhosRegistrados: aparelhos,
     aviso:
       ativa && nomes.length === 0
         ? "Manutenção LIGADA sem APARELHOS_DE_TESTE: NINGUÉM está recebendo aviso."

@@ -134,7 +134,13 @@ export function PainelFornoDeHoje({
     );
   }
 
-  function sanfona(chave: string, titulo: string, lista: LinhaDaMatriz[]) {
+  /** O sino é só da lista que espera resposta — ver PainelFornadasFilial. */
+  function sanfona(
+    chave: string,
+    titulo: string,
+    lista: LinhaDaMatriz[],
+    { cobraResposta = false }: { cobraResposta?: boolean } = {}
+  ) {
     const abertaAgora = !!aberta[chave];
     return (
       <div className={`acordeao-sessao ${abertaAgora ? "aberta" : ""}`}>
@@ -148,7 +154,12 @@ export function PainelFornoDeHoje({
             <span className="nome-sessao">{titulo}</span>
             {/* O SINO NO LUGAR DA CONTAGEM ESCRITA — mesmo motivo da tela
                 da filial: o número é lido, o sino é reconhecido. */}
-            {lista.length > 0 && (
+            {lista.length > 0 && !cobraResposta && (
+              <span className="contagem-itens">
+                {lista.length} {lista.length === 1 ? "item" : "itens"}
+              </span>
+            )}
+            {lista.length > 0 && cobraResposta && (
               <span
                 className="sino-sessao"
                 aria-label={`${lista.length} ${lista.length === 1 ? "registro" : "registros"}`}
@@ -364,7 +375,7 @@ export function PainelFornoDeHoje({
           </>
         ) : null}
 
-        {sanfona("semResposta", "Pedidos sem resposta", semResposta)}
+        {sanfona("semResposta", "Pedidos sem resposta", semResposta, { cobraResposta: true })}
         {sanfona("concluidos", "Pedidos concluídos", concluidos)}
 
         <TesteDeAvisos destino="filial" />

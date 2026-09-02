@@ -171,7 +171,21 @@ export function PainelFornadasFilial({
   const totalUnidades = itens.reduce((soma, i) => soma + i.quantidadeUnidades, 0);
   const faltaQuantidade = itens.some((i) => i.quantidadeUnidades <= 0);
 
-  function sanfona(chave: string, titulo: string, linhasDaLista: LinhaDoDia[]) {
+  /**
+   * O SINO É SÓ DA LISTA QUE ESPERA RESPOSTA (set/2026, decisão do dono
+   * do negócio).
+   *
+   * "Pedidos concluídos" é histórico do dia: ele informa, não cobra
+   * nada. Um sino balançando ali competiria com o único aviso que
+   * realmente pede ação — e dois alarmes na mesma tela é o mesmo que
+   * nenhum, porque a pessoa aprende a ignorar os dois.
+   */
+  function sanfona(
+    chave: string,
+    titulo: string,
+    linhasDaLista: LinhaDoDia[],
+    { cobraResposta = false }: { cobraResposta?: boolean } = {}
+  ) {
     const abertaAgora = !!aberta[chave];
     return (
       <div className={`acordeao-sessao ${abertaAgora ? "aberta" : ""}`}>
@@ -193,7 +207,12 @@ export function PainelFornadasFilial({
                 é curto e para sozinho — animação infinita numa tela que
                 fica aberta o dia todo vira ruído, e ruído a pessoa
                 aprende a ignorar. */}
-            {linhasDaLista.length > 0 && (
+            {linhasDaLista.length > 0 && !cobraResposta && (
+              <span className="contagem-itens">
+                {linhasDaLista.length} {linhasDaLista.length === 1 ? "item" : "itens"}
+              </span>
+            )}
+            {linhasDaLista.length > 0 && cobraResposta && (
               <span
                 className="sino-sessao"
                 aria-label={`${linhasDaLista.length} ${linhasDaLista.length === 1 ? "registro" : "registros"}`}
@@ -526,7 +545,7 @@ export function PainelFornadasFilial({
           </div>
         )}
 
-        {sanfona("semResposta", "Pedidos sem resposta", semResposta)}
+        {sanfona("semResposta", "Pedidos sem resposta", semResposta, { cobraResposta: true })}
         {sanfona("concluidos", "Pedidos concluídos", concluidos)}
 
         <TesteDeAvisos destino="matriz" />
