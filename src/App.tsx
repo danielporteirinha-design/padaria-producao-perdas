@@ -66,7 +66,40 @@ interface DefinicaoAba {
   rotulo: string;
 }
 
-const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
+/**
+ * IMPLANTAÇÃO GRADUAL — QUAIS ABAS ESTÃO LIBERADAS (set/2026)
+ * ------------------------------------------------------------------
+ * Decisão do dono do negócio: a equipe aprende UMA tela por vez. Enquanto
+ * a Reposição não estiver dominada, o resto do app não aparece — nem para
+ * a matriz, nem para as filiais.
+ *
+ * O motivo é de treinamento, não de código: cinco abas no primeiro dia
+ * transformam "onde eu lanço isso?" na pergunta mais frequente do
+ * balcão, e cada resposta errada vira dado errado no banco.
+ *
+ * COMO LIBERAR A PRÓXIMA: acrescente a chave nesta lista e publique.
+ * Nada mais muda — as telas, as regras do Firestore e os avisos já
+ * existem e continuam funcionando. Esta lista é só a porta.
+ *
+ * A ORDEM DE CADA PAPEL continua definida em TODAS_AS_ABAS, abaixo:
+ * liberar "perdas" faz a aba aparecer no lugar certo de cada perfil, sem
+ * precisar lembrar onde ela entrava.
+ */
+const ABAS_LIBERADAS: Aba[] = [
+  "fornada",
+  // "perdas",
+  // "suprimentos",
+  // "cronograma",   (matriz — Lista de Produção)
+  // "pedido",       (filial — Lista de Produção)
+  // "cadastro",     (matriz — Produtos)
+  // "analises",
+];
+
+/**
+ * A ordem completa de cada perfil. Serve de mapa do que existe: o que
+ * aparece de fato é o cruzamento disto com ABAS_LIBERADAS.
+ */
+const TODAS_AS_ABAS: Record<"matriz" | "filial", DefinicaoAba[]> = {
   matriz: [
     { chave: "fornada", rotulo: "Reposição" },
     { chave: "perdas", rotulo: "Perdas" },
@@ -80,6 +113,21 @@ const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
     { chave: "pedido", rotulo: "Lista de Produção" },
   ],
 };
+
+/**
+ * NUNCA DEVOLVE LISTA VAZIA. Se alguém esvaziar ABAS_LIBERADAS por
+ * engano, o app ficaria sem nenhuma aba para renderizar — tela branca,
+ * sem explicação, no balcão. A Reposição é o piso.
+ */
+const ABAS_POR_PAPEL: Record<"matriz" | "filial", DefinicaoAba[]> = {
+  matriz: TODAS_AS_ABAS.matriz.filter((a) => ABAS_LIBERADAS.includes(a.chave)),
+  filial: TODAS_AS_ABAS.filial.filter((a) => ABAS_LIBERADAS.includes(a.chave)),
+};
+for (const papel of ["matriz", "filial"] as const) {
+  if (ABAS_POR_PAPEL[papel].length === 0) {
+    ABAS_POR_PAPEL[papel] = [TODAS_AS_ABAS[papel][0]];
+  }
+}
 
 const SEGUNDOS_ATE_ASSUMIR_OFFLINE = 6000;
 const SEGUNDOS_ATE_DESISTIR_DA_IMPRESSAO = 45_000;
@@ -145,7 +193,9 @@ export default function App() {
     void lerManutencao().then(setManutencao);
   }, []);
   const [nomeSugerido, setNomeSugerido] = useState("");
-  const [aba, setAba] = useState<Aba>("cronograma");
+  // Abre na Reposição: é a única aba liberada na fase de implantação,
+  // e continua sendo a primeira de todo perfil depois.
+  const [aba, setAba] = useState<Aba>("fornada");
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [suprimentos, setSuprimentos] = useState<Suprimento[]>([]);
   const [pedidosSuprimentos, setPedidosSuprimentos] = useState<PedidoSuprimentos[]>([]);
