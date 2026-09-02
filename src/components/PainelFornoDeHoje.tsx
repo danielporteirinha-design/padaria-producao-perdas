@@ -263,6 +263,8 @@ export function PainelFornoDeHoje({
           <div className="corpo-sessao">
             {lista.length === 0 ? (
               <p className="nota-rodape">Nada aqui hoje.</p>
+            ) : chave === "concluidos" ? (
+              historicoPorLoja(lista)
             ) : (
               lista.map((linha) => linhaAnunciada(linha))
             )}
@@ -356,6 +358,52 @@ export function PainelFornoDeHoje({
         )}
       </div>
     );
+  }
+
+  /**
+   * O HISTÓRICO DO DIA, AGRUPADO POR LOJA (set/2026, pedido do dono do
+   * negócio: "a leitura deve ser rápida, precisa e organizada").
+   *
+   * Antes era uma lista corrida em que cada linha repetia o nome da loja
+   * numa etiqueta. Com dez pedidos de três lojas, ler "quem pediu o quê"
+   * exigia percorrer tudo e ir juntando de cabeça.
+   *
+   * Agora a loja é um cabeçalho e aparece UMA vez; embaixo dela, uma
+   * linha por item, sempre na mesma ordem: produto · quantidade ·
+   * status. Colunas fixas são o que permite ler na diagonal — o olho
+   * aprende onde cada coisa está e para de procurar.
+   */
+  function historicoPorLoja(lista: LinhaDaMatriz[]) {
+    const porLoja = new Map<string, LinhaDaMatriz[]>();
+    for (const linha of lista) {
+      const loja = linha.lojaId ?? "";
+      porLoja.set(loja, [...(porLoja.get(loja) ?? []), linha]);
+    }
+
+    return [...porLoja.entries()].map(([lojaId, doGrupo]) => (
+      <div key={lojaId} className="grupo-historico">
+        <strong className="loja-do-historico">{nomeDaLoja(lojaId)}</strong>
+        {doGrupo.map((linha) => (
+          <div key={linha.chave} className="linha-historico">
+            <span className="produto-historico">
+              {nomeDoProduto(linha.codigoPdv)}
+              <em className="hora-historico">{horaDoInstante(linha.quando)}</em>
+            </span>
+            <span className="qtd-historico">
+              {linha.pedidoUnidades !== undefined ? `${linha.pedidoUnidades} un` : ""}
+            </span>
+            <span
+              className={`status-historico ${linha.situacao === "pedido" ? "confirmado" : "recusado"}`}
+            >
+              {linha.situacao === "pedido" ? "Confirmado" : "Recusado"}
+            </span>
+            {linha.situacao === "encerrado" && linha.motivo && (
+              <span className="motivo-historico">{linha.motivo}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    ));
   }
 
   function linhaAnunciada(linha: LinhaDaMatriz) {
