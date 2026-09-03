@@ -198,6 +198,15 @@ const CONFERENCIAS = [
   ["src/types/suprimento.ts", "segmentosExibidos", "Sessao criada na hora vira sanfona propria"],
   ["src/types/suprimento.ts", "personalizado", "Sessao propria nao cai mais em Outros"],
   ["src/components/TelaSuprimentos.tsx", "opcoesDeIncluir", "Nao achou (por voz ou busca) oferece criar sessao nova"],
+
+  // --- Lista de Producao de volta para matriz e filiais (set/2026)
+  ["src/App.tsx", "\"cronograma\", // (matriz", "Lista de Producao liberada para a matriz"],
+  ["src/App.tsx", "\"pedido\", // (filial", "Lista de Producao liberada para as filiais"],
+
+  // --- Permissao de aviso: soneca vence sozinha, reconfere ao voltar (set/2026)
+  ["src/components/AtivarAvisos.tsx", "aindaDispensado", "Agora nao vira soneca, nao apagao definitivo"],
+  ["src/components/AtivarAvisos.tsx", "reconferir", "Permissao de aviso reconferida ao reabrir o app"],
+  ["src/App.tsx", "registrarAparelhoSePermitido(lojaId, operador)", "Aparelho registrado de novo ao reabrir o app"],
 ];
 
 /**

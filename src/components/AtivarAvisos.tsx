@@ -30,6 +30,25 @@
  * toques exatos, na ordem, com os nomes que aparecem na tela dele (ver
  * src/lib/plataforma.ts). "Libere nas configurações" é uma instrução que
  * ninguém completa; "toque e segure o ícone na tela inicial" é.
+ *
+ * "AGORA NÃO" NÃO PODE VIRAR "NUNCA MAIS" (set/2026, pedido do dono do
+ * negócio: a permissão do aparelho tem de ser checada de novo, e a
+ * solicitação reenviada, para que nenhum aviso — sobretudo o de
+ * atualização do app — deixe de chegar por erro silencioso).
+ *
+ * Antes, um toque em "agora não" escondia o cartão PARA SEMPRE, mesmo
+ * com a permissão ainda em aberto (nem concedida, nem negada). Alguém
+ * que dispensa às pressas no meio do balcão nunca mais via o convite —
+ * e o aparelho ficava sem nenhum aviso, sem ninguém perceber, até o dia
+ * em que um justamente crítico (a atualização do app) não chegasse.
+ *
+ * Agora "agora não" é um soneca de alguns dias, não um apagão
+ * definitivo — e o estado é reconferido toda vez que o app volta para a
+ * tela (o mesmo `visibilitychange` que já reconfere a versão nova em
+ * src/lib/atualizacao.ts), não só quando o cartão nasce. Se a pessoa
+ * liberar a notificação pelas configurações do sistema enquanto o app
+ * estava em segundo plano, o cartão some sozinho ao voltar; se ainda
+ * estiver bloqueada, ele reaparece.
  */
 
 import { useEffect, useState } from "react";
@@ -48,15 +67,33 @@ interface AtivarAvisosProps {
   operador: string;
 }
 
+/**
+ * QUANTO TEMPO UM "AGORA NÃO" VALE (set/2026). Curto o bastante para o
+ * aparelho não ficar dias sem nenhum aviso por causa de um toque apressado
+ * no meio do balcão; longo o bastante para não implicar de novo no dia
+ * seguinte com quem já viu o cartão.
+ */
+const DIAS_ATE_LEMBRAR_DE_NOVO = 3;
+const MS_ATE_LEMBRAR_DE_NOVO = DIAS_ATE_LEMBRAR_DE_NOVO * 24 * 60 * 60 * 1000;
+
+function aindaDispensado(lojaId: string): boolean {
+  const bruto = localStorage.getItem(`padaria:avisos-dispensados:${lojaId}`);
+  if (!bruto) return false;
+  const desde = Date.parse(bruto);
+  // Valor antigo, de antes de o "agora não" virar soneca (era só "1", não
+  // uma data) — não sabe dizer há quanto tempo foi, então trata como
+  // vencido: melhor reaparecer uma vez a mais do que ficar calado.
+  if (Number.isNaN(desde)) return false;
+  return Date.now() - desde < MS_ATE_LEMBRAR_DE_NOVO;
+}
+
 export function AtivarAvisos({ loja, operador }: AtivarAvisosProps) {
   const [estado, setEstado] = useState<EstadoAviso | null>(null);
   const [ativando, setAtivando] = useState(false);
   const [erro, setErro] = useState("");
   const [mostrarCaminho, setMostrarCaminho] = useState(false);
   const [copiado, setCopiado] = useState(false);
-  const [dispensado, setDispensado] = useState(
-    () => localStorage.getItem(`padaria:avisos-dispensados:${loja.id}`) === "1"
-  );
+  const [dispensado, setDispensado] = useState(() => aindaDispensado(loja.id));
 
   useEffect(() => {
     let cancelado = false;
@@ -67,6 +104,23 @@ export function AtivarAvisos({ loja, operador }: AtivarAvisosProps) {
       cancelado = true;
     };
   }, []);
+
+  /**
+   * RECONFERE AO VOLTAR PARA A TELA, não só quando o cartão nasce — mesmo
+   * `visibilitychange` de src/lib/atualizacao.ts, pelo mesmo motivo: um
+   * `setInterval` é pausado com o app em segundo plano, e a pessoa pode
+   * ter mexido na permissão pelas configurações do sistema nesse meio
+   * tempo (ou o soneca do "agora não" pode ter vencido).
+   */
+  useEffect(() => {
+    function reconferir() {
+      if (document.visibilityState !== "visible") return;
+      estadoDosAvisos().then(setEstado);
+      setDispensado(aindaDispensado(loja.id));
+    }
+    document.addEventListener("visibilitychange", reconferir);
+    return () => document.removeEventListener("visibilitychange", reconferir);
+  }, [loja.id]);
 
   async function ligar() {
     setAtivando(true);
@@ -97,7 +151,9 @@ export function AtivarAvisos({ loja, operador }: AtivarAvisosProps) {
     // Sem isto o clique subiria para o cartão e dispararia a ativação —
     // "agora não" acabaria pedindo a permissão.
     evento.stopPropagation();
-    localStorage.setItem(`padaria:avisos-dispensados:${loja.id}`, "1");
+    // Grava QUANDO, não só "dispensei" — é a data que faz o soneca vencer
+    // sozinho em vez de virar um "nunca mais" (ver DIAS_ATE_LEMBRAR_DE_NOVO).
+    localStorage.setItem(`padaria:avisos-dispensados:${loja.id}`, new Date().toISOString());
     setDispensado(true);
   }
 

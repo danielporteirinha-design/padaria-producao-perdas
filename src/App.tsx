@@ -88,9 +88,11 @@ const ABAS_LIBERADAS: Aba[] = [
   // Suprimentos voltou em set/2026: a Reposição já rodou no balcão, e a
   // lista de embalagens é a segunda coisa que a filial pede todo dia.
   "suprimentos",
+  // Lista de Produção voltou em set/2026, pedido do dono do negócio —
+  // para a matriz (cronograma) e para as filiais (pedido) juntas.
+  "cronograma", // (matriz — Lista de Produção)
+  "pedido", // (filial — Lista de Produção)
   // "perdas",
-  // "cronograma",   (matriz — Lista de Produção)
-  // "pedido",       (filial — Lista de Produção)
   // "cadastro",     (matriz — Produtos)
   // "analises",
 ];
@@ -326,7 +328,29 @@ export default function App() {
 
   useEffect(() => {
     if (!loja || !operador) return;
-    void registrarAparelhoSePermitido(loja.id, operador);
+    const lojaId = loja.id;
+    void registrarAparelhoSePermitido(lojaId, operador);
+
+    /**
+     * RECONFERE AO VOLTAR PARA A TELA (set/2026, pedido do dono do
+     * negócio: nenhum aviso — sobretudo o de atualização do app — pode
+     * deixar de chegar por causa de uma permissão que mudou enquanto o
+     * app estava em segundo plano).
+     *
+     * Se a pessoa liberou a notificação pelas configurações do sistema
+     * (ou trocou de aparelho) sem fechar e reabrir o app, só voltar para
+     * a tela já é o suficiente para registrar este aparelho — sem
+     * esperar o próximo login. Mesmo `visibilitychange` de
+     * src/lib/atualizacao.ts: um `setInterval` fica pausado em segundo
+     * plano, e isto não pode.
+     */
+    function reconferir() {
+      if (document.visibilityState === "visible") {
+        void registrarAparelhoSePermitido(lojaId, operador);
+      }
+    }
+    document.addEventListener("visibilitychange", reconferir);
+    return () => document.removeEventListener("visibilitychange", reconferir);
   }, [loja, operador]);
 
   useEffect(() => {
