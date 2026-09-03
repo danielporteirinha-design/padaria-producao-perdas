@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import type { Produto } from "../types/produto";
+import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { ItemPlanoProducao } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
@@ -24,6 +24,7 @@ import {
 } from "../lib/concluidosVistos";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { contemBusca } from "../lib/texto";
+import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { IconeConfere, IconeLixeira, IconeSeta, IconeSino } from "./Icones";
 import { CampoDeBusca } from "./CampoDeBusca";
 import { AssistenteDeVoz } from "./AssistenteDeVoz";
@@ -47,6 +48,13 @@ interface PainelFornadasFilialProps {
   encerrados: Set<number>;
   onSalvarPedido: (pedido: PedidoFilial) => Promise<void>;
   /**
+   * Cadastro relâmpago de um produto que não existe no catálogo ainda —
+   * mesmo mecanismo que a matriz já tem em PainelFornoDeHoje.tsx, agora
+   * espelhado aqui para a filial não depender da matriz para incluir um
+   * item novo na Reposição.
+   */
+  onCadastrarProduto: (input: NovoProdutoInput) => Promise<Produto | undefined>;
+  /**
    * Manda a lista em montagem para a impressão (set/2026, pedido do dono
    * do negócio). Quem vai buscar a mercadoria na matriz anda com o papel
    * na mão — conferir pelo celular com as mãos ocupadas não funciona.
@@ -64,6 +72,7 @@ export function PainelFornadasFilial({
   operador,
   encerrados,
   onSalvarPedido,
+  onCadastrarProduto,
   onImprimir,
 }: PainelFornadasFilialProps) {
   const hoje = dataDeHojeIso();
@@ -71,6 +80,9 @@ export function PainelFornadasFilial({
   /** O microfone está aberto? Enquanto estiver, a busca some da tela. */
   const [ouvindoVoz, setOuvindoVoz] = useState(false);
   const [codigoPedindo, setCodigoPedindo] = useState<number | null>(null);
+  const [cadastrando, setCadastrando] = useState(false);
+  const [categoriaNova, setCategoriaNova] = useState("");
+  const [salvandoNovo, setSalvandoNovo] = useState(false);
   const [quantidade, setQuantidade] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false);
@@ -158,6 +170,38 @@ export function PainelFornadasFilial({
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
       .slice(0, MAXIMO_RESULTADOS);
   }, [produtos, busca, encerrados]);
+
+  /**
+   * Cadastro relâmpago (set/2026, pedido do dono do negócio: a inserção
+   * de produto novo "pode ser feita pela matriz ou filiais"). A matriz
+   * já tinha isso em PainelFornoDeHoje — aqui é o mesmo botão, para o
+   * mesmo caso: a busca não achou nada no catálogo. Depois de salvar,
+   * abre direto o editor de quantidade do item recém-criado, porque o
+   * próximo passo natural é pedir a quantidade, não parar no meio.
+   */
+  async function cadastrarEIncluir() {
+    const nome = busca.trim();
+    if (!nome || !categoriaNova || salvandoNovo) return;
+    setSalvandoNovo(true);
+    try {
+      const novo = await onCadastrarProduto({
+        nome,
+        categoria: categoriaNova,
+        unidadeProducao: "un",
+        ativoNaProducao: true,
+        prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[categoriaNova] ?? null,
+      });
+      if (!novo) return;
+      setCadastrando(false);
+      setCategoriaNova("");
+      setCodigoPedindo(novo.codigoPdv);
+      setQuantidade("");
+    } catch {
+      // Mensagem já vem do aviso global (ver App.tsx).
+    } finally {
+      setSalvandoNovo(false);
+    }
+  }
 
   function acrescentar(novos: { codigoPdv: number; quantidadeUnidades: number }[]) {
     if (novos.length === 0) return;
@@ -515,7 +559,54 @@ export function PainelFornadasFilial({
 
         {busca.trim().length > 0 &&
           (resultados.length === 0 ? (
-            <p className="nota-rodape">Nenhum produto ativo com esse nome.</p>
+            <div className="cadastro-relampago">
+              {!cadastrando ? (
+                <>
+                  <p className="nota-rodape">Não está no catálogo.</p>
+                  <button
+                    type="button"
+                    className="secundario"
+                    onClick={() => {
+                      setCadastrando(true);
+                      setCategoriaNova("");
+                    }}
+                  >
+                    Cadastrar "{busca.trim()}"
+                  </button>
+                </>
+              ) : (
+                <>
+                  <strong className="nome-do-novo">{busca.trim()}</strong>
+                  <p className="nota-rodape">Em qual categoria?</p>
+                  <div className="setores-do-novo">
+                    {CATEGORIAS_PRODUCAO.map((categoria) => (
+                      <button
+                        key={categoria.chave}
+                        type="button"
+                        className={`chip-setor ${categoriaNova === categoria.chave ? "ativo" : ""}`}
+                        aria-pressed={categoriaNova === categoria.chave}
+                        onClick={() => setCategoriaNova(categoria.chave)}
+                      >
+                        {categoria.rotulo}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="acoes">
+                    <button type="button" className="link" onClick={() => setCadastrando(false)}>
+                      cancelar
+                    </button>
+                    <button
+                      type="button"
+                      className="primario"
+                      disabled={!categoriaNova || salvandoNovo}
+                      onClick={() => void cadastrarEIncluir()}
+                    >
+                      {salvandoNovo ? "Salvando..." : "Cadastrar e incluir"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           ) : (
             resultados.map((produto) => (
               <div key={produto.codigoPdv} className="linha-fornada">

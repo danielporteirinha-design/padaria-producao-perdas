@@ -1020,6 +1020,7 @@ export default function App() {
             hoje={diaCorrente}
             onSalvarPlano={handleSalvarPlano}
             onAjustarPedido={handleAjustarPedido}
+            onCadastrarProduto={handleCadastroRelampago}
           />
         )}
         {abaAtual === "fornada" &&
@@ -1062,6 +1063,7 @@ export default function App() {
               operador={operador}
               encerrados={codigosEncerrados(anunciosEncerrados, diaCorrente)}
               onSalvarPedido={handleSalvarPedido}
+              onCadastrarProduto={handleCadastroRelampago}
               onImprimir={setReposicaoParaImprimir}
             />
           ))}
@@ -1088,6 +1090,7 @@ export default function App() {
             operador={operador}
             hoje={diaCorrente}
             onSalvarPedido={handleSalvarPedido}
+            onCadastrarProduto={handleCadastroRelampago}
           />
         )}
         {abaAtual === "cadastro" && (

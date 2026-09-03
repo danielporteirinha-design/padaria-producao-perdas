@@ -217,6 +217,12 @@ const CONFERENCIAS = [
   // --- Suprimentos: tela sempre em branco, soma no envio (set/2026)
   ["src/components/TelaSuprimentos.tsx", "itensMesclados", "Suprimentos: novo pedido soma ao que ja foi enviado hoje"],
   ["src/components/PainelFornadasFilial.tsx", "linhaDeSuprimentos", "Status do pedido de suprimentos mora na Reposicao"],
+
+  // --- Cadastro relampago de produto, matriz e filiais (set/2026)
+  ["src/components/PainelFornadasFilial.tsx", "cadastrarEIncluir", "Filial cadastra produto novo direto na Reposicao"],
+  ["src/components/TelaCronograma.tsx", "cadastrarProduto", "Matriz cadastra produto novo direto na Lista de Producao"],
+  ["src/components/TelaPedidoFilial.tsx", "cadastrarProduto", "Filial cadastra produto novo direto na Lista de Producao"],
+  ["src/App.tsx", "onCadastrarProduto={handleCadastroRelampago}", "Cadastro relampago ligado nas tres telas novas"],
 ];
 
 /**

@@ -34,7 +34,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Produto } from "../types/produto";
+import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { ItemPlanoProducao, PlanoDeProducaoDiario, SessaoProducao } from "../types/producao";
 import type { RegistroPerda } from "../types/perda";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
@@ -48,7 +48,7 @@ import {
   mapasIguais,
 } from "../lib/rascunhoCronograma";
 import { gerarId } from "../lib/id";
-import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
+import { CATEGORIAS_PRODUCAO, rotuloDaCategoria, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProducao } from "../lib/sugestaoProducao";
 import { ExportarFita } from "./ExportarFita";
@@ -93,6 +93,13 @@ interface TelaCronogramaProps {
    * ajustarPedidoPelaMatriz em src/types/pedido.ts.
    */
   onAjustarPedido: (pedido: PedidoFilial) => Promise<void>;
+  /**
+   * Cadastro relâmpago de um produto que ainda não está no catálogo
+   * (set/2026, pedido do dono do negócio: cadastro "pela matriz ou
+   * filiais", direto de onde falta o produto). A categoria já vem
+   * decidida pela sessão em que o botão aparece — só falta o nome.
+   */
+  onCadastrarProduto: (input: NovoProdutoInput) => Promise<Produto | undefined>;
 }
 
 /**
@@ -124,6 +131,7 @@ export function TelaCronograma({
   hoje,
   onSalvarPlano,
   onAjustarPedido,
+  onCadastrarProduto,
 }: TelaCronogramaProps) {
   const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
   const [mostrarSeletorData, setMostrarSeletorData] = useState(false);
@@ -161,6 +169,9 @@ export function TelaCronograma({
   const [expandido, setExpandido] = useState<Record<string, boolean>>({});
   const [produtoAtivo, setProdutoAtivo] = useState<number | null>(null);
   const [valorEditando, setValorEditando] = useState("");
+  const [cadastrandoEm, setCadastrandoEm] = useState<string | null>(null);
+  const [nomeNovoProduto, setNomeNovoProduto] = useState("");
+  const [salvandoNovoProduto, setSalvandoNovoProduto] = useState(false);
   const [fase, setFase] = useState<Fase>("montar");
   const [salvando, setSalvando] = useState(false);
   /** Confirmação da produção da matriz, pendente do segundo toque. */
@@ -423,6 +434,38 @@ export function TelaCronograma({
     });
     setProdutoAtivo(null);
     setValorEditando("");
+  }
+
+  /**
+   * Cadastro relâmpago dentro da própria sessão da categoria (set/2026,
+   * pedido do dono do negócio: "a inserção de novos produtos poderia ser
+   * feita quando o produto não for encontrado... o usuário informará o
+   * nome do produto e a categoria"). Aqui a categoria já está decidida —
+   * é a sessão aberta — então só falta o nome. Depois de salvar, abre
+   * direto o editor de quantidade do item novo, mesmo fluxo de tocar
+   * num produto já existente.
+   */
+  async function cadastrarProduto(chaveGrupo: string) {
+    const nome = nomeNovoProduto.trim();
+    if (!nome || salvandoNovoProduto) return;
+    setSalvandoNovoProduto(true);
+    try {
+      const novo = await onCadastrarProduto({
+        nome,
+        categoria: chaveGrupo,
+        unidadeProducao: "un",
+        ativoNaProducao: true,
+        prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[chaveGrupo] ?? null,
+      });
+      if (!novo) return;
+      setCadastrandoEm(null);
+      setNomeNovoProduto("");
+      abrirEdicao(novo.codigoPdv, chaveGrupo);
+    } catch {
+      // Mensagem já vem do aviso global (ver App.tsx).
+    } finally {
+      setSalvandoNovoProduto(false);
+    }
   }
 
   /**
@@ -1197,6 +1240,52 @@ export function TelaCronograma({
                       </div>
                     );
                   })}
+
+                  {cadastrandoEm === chave ? (
+                    <div className="cadastro-relampago">
+                      <label>
+                        Nome do produto novo em {rotulo}
+                        <input
+                          type="text"
+                          autoFocus
+                          value={nomeNovoProduto}
+                          onChange={(e) => setNomeNovoProduto(e.target.value)}
+                          placeholder="Nome do produto"
+                        />
+                      </label>
+                      <div className="acoes">
+                        <button
+                          type="button"
+                          className="link"
+                          onClick={() => {
+                            setCadastrandoEm(null);
+                            setNomeNovoProduto("");
+                          }}
+                        >
+                          cancelar
+                        </button>
+                        <button
+                          type="button"
+                          className="primario"
+                          disabled={!nomeNovoProduto.trim() || salvandoNovoProduto}
+                          onClick={() => void cadastrarProduto(chave)}
+                        >
+                          {salvandoNovoProduto ? "Salvando..." : "Cadastrar produto"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="link"
+                      onClick={() => {
+                        setCadastrandoEm(chave);
+                        setNomeNovoProduto("");
+                      }}
+                    >
+                      + cadastrar produto novo em {rotulo}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
