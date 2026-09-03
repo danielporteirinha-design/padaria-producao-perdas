@@ -11,7 +11,6 @@ import type { FornadaPronta } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
 import { idDaReposicao } from "../types/pedido";
 import type { PedidoSuprimentos, Suprimento } from "../types/suprimento";
-import { desfechoDosSuprimentos } from "../types/suprimento";
 import type { LinhaDoDia } from "../lib/reposicaoDoDia";
 import { estaPendente, montarLinhasDoDia } from "../lib/reposicaoDoDia";
 import { dispensarFornada, fornadasDispensadas } from "../lib/fornadasDispensadas";
@@ -107,12 +106,6 @@ export function PainelFornadasFilial({
   }
 
 
-  const pedidoSuprimentosHoje = useMemo(
-    () => pedidosSuprimentos.find((p) => p.data === hoje && p.lojaId === loja.id),
-    [pedidosSuprimentos, hoje, loja.id]
-  );
-  const desfechoSup = desfechoDosSuprimentos(pedidoSuprimentosHoje);
-
   const nomePorSuprimentoId = useMemo(
     () => new Map(catalogoSuprimentos.map((s) => [s.id, s.nome])),
     [catalogoSuprimentos]
@@ -150,8 +143,9 @@ export function PainelFornadasFilial({
         dispensadas,
         // O que já está na montagem sai de "sem resposta" na hora.
         naMontagem: new Set(itens.map((i) => i.codigoPdv)),
+        pedidosSuprimentos,
       }),
-    [fornadas, pedidos, hoje, loja.id, encerrados, dispensadas, itens]
+    [fornadas, pedidos, hoje, loja.id, encerrados, dispensadas, itens, pedidosSuprimentos]
   );
   const semResposta = useMemo(() => linhas.filter(estaPendente), [linhas]);
   const concluidos = useMemo(() => linhas.filter((l) => !estaPendente(l)), [linhas]);
@@ -296,7 +290,61 @@ export function PainelFornadasFilial({
     );
   }
 
+  /**
+   * A LISTA DE SUPRIMENTOS DENTRO DA SANFONA (set/2026, pedido do dono
+   * do negócio).
+   *
+   * Mesma forma das outras linhas — etiqueta, nome, hora e situação —,
+   * porque é a mesma pergunta: a matriz respondeu ou não? O que muda é
+   * que aqui o "produto" é uma lista, e por isso os itens aparecem
+   * escritos embaixo: sem eles a linha diria "Suprimentos" e obrigaria a
+   * pessoa a trocar de aba para lembrar o que foi que ela pediu.
+   */
+  function linhaDeSuprimentos(linha: LinhaDoDia) {
+    const pedidos = (linha.suprimentos?.itens ?? []).filter((i) => i.quantidade > 0);
+    const quantos = linha.variedades ?? pedidos.length;
+    return (
+      <div key={linha.chave} className="linha-reposicao">
+        <span className="nome-reposicao">
+          <span className="topo-reposicao">
+            <em className="etiqueta-origem suprimentos">Suprimentos</em>
+            <strong>Embalagens e limpeza</strong>
+            <em className="hora-reposicao">{horaDoInstante(linha.quando)}</em>
+          </span>
+
+          {pedidos.length > 0 && (
+            <span className="itens-da-lista">
+              {pedidos
+                .map(
+                  (i) =>
+                    `${nomePorSuprimentoId.get(i.suprimentoId) ?? i.suprimentoId} (${i.quantidade})`
+                )
+                .join(", ")}
+            </span>
+          )}
+
+          {linha.situacao === "pendente" && (
+            <span className="reposicao-aguardando">Aguardando a matriz responder</span>
+          )}
+          {linha.situacao === "confirmado" && (
+            <span className="reposicao-confirmada">
+              <IconeConfere tamanho={14} /> Separado — vem na próxima entrega.
+            </span>
+          )}
+          {linha.situacao === "cancelado" && (
+            <span className="reposicao-negada">Não vem: {linha.motivo}</span>
+          )}
+        </span>
+
+        <span className="qtd-reposicao">
+          {quantos} {quantos === 1 ? "item" : "itens"}
+        </span>
+      </div>
+    );
+  }
+
   function linhaDoDia(linha: LinhaDoDia) {
+    if (linha.origem === "suprimentos") return linhaDeSuprimentos(linha);
     const daMatriz = linha.origem === "matriz";
     return (
       <div key={linha.chave} className="linha-reposicao">
@@ -419,30 +467,17 @@ export function PainelFornadasFilial({
   return (
     <div className="painel-fornadas">
       <div className="corpo-fornadas">
-        {pedidoSuprimentosHoje && pedidoSuprimentosHoje.status === "enviado" && (
-          <div className={`cartao-status-suprimentos ${desfechoSup}`}>
-            <strong className="titulo-montagem">Lista de Suprimentos enviada hoje</strong>
-            <p className="nota-rodape">
-              {pedidoSuprimentosHoje.itens
-                .map((i) => `${nomePorSuprimentoId.get(i.suprimentoId) ?? i.suprimentoId} (${i.quantidade} un)`)
-                .join(", ")}
-            </p>
-            {desfechoSup === "pendente" && (
-              <span className="reposicao-aguardando">Aguardando a matriz responder a lista de suprimentos...</span>
-            )}
-            {desfechoSup === "confirmado" && (
-              <span className="reposicao-confirmada">
-                <IconeConfere tamanho={14} /> Suprimentos separados pela matriz!
-              </span>
-            )}
-            {desfechoSup === "cancelado" && (
-              <span className="reposicao-negada">
-                Suprimentos não enviados: {pedidoSuprimentosHoje.atendimento?.motivo}
-              </span>
-            )}
-          </div>
-        )}
+        {/* O CARTÃO SOLTO DE SUPRIMENTOS SAIU DAQUI (set/2026, pedido do
+            dono do negócio: a lista de suprimentos "deve também ser
+            sinalizada nas sanfonas de pedidos não respondidos").
 
+            Ele ficava acima de tudo, fora das duas listas, e por isso
+            não era cobrado por ninguém: a pessoa lia "Pedidos sem
+            resposta", via a sanfona vazia e concluía que o dia estava
+            resolvido — com a lista de embalagens parada esperando a
+            matriz logo acima, sem sino e sem contagem. Agora a lista é
+            uma linha das sanfonas, como qualquer outra coisa que espera
+            resposta. */}
         <AssistenteDeVoz
           produtos={produtos}
           modo="pedir"

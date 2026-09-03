@@ -68,6 +68,34 @@ export function variedadesDoPedidoSuprimentos(pedido: PedidoSuprimentos | undefi
   return (pedido?.itens ?? []).filter((i) => i.quantidade > 0).length;
 }
 
+/**
+ * A LISTA PEDIDA COM NOME, e não com id (set/2026, pedido do dono do
+ * negócio: as notificações "devem ser enviadas para a matriz, com todos
+ * os detalhes solicitados").
+ *
+ * O documento guarda `suprimentoId` porque é ele que sobrevive a uma
+ * renomeação no catálogo. Mas ninguém no balcão reconhece
+ * "saco-kraft-2kg" — e o aviso que chega no celular da matriz não tem o
+ * catálogo à mão para traduzir. Traduzir aqui, uma vez só, evita que
+ * cada tela invente o próprio jeito de fazer isso — e que uma delas
+ * mostre o id cru quando o item saiu do catálogo.
+ *
+ * SÓ O QUE TEM QUANTIDADE, pelo mesmo motivo de
+ * `variedadesDoPedidoSuprimentos`: item zerado não vai na lista.
+ */
+export function itensComNome(
+  pedido: PedidoSuprimentos | undefined,
+  catalogo: Suprimento[]
+): { nome: string; quantidade: number }[] {
+  const nomePorId = new Map(catalogo.map((s) => [s.id, s.nome]));
+  return (pedido?.itens ?? [])
+    .filter((i) => i.quantidade > 0)
+    .map((i) => ({
+      nome: nomePorId.get(i.suprimentoId) ?? i.suprimentoId,
+      quantidade: i.quantidade,
+    }));
+}
+
 export function desfechoDosSuprimentos(pedido: PedidoSuprimentos | undefined): "pendente" | "confirmado" | "cancelado" {
   if (!pedido || pedido.status !== "enviado") return "pendente";
   if (!pedido.atendimento) return "pendente";

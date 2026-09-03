@@ -36,7 +36,16 @@ import type { PedidoSuprimentos } from "../types/suprimento";
 import { desfechoDosSuprimentos } from "../types/suprimento";
 import { desfechoDoItem, ehReposicao, motivoDoItem } from "../types/pedido";
 
-export type OrigemDaLinha = "filial" | "matriz";
+/**
+ * De onde a linha veio (set/2026).
+ *
+ * "suprimentos" entrou por decisão do dono do negócio: a lista de
+ * embalagens e limpeza vivia num cartão solto acima das sanfonas, e por
+ * isso não era cobrada por ninguém. Ela espera exatamente a mesma
+ * resposta da matriz que uma reposição espera — e o que espera resposta
+ * pertence à lista de pendências, não a um cartão ao lado dela.
+ */
+export type OrigemDaLinha = "filial" | "matriz" | "suprimentos";
 
 export type SituacaoDaLinha =
   /** Esperando: a matriz não respondeu meu pedido, ou eu não respondi o aviso dela. */
@@ -77,6 +86,10 @@ export interface LinhaDoDia {
   motivo?: string;
   /** Quantas fornadas do produto saíram hoje (linhas da matriz). */
   vezes?: number;
+  /** A lista enviada — devolvida inteira para a tela mostrar os itens. */
+  suprimentos?: PedidoSuprimentos;
+  /** Quantas variedades a lista de suprimentos tem. */
+  variedades?: number;
 }
 
 export interface EntradaDoDia {
@@ -97,6 +110,8 @@ export interface EntradaDoDia {
    * ainda não enviados. Ver a situação "na-lista".
    */
   naMontagem?: Set<number>;
+  /** As listas de embalagens e limpeza — só a DESTA loja entra. */
+  pedidosSuprimentos?: PedidoSuprimentos[];
 }
 
 export function montarLinhasDoDia({
@@ -107,6 +122,7 @@ export function montarLinhasDoDia({
   encerrados,
   dispensadas,
   naMontagem,
+  pedidosSuprimentos = [],
 }: EntradaDoDia): LinhaDoDia[] {
   const linhas: LinhaDoDia[] = [];
   /** Produto -> instante do pedido MAIS RECENTE que esta loja fez hoje. */
@@ -137,6 +153,38 @@ export function montarLinhasDoDia({
             : undefined,
       });
     }
+  }
+
+  /**
+   * ---- a LISTA DE SUPRIMENTOS que esta loja mandou ----
+   *
+   * UMA LINHA POR LISTA, e não por item: a matriz separa embalagem e
+   * material de limpeza de uma vez só, e responde o conjunto. Quebrar em
+   * itens encheria a sanfona de pendências com vinte linhas que têm um
+   * único desfecho.
+   *
+   * SÓ O QUE FOI ENVIADO. Rascunho ainda está sendo montado na aba
+   * Suprimentos — não espera resposta de ninguém, e cobrá-lo aqui seria
+   * cobrar a própria loja de uma coisa que ela ainda está fazendo.
+   */
+  for (const lista of pedidosSuprimentos) {
+    if (lista.data !== hoje || lista.lojaId !== lojaId || lista.status !== "enviado") continue;
+    const desfecho = desfechoDosSuprimentos(lista);
+    linhas.push({
+      chave: `sup-${lista.id}`,
+      origem: "suprimentos",
+      // Não é um produto do PDV: a lista não tem código, e -1 é o valor
+      // que a tela reconhece para não tentar buscar um nome que não existe.
+      codigoPdv: -1,
+      suprimentos: lista,
+      variedades: lista.itens.filter((i) => i.quantidade > 0).length,
+      quando: lista.enviadoEm ?? lista.criadoEm ?? "",
+      situacao: desfecho === "pendente" ? "pendente" : desfecho,
+      motivo:
+        desfecho === "cancelado"
+          ? lista.atendimento?.motivo || "sem motivo informado"
+          : undefined,
+    });
   }
 
   // ---- o que a MATRIZ anunciou ----

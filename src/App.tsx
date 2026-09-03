@@ -31,7 +31,7 @@ import { idDaFornada, type FornadaPronta } from "./types/fornada";
 import { codigosEncerrados, idDoEncerramento, type AnuncioEncerrado } from "./types/anuncio";
 import {
   agruparPorSegmento,
-  variedadesDoPedidoSuprimentos,
+  itensComNome,
   type PedidoSuprimentos,
   type Suprimento,
 } from "./types/suprimento";
@@ -603,7 +603,9 @@ export default function App() {
     setPedidosSuprimentos((atual) => [...atual.filter((p) => p.id !== pedido.id), pedido]);
 
     try {
-      await avisarListaDeSuprimentos(variedadesDoPedidoSuprimentos(pedido));
+      // COM OS ITENS: o aviso na mão da matriz precisa dizer o que
+      // separar, e não só quantas linhas a lista tem.
+      await avisarListaDeSuprimentos(itensComNome(pedido, suprimentos));
     } catch (erro) {
       console.warn("Lista de suprimentos gravada, mas o aviso à matriz não saiu:", erro);
     }
@@ -1038,6 +1040,7 @@ export default function App() {
                 onCadastrarProduto={handleCadastroRelampago}
                 onDecidirReposicao={handleDecidirReposicao}
                 pedidosSuprimentos={pedidosSuprimentos}
+                catalogoSuprimentos={suprimentos}
                 onDecidirSuprimentos={handleDecidirSuprimentos}
               />
             </>

@@ -160,9 +160,35 @@ export async function avisarListaEnviada(variedades: number): Promise<void> {
   await tentarAviso({ listaDiaria: true, variedades });
 }
 
-/** Filial -> matriz: lista de embalagens e material de limpeza. */
-export async function avisarListaDeSuprimentos(variedades: number): Promise<void> {
-  await tentarAviso({ suprimentos: true, variedades });
+/**
+ * QUANTOS ITENS VIAJAM DENTRO DO AVISO.
+ *
+ * O aviso carrega a lista para o servidor montar o texto — mas carregar
+ * uma lista inteira de trinta embalagens não serviria para nada: a
+ * notificação mostra os primeiros e resume o resto. O corte aqui é o que
+ * impede uma lista grande de virar uma requisição grande numa conexão
+ * de padaria, justo no momento em que a pessoa está esperando o envio
+ * terminar. A contagem correta vai separada, em `variedades`.
+ */
+const ITENS_QUE_VIAJAM_NO_AVISO = 12;
+
+/**
+ * Filial -> matriz: lista de embalagens e material de limpeza.
+ *
+ * MANDA OS ITENS, e não só a contagem (set/2026, pedido do dono do
+ * negócio: "com todos os detalhes solicitados"). "5 itens" obrigava a
+ * matriz a abrir o app só para descobrir se dava para separar agora — e
+ * o aviso existe justamente para poupar essa abertura.
+ */
+export async function avisarListaDeSuprimentos(
+  itens: { nome: string; quantidade: number }[]
+): Promise<void> {
+  await tentarAviso({
+    suprimentos: true,
+    // A contagem é de TODOS os itens; a lista pode vir cortada.
+    variedades: itens.length,
+    itensSuprimentos: itens.slice(0, ITENS_QUE_VIAJAM_NO_AVISO),
+  });
 }
 
 /** Matriz -> filial: resposta ao pedido de reposição. */

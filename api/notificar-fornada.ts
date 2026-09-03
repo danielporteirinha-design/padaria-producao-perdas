@@ -182,6 +182,57 @@ async function lojaDeQuemChamou(cabecalho: string | undefined) {
 }
 
 // Tipagem mínima e deliberadamente solta, igual às outras funções de /api.
+/**
+ * QUANTOS ITENS CABEM NO TEXTO DA NOTIFICAÇÃO.
+ *
+ * O corpo de uma notificação é cortado pelo sistema operacional sem
+ * avisar, e em alguns aparelhos um texto comprido some inteiro na tela
+ * de bloqueio. Cortar aqui é escolher ONDE o texto termina, em vez de
+ * deixar o Android escolher — e o resumo "e mais N itens" diz, no lugar
+ * do corte, que existe mais coisa esperando no app.
+ */
+const ITENS_VISIVEIS_NO_AVISO = 5;
+
+/**
+ * O TEXTO DO AVISO DE SUPRIMENTOS, com os itens (set/2026, pedido do
+ * dono do negócio: "com todos os detalhes solicitados").
+ *
+ * "5 itens" não deixava a matriz decidir nada: para saber se dava para
+ * separar agora, ou se faltava passar no depósito, ela tinha que abrir o
+ * app — que é exatamente o trabalho que o aviso deveria poupar.
+ *
+ * CAI PARA A CONTAGEM se a lista não vier. Versões antigas do app
+ * instaladas nos celulares continuam mandando só `variedades`, e um
+ * aviso em branco seria pior do que o resumo curto que elas já geravam.
+ */
+export function corpoDaListaDeSuprimentos(
+  itens: { nome?: string; quantidade?: number }[],
+  variedades: number
+): string {
+  const legiveis = itens
+    .filter((i) => i && typeof i.nome === "string" && i.nome.trim().length > 0)
+    .map((i) => {
+      const quantos = Number(i.quantidade);
+      const nome = (i.nome as string).trim();
+      return Number.isFinite(quantos) && quantos > 0 ? `${nome} (${quantos})` : nome;
+    });
+
+  if (legiveis.length === 0) {
+    return variedades > 0
+      ? `${variedades} ${variedades === 1 ? "item" : "itens"} entre embalagens e limpeza. Toque para ver.`
+      : "Lista de suprimentos enviada. Toque para ver.";
+  }
+
+  const mostrados = legiveis.slice(0, ITENS_VISIVEIS_NO_AVISO);
+  // O total vem de `variedades`, que conta a lista INTEIRA — a lista que
+  // viajou pode já ter sido cortada na saída do app.
+  const total = Math.max(variedades, legiveis.length);
+  const sobra = total - mostrados.length;
+  return sobra > 0
+    ? `${mostrados.join(", ")} e mais ${sobra} ${sobra === 1 ? "item" : "itens"}.`
+    : `${mostrados.join(", ")}.`;
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ erro: "Método não permitido — use POST." });
@@ -214,6 +265,8 @@ export default async function handler(req: any, res: any) {
       itensAlterados?: number;
       /** Lista de embalagens e material de limpeza (ago/2026). */
       suprimentos?: boolean;
+      /** Os itens da lista de suprimentos, para o texto do aviso (set/2026). */
+      itensSuprimentos?: { nome?: string; quantidade?: number }[];
       /** Quantos itens a reposição tem ao todo (ago/2026). */
       itensNoPedido?: number;
     } = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {});
@@ -231,6 +284,7 @@ export default async function handler(req: any, res: any) {
       listaAjustada,
       itensAlterados,
       suprimentos,
+      itensSuprimentos,
       itensNoPedido,
     } = corpoBruto;
     // O aviso de lista diária e o de teste não falam de um produto — os
@@ -385,10 +439,10 @@ export default async function handler(req: any, res: any) {
        * aviso em vez de empilhar dois.
        */
       titulo = `${quemChamou.nome} pediu suprimentos`;
-      corpo =
-        typeof variedades === "number" && variedades > 0
-          ? `${variedades} ${variedades === 1 ? "item" : "itens"} entre embalagens e limpeza. Toque para ver.`
-          : "Lista de suprimentos enviada. Toque para ver.";
+      corpo = corpoDaListaDeSuprimentos(
+        Array.isArray(itensSuprimentos) ? itensSuprimentos : [],
+        typeof variedades === "number" ? variedades : 0
+      );
       etiqueta = `suprimentos-${quemChamou.id}`;
       destinoNoApp = "/?aba=fornada";
     } else if (listaDiaria) {

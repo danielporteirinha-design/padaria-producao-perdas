@@ -178,6 +178,13 @@ const CONFERENCIAS = [
   ["src/lib/analises.ts", "fornecimento", "Análises: denominador por loja"],
   ["src/lib/analises.ts", "fornadasPorFaixaDeHora", "Análises: relatório do forno"],
   ["src/lib/producaoDeHoje.ts", "incluirItemProduzido", "Reposição entra na produção do dia"],
+
+  // --- Suprimentos nas sanfonas, e o aviso com os itens (set/2026)
+  ["src/lib/reposicaoDoDia.ts", "origem: \"suprimentos\"", "Filial: suprimentos cobram na sanfona"],
+  ["src/types/suprimento.ts", "itensComNome", "Suprimentos: id traduzido para nome"],
+  ["src/lib/avisarFiliais.ts", "itensSuprimentos", "Aviso de suprimentos leva os itens"],
+  ["api/notificar-fornada.ts", "corpoDaListaDeSuprimentos", "Servidor: aviso de suprimentos detalhado"],
+  ["src/components/PainelFornoDeHoje.tsx", "itensDaLista", "Matriz le a lista de suprimentos na sanfona"],
 ];
 
 /**

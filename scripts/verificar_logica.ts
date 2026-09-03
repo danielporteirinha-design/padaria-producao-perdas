@@ -80,10 +80,12 @@ import {
   agruparPorSegmento,
   idDoPedidoSuprimentos,
   idDoSuprimento,
+  itensComNome,
   type PedidoSuprimentos,
   variedadesDoPedidoSuprimentos,
   type Suprimento,
 } from "../src/types/suprimento";
+import { corpoDaListaDeSuprimentos } from "../api/notificar-fornada";
 import { agruparPorCategoria } from "../src/lib/blocosDeImpressao";
 import { proximaDataAlvo } from "../src/lib/dataAlvoDoDia";
 import {
@@ -3623,6 +3625,114 @@ const perdas: RegistroPerda[] = [
       pedidos: [], hoje: HOJE, encerrados: vazio,
     }).length === 0,
     "fornada de ontem nao entra na lista de hoje"
+  );
+}
+
+
+/**
+ * A LISTA DE SUPRIMENTOS COBRADA E DETALHADA (set/2026, pedido do dono
+ * do negócio: ela "deve também ser sinalizada nas sanfonas de pedidos
+ * não respondidos", e o aviso à matriz deve levar "todos os detalhes").
+ */
+{
+  const HOJE = "2026-09-03";
+  const LOJA = "FILIAL_AB";
+  const catalogo = [
+    { id: "saco-kraft", nome: "Saco Kraft 2kg" },
+    { id: "detergente", nome: "Detergente" },
+  ] as Suprimento[];
+  const lista = {
+    id: "sup-hoje",
+    lojaId: LOJA,
+    data: HOJE,
+    itens: [
+      { suprimentoId: "saco-kraft", quantidade: 50 },
+      { suprimentoId: "detergente", quantidade: 3 },
+      { suprimentoId: "nao-preenchido", quantidade: 0 },
+    ],
+    status: "enviado",
+    criadoPor: "Joana",
+    criadoEm: `${HOJE}T09:00:00.000Z`,
+    enviadoEm: `${HOJE}T09:00:00.000Z`,
+  } as PedidoSuprimentos;
+
+  const daFilial = (extra: Partial<PedidoSuprimentos> = {}) =>
+    montarLinhasDoDia({
+      fornadas: [],
+      pedidos: [],
+      hoje: HOJE,
+      lojaId: LOJA,
+      encerrados: new Set<number>(),
+      dispensadas: new Map<number, string>(),
+      pedidosSuprimentos: [{ ...lista, ...extra } as PedidoSuprimentos],
+    });
+
+  const pendente = daFilial();
+  afirmar(pendente.length === 1, "a lista de suprimentos vira UMA linha na sanfona da filial");
+  afirmar(pendente[0].origem === "suprimentos", "a linha se identifica como suprimentos");
+  afirmar(pendente[0].variedades === 2, "conta so o item com quantidade");
+  afirmar(estaPendente(pendente[0]), "sem resposta da matriz, a lista COBRA na sanfona de cima");
+  afirmar(
+    pendente[0].suprimentos?.id === "sup-hoje",
+    "a linha carrega o documento — a tela mostra os itens a partir dele"
+  );
+
+  const respondida = daFilial({
+    atendimento: {
+      desfecho: "cancelado",
+      motivo: "acabou o kraft",
+      por: "Matriz",
+      em: `${HOJE}T10:00:00.000Z`,
+    },
+  });
+  afirmar(!estaPendente(respondida[0]), "respondida sai de 'sem resposta'");
+  afirmar(respondida[0].motivo === "acabou o kraft", "e leva o motivo da recusa junto");
+
+  afirmar(
+    daFilial({ status: "rascunho" }).length === 0,
+    "rascunho ainda em montagem nao cobra nada na sanfona"
+  );
+  afirmar(
+    montarLinhasDoDia({
+      fornadas: [], pedidos: [], hoje: HOJE, lojaId: "FILIAL_BC",
+      encerrados: new Set<number>(), dispensadas: new Map<number, string>(),
+      pedidosSuprimentos: [lista],
+    }).length === 0,
+    "a lista de OUTRA loja nao aparece nesta filial"
+  );
+
+  // --- os nomes, e o texto que vai para o celular da matriz ---
+  const comNome = itensComNome(lista, catalogo);
+  afirmar(comNome.length === 2, "itensComNome ignora o item zerado");
+  afirmar(comNome[0].nome === "Saco Kraft 2kg", "traduz o id para o nome do catalogo");
+  afirmar(
+    itensComNome(lista, []).some((i) => i.nome === "saco-kraft"),
+    "sem catalogo, cai no id em vez de sumir com o item"
+  );
+
+  const texto = corpoDaListaDeSuprimentos(comNome, 2);
+  afirmar(
+    texto.includes("Saco Kraft 2kg (50)") && texto.includes("Detergente (3)"),
+    `o aviso leva item e quantidade (obtido: ${texto})`
+  );
+
+  const muitos = Array.from({ length: 9 }, (_, i) => ({ nome: `Item ${i + 1}`, quantidade: 1 }));
+  const cortado = corpoDaListaDeSuprimentos(muitos, 9);
+  afirmar(cortado.includes("e mais 4 itens"), `corta no quinto e resume o resto (obtido: ${cortado})`);
+  afirmar(!cortado.includes("Item 6"), "o sexto item nao entra no texto da notificacao");
+
+  const soContagem = corpoDaListaDeSuprimentos([], 5);
+  afirmar(
+    soContagem.includes("5 itens"),
+    "app antigo, que so manda a contagem, continua gerando um aviso legivel"
+  );
+  afirmar(
+    corpoDaListaDeSuprimentos([], 0).length > 0,
+    "sem itens e sem contagem, o aviso ainda tem texto"
+  );
+  afirmar(
+    corpoDaListaDeSuprimentos([{ nome: "Papel toalha" }], 1).includes("Papel toalha"),
+    "item sem quantidade aparece pelo nome, sem parenteses vazios"
   );
 }
 

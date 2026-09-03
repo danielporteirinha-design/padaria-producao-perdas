@@ -1905,6 +1905,31 @@ button.perigo:hover { background: #822525; }
   background: var(--cor-sucesso-fundo);
   color: var(--cor-sucesso);
 }
+/* Suprimentos é a TERCEIRA natureza da sanfona: não é mercadoria que
+   saiu do forno nem reposição de balcão — é compra. A cor de acento a
+   separa das outras duas de relance, antes de a etiqueta ser lida. */
+.etiqueta-origem.suprimentos {
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+}
+/* Os itens escritos embaixo da linha. Menores e mais suaves que o
+   título: quem procura a pendência lê a linha de cima; quem já decidiu
+   responder desce para conferir o que vai separar. */
+.itens-da-lista {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--cor-texto-suave);
+}
+.itens-do-historico {
+  display: block;
+  margin-top: 2px;
+  font-style: normal;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--cor-texto-suave);
+}
 .linha-reposicao .acoes-fornada,
 .linha-reposicao .editor-quantidade {
   margin-top: 4px;

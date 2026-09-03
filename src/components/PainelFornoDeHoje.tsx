@@ -9,7 +9,7 @@ import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
-import type { PedidoSuprimentos } from "../types/suprimento";
+import type { PedidoSuprimentos, Suprimento } from "../types/suprimento";
 import type { LinhaDaMatriz } from "../lib/reposicaoDoDia";
 import { anuncioPendente, montarLinhasDaMatriz } from "../lib/reposicaoDoDia";
 import { horaDoInstante } from "../lib/data";
@@ -35,6 +35,14 @@ interface PainelFornoDeHojeProps {
   pedidos: PedidoFilial[];
   /** Listas de suprimentos que as filiais mandaram hoje. */
   pedidosSuprimentos?: PedidoSuprimentos[];
+  /**
+   * O catálogo de suprimentos — só para traduzir id em nome (set/2026).
+   *
+   * A matriz precisa LER a lista para saber se dá para separar agora:
+   * "Suprimentos · 5 itens" não deixa decidir nada, e obrigava a abrir
+   * outra aba justamente na tela onde a decisão é tomada.
+   */
+  catalogoSuprimentos?: Suprimento[];
   dataHoje: string;
   encerrados: Set<number>;
   onEncerrarAnuncio: (codigoPdv: number) => Promise<void>;
@@ -69,6 +77,7 @@ export function PainelFornoDeHoje({
   fornadas,
   pedidos,
   pedidosSuprimentos = [],
+  catalogoSuprimentos = [],
   dataHoje,
   encerrados,
   onEncerrarAnuncio,
@@ -161,6 +170,18 @@ export function PainelFornoDeHoje({
       montarLinhasDaMatriz({ fornadas, pedidos, hoje: dataHoje, encerrados, pedidosSuprimentos }),
     [fornadas, pedidos, dataHoje, encerrados, pedidosSuprimentos]
   );
+
+  const nomePorSuprimentoId = useMemo(
+    () => new Map(catalogoSuprimentos.map((s) => [s.id, s.nome])),
+    [catalogoSuprimentos]
+  );
+  /** Os itens da lista, escritos — o que a matriz vai separar. */
+  function itensDaLista(linha: LinhaDaMatriz): string {
+    return (linha.suprimentos?.itens ?? [])
+      .filter((i) => i.quantidade > 0)
+      .map((i) => `${nomePorSuprimentoId.get(i.suprimentoId) ?? i.suprimentoId} (${i.quantidade})`)
+      .join(", ");
+  }
   const semResposta = useMemo(() => linhas.filter(anuncioPendente), [linhas]);
   /**
    * O HISTÓRICO É SÓ DOS PEDIDOS DAS FILIAIS (set/2026, decisão do dono
@@ -318,6 +339,13 @@ export function PainelFornoDeHoje({
             <em className="hora-reposicao">{horaDoInstante(linha.quando)}</em>
           </span>
 
+          {/* A LISTA ESCRITA, e não só a contagem (set/2026, pedido do
+              dono do negócio). É o que a matriz vai separar — sem isto a
+              linha pede uma decisão sem dizer sobre o quê. */}
+          {ehSuprimentos && itensDaLista(linha).length > 0 && (
+            <span className="itens-da-lista">{itensDaLista(linha)}</span>
+          )}
+
           {linha.situacao === "pendente" && (
             <span className="reposicao-aguardando">Esperando sua resposta</span>
           )}
@@ -415,6 +443,9 @@ export function PainelFornoDeHoje({
                 ? `Suprimentos · ${linha.variedades ?? 0} ${(linha.variedades ?? 0) === 1 ? "item" : "itens"}`
                 : nomeDoProduto(linha.codigoPdv)}
               <em className="hora-historico">{horaDoInstante(linha.quando)}</em>
+              {linha.tipo === "suprimentos" && itensDaLista(linha).length > 0 && (
+                <em className="itens-do-historico">{itensDaLista(linha)}</em>
+              )}
             </span>
             <span className="qtd-historico">
               {linha.pedidoUnidades !== undefined ? `${linha.pedidoUnidades} un` : ""}
