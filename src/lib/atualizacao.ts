@@ -1,7 +1,7 @@
 /**
  * src/lib/atualizacao.ts
  * ---------------------------------------------------------------
- * Aviso de versão nova do app (ago/2026).
+ * Aviso de versão nova do app (ago/2026; checagem ao reabrir, set/2026).
  *
  * O QUE MUDOU E POR QUÊ
  * ----------------------
@@ -18,13 +18,30 @@
  * recarrega a página. O reinício deixou de ser algo que a pessoa precisa
  * saber fazer: é o próprio botão.
  *
- * A VERIFICAÇÃO PERIÓDICA
- * ------------------------
+ * A VERIFICAÇÃO PERIÓDICA — E POR QUE ELA SOZINHA NÃO BASTAVA
+ * ----------------------------------------------------------------
  * O navegador só procura service worker novo quando a página carrega. No
  * PC do caixa o app fica aberto o dia inteiro, e sem isso uma correção
  * publicada às 8h só apareceria no dia seguinte. Por isso a checagem de
  * hora em hora — barata (uma requisição condicional ao sw.js) e
  * suficiente para o ritmo de quem publica algumas vezes por dia.
+ *
+ * NO CELULAR, "hora em hora" não se cumpre: o sistema operacional pausa
+ * o `setInterval` de uma aba em segundo plano assim que a tela apaga ou
+ * o app vai para trás. É esse o motivo de "hoje para ter o botão de
+ * atualizar disponível o usuário precisa reiniciar o app" (set/2026,
+ * relatado pelo dono do negócio) — reabrir o app de um jeito comum
+ * (tocar no ícone de novo, sem fechar de verdade) não disparava nenhuma
+ * checagem nova, e a pessoa só via a versão nova horas depois, se a hora
+ * batesse com o app aberto e em primeiro plano bem naquele minuto.
+ *
+ * A CORREÇÃO: checar também quando a ABA VOLTA a ficar visível
+ * ----------------------------------------------------------------
+ * `visibilitychange` dispara toda vez que o app volta para a frente —
+ * inclusive quando ele nunca foi de fato fechado, só ficou minimizado.
+ * Isso cobre exatamente o caso que faltava, sem esperar a próxima hora
+ * cheia: quem abre o app de manhã já encontra a checagem rodando na
+ * hora, e o aviso aparece sem precisar de reinício nenhum.
  */
 
 import { registerSW } from "virtual:pwa-register";
@@ -53,6 +70,19 @@ export function observarAtualizacao(aoTerVersaoNova: () => void): Recarregar {
       setInterval(() => {
         void registro.update();
       }, INTERVALO_DE_CHECAGEM_MS);
+
+      /**
+       * A CHECAGEM QUE FALTAVA (set/2026): assim que o app volta a
+       * ficar visível — reaberto, trazido de volta do fundo, tela
+       * ligada de novo —, confere na hora, em vez de esperar o próximo
+       * intervalo de uma hora. `document.hidden` de saída ignora o
+       * evento de quando a aba SAI de vista; só importa a volta.
+       */
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          void registro.update();
+        }
+      });
     },
     onRegisterError(erro) {
       // Falhar aqui não pode derrubar o app: sem service worker ele

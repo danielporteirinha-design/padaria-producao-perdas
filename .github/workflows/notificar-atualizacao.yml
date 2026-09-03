@@ -1,0 +1,49 @@
+# .github/workflows/notificar-atualizacao.yml
+# -----------------------------------------------------------------
+# Avisa todos os celulares que uma versão nova do app foi publicada
+# (set/2026, pedido do dono do negócio).
+#
+# POR QUE AQUI, E NÃO NUM WEBHOOK DA VERCEL
+# --------------------------------------------
+# A Vercel tem um recurso pronto pra isso, mas só nos planos pagos
+# (Pro/Enterprise). Este workflow observa o MESMO push para `main` que já
+# aciona o deploy automático na Vercel — e roda de graça no plano gratuito
+# do GitHub (2000 minutos/mês, e este job usa menos de um).
+#
+# A ESPERA DE 90 SEGUNDOS
+# --------------------------
+# Não temos como perguntar à Vercel "o deploy já terminou?" sem um token
+# de acesso a mais para configurar. Para um app deste tamanho, o build e a
+# publicação terminam bem antes disso — 90s é uma folga generosa, não uma
+# medida exata. Se algum dia o build ficar mais pesado e o aviso chegar
+# antes da hora, o botão "Atualizar agora" simplesmente ainda não aparece
+# na hora do toque — a checagem periódica do app (a cada 1h, ou ao
+# reabrir o app) pega a versão nova pouco depois, sem quebrar nada.
+#
+# CONFIGURAÇÃO NECESSÁRIA (uma vez só)
+# ----------------------------------------
+# 1. Na Vercel: Settings -> Environment Variables -> crie
+#    `CHAVE_NOTIFICAR_ATUALIZACAO` com qualquer texto longo e aleatório.
+# 2. No GitHub: Settings -> Secrets and variables -> Actions -> New
+#    repository secret -> nome `CHAVE_NOTIFICAR_ATUALIZACAO`, MESMO VALOR
+#    do passo 1.
+# Sem os dois iguais, o endereço responde 401 e nenhum aviso sai — seguro
+# por padrão, em vez de notificar sem checar quem está chamando.
+
+name: Avisar atualizacao do app
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  avisar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Espera o deploy da Vercel terminar
+        run: sleep 90
+
+      - name: Avisa o servidor que ha uma versao nova
+        run: |
+          curl -sS -f -X POST "https://padaria-producao-perdas.vercel.app/api/notificar-atualizacao" \
+            -H "X-Chave-Atualizacao: ${{ secrets.CHAVE_NOTIFICAR_ATUALIZACAO }}"

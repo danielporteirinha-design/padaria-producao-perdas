@@ -25,7 +25,7 @@ import { contemBusca } from "../lib/texto";
 import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
 import { AssistenteDeVoz } from "./AssistenteDeVoz";
-import { IconeConfere, IconeLixeira, IconeSeta, IconeSino } from "./Icones";
+import { IconeConfere, IconeImpressora, IconeLixeira, IconeSeta, IconeSino } from "./Icones";
 
 const MAXIMO_RESULTADOS = 12;
 
@@ -70,6 +70,19 @@ interface PainelFornoDeHojeProps {
     desfecho: "confirmado" | "cancelado",
     motivo?: string
   ) => Promise<void>;
+  /**
+   * Imprimir ou compartilhar o pedido de uma filial (set/2026, pedido do
+   * dono do negócio: a opção "voltou ao app" depois de sair junto com o
+   * card antigo de "Pedidos das filiais hoje").
+   *
+   * Abre a MESMA tela de cupom que a filial já usa para a própria lista
+   * — com "Imprimir no caixa" e "Compartilhar" —, e não uma tela nova:
+   * quem vai buscar a mercadoria precisa do mesmo papel, venha o pedido
+   * de onde vier.
+   */
+  onImprimirReposicao?: (pedido: PedidoFilial) => void;
+  /** Imprimir ou compartilhar a lista de suprimentos de uma filial. */
+  onImprimirSuprimentos?: (pedido: PedidoSuprimentos) => void;
 }
 
 export function PainelFornoDeHoje({
@@ -85,6 +98,8 @@ export function PainelFornoDeHoje({
   onCadastrarProduto,
   onDecidirReposicao,
   onDecidirSuprimentos,
+  onImprimirReposicao,
+  onImprimirSuprimentos,
 }: PainelFornoDeHojeProps) {
   const [marcando, setMarcando] = useState<number | null>(null);
   const [busca, setBusca] = useState("");
@@ -344,6 +359,36 @@ export function PainelFornoDeHoje({
               linha pede uma decisão sem dizer sobre o quê. */}
           {ehSuprimentos && itensDaLista(linha).length > 0 && (
             <span className="itens-da-lista">{itensDaLista(linha)}</span>
+          )}
+
+          {/* IMPRIMIR OU COMPARTILHAR VOLTOU AO APP (set/2026, pedido do
+              dono do negócio) — tinha saído junto com o card antigo de
+              "Pedidos das filiais hoje". Abre a MESMA tela de cupom que a
+              filial já usa ("Imprimir no caixa" + "Compartilhar"): quem
+              vai separar a mercadoria precisa do papel na mão para
+              decidir, não só depois de confirmar.
+
+              REPOSIÇÃO TEM UMA LINHA POR ITEM, mas o pedido é um só
+              documento com todos os itens da filial — por isso o botão
+              aparece uma vez só, na linha do PRIMEIRO item do pedido, e
+              imprime a lista inteira. Suprimentos já é uma linha por
+              lista, então aparece sempre. */}
+          {((ehSuprimentos && onImprimirSuprimentos && linha.suprimentos) ||
+            (!ehSuprimentos &&
+              onImprimirReposicao &&
+              linha.pedido &&
+              linha.pedido.itens[0]?.codigoPdv === linha.codigoPdv)) && (
+            <button
+              type="button"
+              className="botao-fornada"
+              onClick={() =>
+                ehSuprimentos
+                  ? onImprimirSuprimentos!(linha.suprimentos!)
+                  : onImprimirReposicao!(linha.pedido!)
+              }
+            >
+              <IconeImpressora tamanho={15} /> Imprimir
+            </button>
           )}
 
           {linha.situacao === "pendente" && (

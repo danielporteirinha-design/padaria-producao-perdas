@@ -2006,6 +2006,35 @@ Enquanto a `CHAVE_VAPID` estiver vazia, o app não quebra: a tela da filial
 mostra "avisos ainda não configurados" e as fornadas continuam aparecendo
 ao abrir o app.
 
+## Aviso de atualização disponível (set/2026)
+
+A cada `git push` para `main`, além do deploy automático da Vercel, um
+aviso push chega em todos os celulares dizendo que tem versão nova — sem
+precisar que alguém reinicie o app para ver o botão "Atualizar agora"
+(ver `src/lib/atualizacao.ts` e `api/notificar-atualizacao.ts`).
+
+Quem dispara o aviso é o **GitHub Actions**
+(`.github/workflows/notificar-atualizacao.yml`), e não um webhook da
+Vercel — esse recurso existe lá, mas só nos planos Pro/Enterprise.
+
+**Configuração (uma variável, em dois lugares — uma vez só):**
+
+1. Escolha qualquer texto longo e aleatório para servir de chave — não
+   precisa ser memorizável, ninguém digita ela na mão.
+2. No painel do Vercel → Settings → Environment Variables, crie
+   `CHAVE_NOTIFICAR_ATUALIZACAO` com esse texto.
+3. No GitHub → Settings → Secrets and variables → Actions → **New
+   repository secret**, crie um segredo de MESMO NOME
+   (`CHAVE_NOTIFICAR_ATUALIZACAO`) com o MESMO VALOR do passo 2.
+
+Sem os dois iguais, o endereço responde 401 e nenhum aviso sai — é o
+comportamento seguro para uma configuração esquecida.
+
+**Um limite que não dá para contornar:** o som da notificação em si é
+decidido pelo sistema operacional do celular, não pelo app — o que dá
+para garantir é que ela fica na tela até alguém tocar (`requireInteraction`),
+não que o som repita até lá.
+
 ## Um card por loja no Cronograma (ago/2026)
 
 Substituiu o quadro único "Quanto vai para cada loja". Cada loja é um

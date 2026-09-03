@@ -1042,6 +1042,8 @@ export default function App() {
                 pedidosSuprimentos={pedidosSuprimentos}
                 catalogoSuprimentos={suprimentos}
                 onDecidirSuprimentos={handleDecidirSuprimentos}
+                onImprimirReposicao={setReposicaoParaImprimir}
+                onImprimirSuprimentos={setSuprimentosParaImprimir}
               />
             </>
           ) : (

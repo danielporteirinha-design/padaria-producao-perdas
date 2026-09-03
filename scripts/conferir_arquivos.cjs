@@ -138,12 +138,11 @@ const CONFERENCIAS = [
   ["src/lib/interpretarPedidoFalado.ts", "interpretarFrase", "Frase inteira vira lista de itens"],
   ["src/lib/vozRespostas.ts", "entenderQuantidade", "Entender a quantidade dita"],
   ["src/types/fornada.ts", "quantidade?", "Quantidade no anuncio"],
-  ["src/components/PainelPedidosFiliais.tsx", "onImprimirReposicao", "Matriz imprime a lista de reposicao"],
 
   // --- Suprimentos (embalagens e material de limpeza)
   ["src/types/suprimento.ts", "idDoSuprimento", "Modelo de suprimentos"],
   ["src/components/TelaSuprimentos.tsx", "onEnviarLista", "Filial: aba Suprimentos"],
-  ["src/components/PainelPedidosFiliais.tsx", "linhaDeSuprimentos", "Matriz: suprimentos na linha do tempo da loja"],
+  ["src/components/PainelFornoDeHoje.tsx", "ehSuprimentos", "Matriz: suprimentos na linha do tempo da loja"],
   ["src/components/TelaSuprimentos.tsx", "incluir em", "Cadastro de suprimento sem escolher segmento"],
   ["src/types/suprimento.ts", "chaveDoSegmento", "Suprimentos: segmento antigo nao some da lista"],
   ["src/data/repositorioFirestore.ts", "pedidos_suprimentos", "Firestore: colecao dos suprimentos"],
@@ -158,8 +157,8 @@ const CONFERENCIAS = [
   ["src/components/TelaPedidoFilial.tsx", "aviso-corte", "Filial ve o que a matriz cortou"],
   ["src/lib/gerarImagemLista.ts", "computarBlocosContinuos", "Lista da loja: um cabecalho, um rodape"],
   ["src/lib/gerarImagemLista.ts", "VERMELHO_MARCA", "Cupom: loja em vermelho, data sem faixa preta"],
-  ["src/components/PainelPedidosFiliais.tsx", "hora-pedido", "Hora da solicitacao na Reposicao"],
-  ["src/components/PainelPedidosFiliais.tsx", "localeCompare", "Reposicoes: recentes primeiro"],
+  ["src/components/PainelFornoDeHoje.tsx", "hora-reposicao", "Hora da solicitacao na Reposicao"],
+  ["src/lib/reposicaoDoDia.ts", "localeCompare", "Reposicoes: recentes primeiro"],
   ["src/components/TelaPerdas.tsx", "ultimo-lancamento", "Perdas sem a tabela do dia"],
   ["src/index.css", "ABAS DE LARGURA IGUAL", "Abas alinhadas e centradas"],
   ["src/lib/avisarFiliais.ts", "avisarListaAjustada", "Aviso de lista ajustada"],
@@ -185,6 +184,13 @@ const CONFERENCIAS = [
   ["src/lib/avisarFiliais.ts", "itensSuprimentos", "Aviso de suprimentos leva os itens"],
   ["api/notificar-fornada.ts", "corpoDaListaDeSuprimentos", "Servidor: aviso de suprimentos detalhado"],
   ["src/components/PainelFornoDeHoje.tsx", "itensDaLista", "Matriz le a lista de suprimentos na sanfona"],
+  ["src/components/PainelFornoDeHoje.tsx", "onImprimirReposicao", "Imprimir/compartilhar pedido da filial voltou para a matriz"],
+
+  // --- Aviso de atualizacao do app (set/2026)
+  ["api/notificar-atualizacao.ts", "CHAVE_NOTIFICAR_ATUALIZACAO", "Servidor: aviso de atualizacao disponivel"],
+  ["api/notificar-atualizacao.ts", "requireInteraction", "Aviso de atualizacao fica na tela ate abrir"],
+  [".github/workflows/notificar-atualizacao.yml", "notificar-atualizacao", "Deploy dispara o aviso de atualizacao sozinho"],
+  ["src/lib/atualizacao.ts", "visibilitychange", "Checa versao nova ao reabrir o app, sem precisar reiniciar"],
 ];
 
 /**
@@ -212,6 +218,7 @@ const DEVEM_TER_SIDO_APAGADOS = [
   ["api/manutencao.ts", "modo de manutenção retirado — os avisos vão para todos"],
   ["src/lib/manutencao.ts", "modo de manutenção retirado — os avisos vão para todos"],
   ["api/notificar-desfecho-suprimentos.ts", "endpoint sem autenticação — o aviso voltou para /api/notificar-fornada"],
+  ["src/components/PainelPedidosFiliais.tsx", "card de pedidos das filiais — virou linha na sanfona da matriz, e o imprimir voltou para dentro dela"],
 ];
 
 /**
