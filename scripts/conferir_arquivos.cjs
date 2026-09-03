@@ -79,7 +79,7 @@ const CONFERENCIAS = [
   // --- O aviso é desenhado pelo NAVEGADOR, e não pelo service worker
   ["api/notificar-fornada.ts", "webpush: {", "Aviso com bloco notification"],
   ["src/lib/concluidosVistos.ts", "marcarConcluidosVistos", "Sino nos concluidos nao lidos"],
-  ["src/lib/somDeAviso.ts", "REPETICOES_DA_CAMPAINHA", "Campainha para sozinha"],
+  ["src/lib/somDeAviso.ts", "não um teto de repetições", "Campainha toca ate abrir a notificacao"],
   ["src/types/pedido.ts", "decidirItemDaReposicao", "Matriz decide item por item"],
   ["src/App.tsx", "handleDecidirSuprimentos", "Matriz responde a lista de suprimentos"],
   ["firestore.rules", "A MATRIZ RESPONDE À LISTA DE SUPRIMENTOS", "Regra: matriz responde suprimentos (COLAR NO CONSOLE!)"],
@@ -207,6 +207,12 @@ const CONFERENCIAS = [
   ["src/components/AtivarAvisos.tsx", "aindaDispensado", "Agora nao vira soneca, nao apagao definitivo"],
   ["src/components/AtivarAvisos.tsx", "reconferir", "Permissao de aviso reconferida ao reabrir o app"],
   ["src/App.tsx", "registrarAparelhoSePermitido(lojaId, operador)", "Aparelho registrado de novo ao reabrir o app"],
+
+  // --- Voz na Lista de Producao da matriz, som e aviso urgente (set/2026)
+  ["src/components/TelaCronograma.tsx", "adicionarPorVoz", "Matriz tambem monta a Lista de Producao por voz"],
+  ["public/firebase-messaging-sw.js", "parar-aviso", "Clicar na notificacao para a campainha"],
+  ["src/App.tsx", "\"parar-aviso\"", "App escuta o clique na notificacao para parar a campainha"],
+  [".github/workflows/notificar-atualizacao.yml", "workflow_dispatch", "Aviso de atualizacao pode ser disparado na mao, para testar"],
 ];
 
 /**
@@ -235,6 +241,7 @@ const DEVEM_TER_SIDO_APAGADOS = [
   ["src/lib/manutencao.ts", "modo de manutenção retirado — os avisos vão para todos"],
   ["api/notificar-desfecho-suprimentos.ts", "endpoint sem autenticação — o aviso voltou para /api/notificar-fornada"],
   ["src/components/PainelPedidosFiliais.tsx", "card de pedidos das filiais — virou linha na sanfona da matriz, e o imprimir voltou para dentro dela"],
+  ["src/components/ConfirmarProducao.tsx", "card 'Confirmar o que foi produzido' retirado — pedido do dono do negocio (set/2026), nao precisa mais dele"],
 ];
 
 /**

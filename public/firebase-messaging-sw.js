@@ -120,6 +120,16 @@ self.addEventListener("notificationclick", (evento) => {
   const destino = (evento.notification.data && evento.notification.data.url) || "/";
   evento.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((janelas) => {
+      /**
+       * A CAMPAINHA PARA AQUI (set/2026, pedido do dono do negócio: o som
+       * volta a tocar sem teto, e só para quando a notificação é aberta).
+       *
+       * Manda para TODAS as janelas, não só a que vai ganhar foco: com o
+       * PC do balcão com várias abas, ou mais de um aparelho tocando ao
+       * mesmo tempo, quem abriu a notificação quer silêncio imediato, não
+       * só na aba que ele focou.
+       */
+      for (const janela of janelas) janela.postMessage({ tipo: "parar-aviso" });
       for (const janela of janelas) {
         if ("focus" in janela) {
           janela.postMessage({ tipo: "abrir-rota", url: destino });

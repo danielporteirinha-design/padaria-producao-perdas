@@ -51,9 +51,7 @@ import { gerarId } from "../lib/id";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria } from "../lib/categorias";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProducao } from "../lib/sugestaoProducao";
-import { itensPlanejados, producaoFoiConfirmada } from "../lib/producaoRealizada";
 import { ExportarFita } from "./ExportarFita";
-import { ConfirmarProducao } from "./ConfirmarProducao";
 import {
   ajustarPedidoPelaMatriz,
   diferencasDoAjuste,
@@ -67,8 +65,6 @@ import {
   lerAjuste,
   limparAjustesAntigos,
 } from "../lib/rascunhoPedido";
-import type { FornadaPronta } from "../types/fornada";
-import { codigosComFornadaNoDia } from "../types/fornada";
 import { FILIAIS, LOJA_MATRIZ, nomeDaLoja } from "../lib/lojas";
 import {
   consolidarProducao,
@@ -76,18 +72,15 @@ import {
   type ItemConsolidado,
 } from "../lib/consolidacao";
 import { agruparPorCategoria } from "../lib/blocosDeImpressao";
+import { AssistenteDeVoz } from "./AssistenteDeVoz";
 import { IconeCalendario, IconeImpressora, IconeLixeira, IconeSeta } from "./Icones";
 
 interface TelaCronogramaProps {
   produtos: Produto[];
   /** Pedidos das filiais — entram no total a produzir (ver consolidacao.ts). */
   pedidos: PedidoFilial[];
-  /** Confirma, no fim do expediente, o que realmente saiu do forno. */
-  onConfirmarProducao: (planoId: string, codigosNaoProduzidos: number[]) => Promise<void>;
   /** Envia as imagens para a impressora térmica do caixa (ver types/impressao.ts). */
   onImprimirNoCaixa: (canvases: HTMLCanvasElement[], documento: string, nomeBase: string) => Promise<void>;
-  /** Fornadas já marcadas hoje (ver types/fornada.ts). */
-  fornadas: FornadaPronta[];
   planos: PlanoDeProducaoDiario[];
   perdas: RegistroPerda[];
   operador: string;
@@ -124,9 +117,7 @@ const GRUPOS = CATEGORIAS_PRODUCAO.map((c) => c.chave);
 export function TelaCronograma({
   produtos,
   pedidos,
-  onConfirmarProducao,
   onImprimirNoCaixa,
-  fornadas,
   planos,
   perdas,
   operador,
@@ -240,29 +231,6 @@ export function TelaCronograma({
   const dataFormatada = `${rotuloDoDia(diaDaSemana)}, ${formatarDataBr(dataAlvo)}`;
 
   const pedidosDoDia = useMemo(() => pedidos.filter((p) => p.data === dataAlvo), [pedidos, dataAlvo]);
-
-  /**
-   * A confirmação do que saiu do forno é sobre a produção de HOJE, não
-   * sobre o cronograma que está sendo montado (que é de amanhã). Por isso
-   * o plano usado aqui é o do dia corrente, independente da data que o
-   * operador estiver planejando na tela.
-   */
-  const hojeIso = hoje;
-  const planoDeHoje = useMemo(
-    () => planos.find((p) => p.data === hojeIso && p.status === "confirmado"),
-    [planos, hojeIso]
-  );
-
-  /** Total pedido de cada item hoje (matriz + filiais) — é o que se confere. */
-  const totaisPedidosDeHoje = useMemo(() => {
-    if (!planoDeHoje) return undefined;
-    const consolidado = consolidarProducao(
-      planoDeHoje.sessoes.flatMap((sessao) => sessao.itens),
-      pedidos.filter((p) => p.data === hojeIso),
-      LOJA_MATRIZ.id
-    );
-    return new Map(consolidado.map((c) => [c.codigoPdv, c.totalUnidades]));
-  }, [planoDeHoje, pedidos, hojeIso]);
 
   /**
    * `ehPedidoDiario` é obrigatório aqui: uma REPOSIÇÃO da loja tem a
@@ -455,6 +423,39 @@ export function TelaCronograma({
     });
     setProdutoAtivo(null);
     setValorEditando("");
+  }
+
+  /**
+   * A LISTA INTEIRA DITADA DE UMA VEZ, para o lançamento da matriz
+   * (set/2026, pedido do dono do negócio: "tanto a matriz quanto as
+   * filiais podem montar sua lista de produção utilizando o comando de
+   * voz" — a filial já tinha isso, ver `adicionarPorVoz` em
+   * TelaPedidoFilial.tsx; esta é a mesma ideia, só que agrupando por
+   * categoria em vez de por loja).
+   *
+   * Cai na MESMA lista que o toque monta — não é um lançamento
+   * paralelo. Produto já lançado tem a quantidade SUBSTITUÍDA, não
+   * somada: quem repete um item falando está corrigindo o número, não
+   * pedindo mais. Confirmar produção continua sendo o passo explícito
+   * de sempre.
+   */
+  function adicionarPorVoz(ditados: { produto: Produto; quantidade: number | null }[]) {
+    setItensPorGrupo((atual) => {
+      const novo = { ...atual };
+      for (const { produto, quantidade } of ditados) {
+        if (!quantidade || quantidade <= 0) continue;
+        const grupo = produto.categoria;
+        const itensDoGrupo = [...(novo[grupo] ?? [])];
+        const onde = itensDoGrupo.findIndex((i) => i.codigoPdv === produto.codigoPdv);
+        if (onde >= 0) itensDoGrupo[onde] = { ...itensDoGrupo[onde], quantidadeUnidades: quantidade };
+        else itensDoGrupo.push({ codigoPdv: produto.codigoPdv, quantidadeUnidades: quantidade });
+        novo[grupo] = itensDoGrupo;
+        // Abre a categoria do item ditado: sem isso ele entra na lista e
+        // fica invisível atrás de uma sanfona fechada.
+        setExpandido((a) => ({ ...a, [grupo]: true }));
+      }
+      return novo;
+    });
   }
 
   function removerItem(chaveGrupo: string, codigoPdv: number) {
@@ -819,24 +820,6 @@ export function TelaCronograma({
       : { texto: "sem itens ainda", tom: "pendente" };
   }
 
-  const itensDoPlanoDeHoje = planoDeHoje ? itensPlanejados(planoDeHoje).length : 0;
-  const hojeJaConfirmado = planoDeHoje ? producaoFoiConfirmada(planoDeHoje) : false;
-  /**
-   * Quantos itens de hoje saíram do forno, dos que foram pedidos.
-   *
-   * Antes o cabeçalho mostrava só o tamanho da lista ("14 itens"), que é
-   * a mesma informação dos cards das lojas e não dizia nada sobre o
-   * assunto DESTE card. "12 de 14 confirmados" responde a pergunta que
-   * traz alguém aqui — falta alguma coisa? — sem abrir o card.
-   *
-   * Antes da conferência do fim do dia, nada foi confirmado ainda: o
-   * número parte de zero em vez de fingir que tudo saiu.
-   */
-  const confirmadosDeHoje =
-    planoDeHoje && hojeJaConfirmado
-      ? itensDoPlanoDeHoje - (planoDeHoje.producaoRealizada?.codigosNaoProduzidos.length ?? 0)
-      : 0;
-
   return (
     <div className="tela">
       {/*
@@ -1078,6 +1061,18 @@ export function TelaCronograma({
         aberto={!!cardsAbertos[LOJA_MATRIZ.id]}
         onAlternar={() => alternarCard(LOJA_MATRIZ.id)}
       >
+        {/* MONTAR FALANDO (set/2026, pedido do dono do negócio: matriz e
+            filiais montam a lista de produção pelo comando de voz — a
+            filial já tinha isso, ver TelaPedidoFilial.tsx). Mesmo lugar
+            da sanfona onde a matriz lança o cronograma dela; as sanfonas
+            continuam abaixo para ajustar item a item. */}
+        <AssistenteDeVoz
+          produtos={produtos}
+          modo="pedir"
+          acao="adicionar"
+          onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
+        />
+
         {GRUPOS.map((chave) => {
           const rotulo = rotuloDaCategoria(chave);
           const itensDoGrupo = itensPorGrupo[chave] ?? [];
@@ -1246,36 +1241,6 @@ export function TelaCronograma({
           )}
         </div>
       </CardCronograma>
-
-      {/*
-        CARD DA CONFERÊNCIA — POR ÚLTIMO (ago/2026, pedido do dono do
-        negócio).
-        ---------------------------------------------------------------
-        Ele fala de HOJE, e todo o resto da aba fala de AMANHÃ. Ficava no
-        meio do caminho de quem entra aqui para planejar, e planejar é o
-        que traz alguém a esta aba. No fim, ele continua à mão para o
-        fechamento do expediente, sem atravessar o trabalho do resto do
-        dia.
-      */}
-      {planoDeHoje && (
-        <CardCronograma
-          nome="Confirmar o que foi produzido"
-          situacao={hojeJaConfirmado ? null : { texto: "ainda não confirmado", tom: "pendente" }}
-          contagem={`${confirmadosDeHoje} de ${itensDoPlanoDeHoje} confirmados`}
-          aberto={!!cardsAbertos.confirmacao}
-          onAlternar={() => alternarCard("confirmacao")}
-        >
-          <ConfirmarProducao
-            embutido
-            plano={planoDeHoje}
-            produtos={produtos}
-            operador={operador}
-            totaisPedidos={totaisPedidosDeHoje}
-            codigosComFornada={codigosComFornadaNoDia(fornadas, hojeIso)}
-            onConfirmar={(codigos) => onConfirmarProducao(planoDeHoje.id, codigos)}
-          />
-        </CardCronograma>
-      )}
 
       {/*
         O BOTÃO DA LISTA DA COZINHA — NO FIM DA PÁGINA (ago/2026, pedido

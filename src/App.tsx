@@ -365,6 +365,13 @@ export default function App() {
         tocarAvisoSonoro();
         return;
       }
+      // A notificação foi aberta (clique do usuário) — ver
+      // `notificationclick` em public/firebase-messaging-sw.js. É o
+      // gatilho que faz a campainha (que agora toca sem teto) parar.
+      if (evento.data?.tipo === "parar-aviso") {
+        pararAvisoSonoro();
+        return;
+      }
       if (evento.data?.tipo !== "abrir-rota" || typeof evento.data.url !== "string") return;
       const destino = abaDaUrl(evento.data.url);
       if (destino) setAba(destino);
@@ -400,21 +407,6 @@ export default function App() {
   async function handleSalvarPlano(plano: PlanoDeProducaoDiario) {
     await comRetorno(() => repositorio!.salvarPlano(plano), "Cronograma salvo.");
     setPlanos((atual) => [...atual.filter((p) => p.id !== plano.id), plano]);
-  }
-
-  async function handleConfirmarProducao(planoId: string, codigosNaoProduzidos: number[]) {
-    const plano = planos.find((p) => p.id === planoId);
-    if (!plano) return;
-    const atualizado: PlanoDeProducaoDiario = {
-      ...plano,
-      producaoRealizada: {
-        confirmadoPor: operador,
-        confirmadoEm: new Date().toISOString(),
-        codigosNaoProduzidos,
-      },
-    };
-    await comRetorno(() => repositorio!.salvarPlano(atualizado), "Produção do dia confirmada.");
-    setPlanos((atual) => atual.map((p) => (p.id === planoId ? atualizado : p)));
   }
 
   async function handleAnularPerda(perdaId: string, motivo: string) {
@@ -1030,9 +1022,7 @@ export default function App() {
           <TelaCronograma
             produtos={produtos}
             pedidos={pedidos}
-            onConfirmarProducao={handleConfirmarProducao}
             onImprimirNoCaixa={handleImprimirNoCaixa}
-            fornadas={fornadas}
             planos={planos}
             perdas={perdas}
             operador={operador}

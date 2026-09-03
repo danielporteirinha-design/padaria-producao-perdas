@@ -35,6 +35,11 @@ name: Avisar atualizacao do app
 on:
   push:
     branches: [main]
+  # Permite disparar manualmente pela aba Actions do GitHub (botao "Run
+  # workflow"), sem precisar de um push novo — util para testar se o
+  # segredo esta certo dos dois lados sem esperar o proximo deploy
+  # (set/2026, diagnostico do aviso que nao chegou).
+  workflow_dispatch:
 
 jobs:
   avisar:

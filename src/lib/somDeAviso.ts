@@ -69,20 +69,24 @@ export function pararAvisoSonoro(): void {
  * Uma badalada de campainha, e não dois bipes (ago/2026, pedido do dono
  * do negócio: no PC do balcão o aviso precisa soar como campainha).
  *
- * TOCA EM LOOP, MAS COM FIM (set/2026 — defeito relatado no celular).
+ * TOCA EM LOOP ATÉ ALGUÉM ABRIR A NOTIFICAÇÃO (set/2026, de volta por
+ * pedido do dono do negócio).
  *
- * A versão anterior repetia até alguém tocar na notificação. No PC isso
- * funcionava, porque a janela está à vista e a pessoa fecha o aviso em
- * segundos. No celular, não: o app fica em segundo plano, a campainha
- * repetia indefinidamente, e a única forma de calar era abrir a
- * notificação. Um alarme que não para sozinho deixa de ser aviso e vira
- * castigo — e o operador acaba desligando o som do app inteiro.
+ * Chegou a ganhar um teto de repetições, por um defeito relatado no
+ * celular: sem nada que avisasse o app de que a notificação tinha sido
+ * aberta, a campainha tocava para sempre em segundo plano, e a única
+ * forma de calar era abrir a notificação mesmo — o que, para quem não
+ * via o celular na hora, virava um alarme sem fim.
  *
- * Agora o loop tem teto. Chamou a atenção nos primeiros segundos ou não
- * chamou; insistir além disso não melhora nada, e a notificação
- * continua na barra esperando, que é o lugar dela.
+ * O teto resolvia isso escondendo o problema: um aviso que para sozinho
+ * em poucos segundos também deixa de cumprir o papel dele, que é
+ * insistir até alguém perceber. A correção de verdade é a notificação
+ * do sistema avisar o app quando é aberta — ver `notificationclick` em
+ * public/firebase-messaging-sw.js, que manda `parar-aviso` para as
+ * janelas abertas — e é isso, não um teto de repetições, que faz a
+ * campainha parar. Fechar o aviso dentro do app (ver AvisoGlobal em
+ * App.tsx) também para, para quem está com a janela em primeiro plano.
  */
-const REPETICOES_DA_CAMPAINHA = 4;
 export function tocarAvisoSonoro(): void {
   try {
     prepararSom();
@@ -97,17 +101,12 @@ export function tocarAvisoSonoro(): void {
       // Toca a primeira vez imediatamente
       badaladas(contexto);
       
-      // A cada 3 segundos (tempo suficiente para o som decair), e para
-      // sozinha depois de REPETICOES_DA_CAMPAINHA — ver o comentário acima.
-      let tocadas = 1;
+      // A cada 3 segundos (tempo suficiente para o som decair), sem
+      // teto — só para com `pararAvisoSonoro()` (clique na notificação,
+      // ou fechar o aviso dentro do app).
       loopToque = window.setInterval(() => {
-        if (tocadas >= REPETICOES_DA_CAMPAINHA) {
-          pararAvisoSonoro();
-          return;
-        }
         if (contexto && contexto.state === "running") {
           badaladas(contexto);
-          tocadas++;
         }
       }, 3000);
     };
