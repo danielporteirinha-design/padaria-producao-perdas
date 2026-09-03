@@ -213,6 +213,10 @@ const CONFERENCIAS = [
   ["public/firebase-messaging-sw.js", "parar-aviso", "Clicar na notificacao para a campainha"],
   ["src/App.tsx", "\"parar-aviso\"", "App escuta o clique na notificacao para parar a campainha"],
   [".github/workflows/notificar-atualizacao.yml", "workflow_dispatch", "Aviso de atualizacao pode ser disparado na mao, para testar"],
+
+  // --- Suprimentos: tela sempre em branco, soma no envio (set/2026)
+  ["src/components/TelaSuprimentos.tsx", "itensMesclados", "Suprimentos: novo pedido soma ao que ja foi enviado hoje"],
+  ["src/components/PainelFornadasFilial.tsx", "linhaDeSuprimentos", "Status do pedido de suprimentos mora na Reposicao"],
 ];
 
 /**
@@ -242,6 +246,7 @@ const DEVEM_TER_SIDO_APAGADOS = [
   ["api/notificar-desfecho-suprimentos.ts", "endpoint sem autenticação — o aviso voltou para /api/notificar-fornada"],
   ["src/components/PainelPedidosFiliais.tsx", "card de pedidos das filiais — virou linha na sanfona da matriz, e o imprimir voltou para dentro dela"],
   ["src/components/ConfirmarProducao.tsx", "card 'Confirmar o que foi produzido' retirado — pedido do dono do negocio (set/2026), nao precisa mais dele"],
+  ["src/components/AvisoPerdaPendente.tsx", "lembrete de lancamento de perdas retirado — pedido do dono do negocio (set/2026), nao precisa mais dele"],
 ];
 
 /**

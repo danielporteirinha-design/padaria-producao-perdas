@@ -18,7 +18,6 @@ import { TelaCadastroProdutos } from "./components/TelaCadastroProdutos";
 import { TelaPerdas } from "./components/TelaPerdas";
 import { TelaAnalises } from "./components/TelaAnalises";
 import { BannerInstalar } from "./components/BannerInstalar";
-import { AvisoPerdaPendente } from "./components/AvisoPerdaPendente";
 import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
 import {
   decidirItemDaReposicao,
@@ -933,14 +932,6 @@ export default function App() {
       />
 
       <BannerInstalar />
-
-      <AvisoPerdaPendente
-        produtos={produtos}
-        planos={planos}
-        perdas={perdas}
-        visivel={aba !== "perdas"}
-        onIrParaPerdas={() => irParaAba("perdas")}
-      />
 
       {loja.papel === "matriz" && <AtivarAvisos loja={loja} operador={operador} />}
 

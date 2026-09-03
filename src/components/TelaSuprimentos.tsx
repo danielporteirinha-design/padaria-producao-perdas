@@ -17,10 +17,9 @@
  * seria trocar um problema de dois minutos por um de dois dias.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Loja } from "../lib/lojas";
 import {
-  agruparPorSegmento,
   chaveDoSegmento,
   idDoPedidoSuprimentos,
   idDoSuprimento,
@@ -29,13 +28,12 @@ import {
   type PedidoSuprimentos,
   type Suprimento,
 } from "../types/suprimento";
-import { formatarDataBr, horaDoInstante } from "../lib/data";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { contemBusca } from "../lib/texto";
 import { CampoDeBusca } from "./CampoDeBusca";
 import { AssistenteDeVoz } from "./AssistenteDeVoz";
 import type { Produto } from "../types/produto";
-import { IconeCalendario, IconeConfere, IconeSeta } from "./Icones";
+import { IconeSeta } from "./Icones";
 
 /** "polpa de frutas" -> "Polpa De Frutas" — só para sugerir um nome
  * legível a partir do que o microfone ouviu. */
@@ -142,30 +140,27 @@ export function TelaSuprimentos({
     [pedidos, hoje, loja.id]
   );
 
-  const [itens, setItens] = useState<ItemPedidoSuprimento[]>(() => pedidoDeHoje?.itens ?? []);
+  /**
+   * A TELA SEMPRE ABRE EM BRANCO (set/2026, pedido do dono do negócio:
+   * "a lista do que foi enviado não deve ficar nessa aba" — o status do
+   * que já foi mandado hoje passou a viver na Reposição, não aqui, ver
+   * `linhaDeSuprimentos` em PainelFornadasFilial.tsx).
+   *
+   * Suprimentos deixou de ser "editar o documento do dia" e virou "pedir
+   * mais uma vez que precisar" — cada toque em Enviar é um pedido novo,
+   * que SOMA ao que a loja já tinha mandado hoje (ver `enviar`, mais
+   * abaixo), em vez de reabrir a lista anterior para revisar.
+   */
+  const [itens, setItens] = useState<ItemPedidoSuprimento[]>([]);
   /** O microfone está aberto? Enquanto estiver, a busca some da tela. */
   const [ouvindoVoz, setOuvindoVoz] = useState(false);
   const [dataCarregada, setDataCarregada] = useState(hoje);
   if (dataCarregada !== hoje) {
     setDataCarregada(hoje);
-    setItens(pedidoDeHoje?.itens ?? []);
+    setItens([]);
     setItemAtivo(null);
   }
 
-  /**
-   * Quando o pedido gravado chega da nuvem depois da tela montar (é
-   * assíncrono), a lista na tela precisa acompanhar — desde que não haja
-   * nada digitado esperando. Sem isto, quem abre a aba antes de a escuta
-   * responder veria a lista vazia e mandaria de novo do zero.
-   */
-  useEffect(() => {
-    if (itens.length === 0 && (pedidoDeHoje?.itens.length ?? 0) > 0) {
-      setItens(pedidoDeHoje!.itens);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pedidoDeHoje]);
-
-  const jaEnviado = pedidoDeHoje?.status === "enviado";
   const quantidadeDe = (id: string) => itens.find((i) => i.suprimentoId === id)?.quantidade ?? 0;
   const totalItens = itens.filter((i) => i.quantidade > 0).length;
 
@@ -257,6 +252,24 @@ export function TelaSuprimentos({
     }
   }
 
+  /**
+   * SOMA AO QUE A LOJA JÁ MANDOU HOJE, NÃO SUBSTITUI (set/2026).
+   *
+   * A tela agora abre sempre em branco — então "enviar" não pode mais
+   * ser "gravar só o que está na tela", ou o segundo pedido do dia
+   * apagaria o primeiro sem ninguém perceber. Por isso cada item é
+   * somado ao que já estava na lista de hoje (o mesmo suprimento pedido
+   * duas vezes no dia é UM pedido maior, não dois).
+   */
+  function itensMesclados(): ItemPedidoSuprimento[] {
+    const mapa = new Map(pedidoDeHoje?.itens.map((i) => [i.suprimentoId, i.quantidade]) ?? []);
+    for (const item of itens) {
+      if (item.quantidade <= 0) continue;
+      mapa.set(item.suprimentoId, (mapa.get(item.suprimentoId) ?? 0) + item.quantidade);
+    }
+    return [...mapa].map(([suprimentoId, quantidade]) => ({ suprimentoId, quantidade }));
+  }
+
   async function enviar() {
     setEnviando(true);
     try {
@@ -265,12 +278,24 @@ export function TelaSuprimentos({
         id: idDoPedidoSuprimentos(hoje, loja.id),
         lojaId: loja.id,
         data: hoje,
-        itens: itens.filter((i) => i.quantidade > 0),
+        itens: itensMesclados(),
         status: "enviado",
+        /**
+         * `atendimento` FICA DE FORA DE PROPÓSITO. A lista mudou — cresceu
+         * com o que acabou de ser somado —, e uma decisão que a matriz já
+         * tinha dado (confirmado/cancelado) valia para a lista de ANTES.
+         * Mandar de novo sem o campo apaga a decisão velha no Firestore
+         * (o gravar é substituição inteira, não mescla — ver
+         * `salvarPedidoSuprimentos`), e a lista volta a pendente para a
+         * matriz olhar de novo, com o que mudou.
+         */
         criadoPor: pedidoDeHoje?.criadoPor ?? operador,
         criadoEm: pedidoDeHoje?.criadoEm ?? agora,
         enviadoEm: agora,
       });
+      // A tela volta a ficar em branco, pronta para o próximo pedido — o
+      // que acabou de ser mandado já está seguro no documento do dia.
+      setItens([]);
     } catch {
       /* mensagem vem do aviso global (ver App.tsx) */
     } finally {
@@ -422,27 +447,8 @@ export function TelaSuprimentos({
     return opcoesDeIncluir(nome);
   }
 
-  const resumo = agruparPorSegmento(itens, catalogo);
-
   return (
     <div className="tela">
-      <div className="destaque-data bloco-pedido">
-        <IconeCalendario tamanho={20} />
-        <div className="texto-bloco-pedido">
-          <span className="titulo-planejamento">Suprimentos de {formatarDataBr(hoje)}</span>
-          <span className="estado-pedido">
-            {jaEnviado ? (
-              <>
-                <IconeConfere tamanho={14} /> enviado
-                {horaDoInstante(pedidoDeHoje?.enviadoEm) ? ` às ${horaDoInstante(pedidoDeHoje?.enviadoEm)}` : ""}
-              </>
-            ) : (
-              "não enviado — a matriz ainda não recebeu esta lista"
-            )}
-          </span>
-        </div>
-      </div>
-
       {/* PEDIR SUPRIMENTO FALANDO (set/2026, pedido do dono do negócio).
           O mesmo assistente da Reposição, com o catálogo de suprimentos
           no lugar do de produtos.
@@ -617,32 +623,13 @@ export function TelaSuprimentos({
         })
       )}
 
-      {/* O resumo do que vai ser mandado, fora das sanfonas: com os
-          segmentos fechados, é a única forma de conferir a lista inteira
-          sem abrir um por um. */}
-      {totalItens > 0 && !buscando && (
-        <div className="resumo-suprimentos">
-          {resumo.map((grupo) => (
-            <div key={grupo.chave} className="sessao-do-card">
-              <h4>{grupo.rotulo}</h4>
-              {grupo.itens.map((item) => (
-                <div key={item.nome} className="item-da-loja">
-                  <span className="nome-item-loja">{item.nome}</span>
-                  <span className="qtd-item-loja">{item.quantidade}</span>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-
       <button
         type="button"
         className="primario largura-cheia"
         disabled={enviando || totalItens === 0}
         onClick={enviar}
       >
-        {enviando ? "Enviando..." : jaEnviado ? "Atualizar" : `Enviar (${totalItens})`}
+        {enviando ? "Enviando..." : `Enviar (${totalItens})`}
       </button>
 
       {/* IMPRIMIR A LISTA (set/2026). Imprime o que está montado agora —
@@ -654,14 +641,16 @@ export function TelaSuprimentos({
           className="secundario largura-cheia"
           onClick={() =>
             onImprimir({
+              // O papel é sempre do que está montado agora, ainda não
+              // mandado — a tela não guarda mais o que já foi enviado
+              // hoje (ver o comentário em `itens`, acima).
               id: idDoPedidoSuprimentos(hoje, loja.id),
               lojaId: loja.id,
               data: hoje,
               itens: itens.filter((i) => i.quantidade > 0),
-              status: pedidoDeHoje?.status ?? "rascunho",
-              criadoPor: pedidoDeHoje?.criadoPor ?? operador,
-              criadoEm: pedidoDeHoje?.criadoEm ?? new Date().toISOString(),
-              enviadoEm: pedidoDeHoje?.enviadoEm,
+              status: "rascunho",
+              criadoPor: operador,
+              criadoEm: new Date().toISOString(),
             })
           }
         >
