@@ -2038,6 +2038,18 @@ button.perigo:hover { background: #822525; }
   font-size: 13px;
   color: var(--cor-texto-suave);
 }
+/* Cada trecho não reconhecido, junto com a ação própria oferecida por
+   quem usa o microfone (hoje, só Suprimentos: cadastrar o item)
+   (set/2026). */
+.linha-fora-da-lista {
+  padding: 6px 0;
+  border-top: 1px solid rgba(155, 44, 44, 0.2);
+}
+.linha-fora-da-lista:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
 .linha-conferencia {
   display: flex;
   align-items: center;
@@ -2099,6 +2111,13 @@ button.perigo:hover { background: #822525; }
   border-color: var(--cor-acento);
   color: var(--cor-acento-texto);
   font-weight: 700;
+}
+/* "+ nova sessão" — visualmente diferente das pastilhas de segmento
+   existentes, porque cria uma sanfona nova em vez de escolher uma que
+   já existe (set/2026, pedido do dono do negócio). */
+.chip-setor-nova {
+  border-style: dashed;
+  color: var(--cor-texto-suave);
 }
 
 /* ---------------------------------------------------------------

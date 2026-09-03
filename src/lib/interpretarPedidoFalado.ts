@@ -284,7 +284,7 @@ function melhorProduto(trecho: string, nomes: string[]): string {
 }
 
 /** Tira o número e as palavras de medida, deixando só o que nomeia. */
-function soONome(trecho: string): string {
+export function soONome(trecho: string): string {
   return trecho
     .replace(/\d+/g, " ")
     .split(/\s+/)

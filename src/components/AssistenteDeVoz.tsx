@@ -76,6 +76,19 @@ interface AssistenteDeVozProps {
    * este componente: ele não conhece o que está em volta dele.
    */
   onOuvindoMudou?: (ouvindo: boolean) => void;
+  /**
+   * Deixa a tela que usa o microfone oferecer uma ação própria para
+   * cada trecho que não entrou na lista — em vez do aviso genérico
+   * "fale de novo" (set/2026, Suprimentos).
+   *
+   * Existe porque em Reposição e Anúncio o produto já existe no
+   * catálogo — o problema é o microfone ter ouvido errado, e repetir
+   * resolve. Em Suprimentos o item pode simplesmente não estar
+   * cadastrado ainda, e repetir não resolve nada: a pessoa precisa de
+   * um jeito de cadastrar o item ali mesmo. Sem esta função a tela
+   * continua exatamente como antes.
+   */
+  renderSobra?: (trecho: string) => React.ReactNode;
 }
 
 export function AssistenteDeVoz({
@@ -84,6 +97,7 @@ export function AssistenteDeVoz({
   acao = "enviar",
   onConfirmar,
   onOuvindoMudou,
+  renderSobra,
 }: AssistenteDeVozProps) {
   const [ouvindo, setOuvindo] = useState(false);
   useEffect(() => {
@@ -367,14 +381,23 @@ export function AssistenteDeVoz({
           <strong className="titulo-fora-da-lista">
         {sobras.length === 1 ? "Não entrou na lista:" : "Não entraram na lista:"}
           </strong>
-      {sobras.map((sobra, indice) => (
-            <span key={`${sobra}-${indice}`} className="trecho-fora-da-lista">
-              {sobra}
+          {renderSobra
+            ? sobras.map((sobra, indice) => (
+                <div key={`${sobra}-${indice}`} className="linha-fora-da-lista">
+                  <span className="trecho-fora-da-lista">{sobra}</span>
+                  {renderSobra(sobra)}
+                </div>
+              ))
+            : sobras.map((sobra, indice) => (
+                <span key={`${sobra}-${indice}`} className="trecho-fora-da-lista">
+                  {sobra}
+                </span>
+              ))}
+          {!renderSobra && (
+            <span className="dica-fora-da-lista">
+              Fale de novo só este item, ou procure pelo nome na busca.
             </span>
-          ))}
-          <span className="dica-fora-da-lista">
-            Fale de novo só este item, ou procure pelo nome na busca.
-          </span>
+          )}
         </div>
       )}
 

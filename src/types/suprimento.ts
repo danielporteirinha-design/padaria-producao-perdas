@@ -103,18 +103,60 @@ export function desfechoDosSuprimentos(pedido: PedidoSuprimentos | undefined): "
 }
 
 /** Chave do segmento sem depender de caixa — ver `agruparPorSegmento`. */
-function chaveDoSegmento(bruto: string | undefined): string {
+export function chaveDoSegmento(bruto: string | undefined): string {
   return (bruto ?? "").trim().toUpperCase();
+}
+
+/** "polpa de frutas" -> "Polpa De Frutas", só para exibir na tela. */
+function rotuloDoSegmento(bruto: string): string {
+  return bruto
+    .trim()
+    .split(/\s+/)
+    .map((parte) => (parte.length > 0 ? parte[0].toUpperCase() + parte.slice(1).toLowerCase() : parte))
+    .join(" ");
 }
 
 /** O balde de quem não pertence a nenhum segmento conhecido. */
 const OUTROS = { chave: "OUTROS", rotulo: "Outros" };
+
+/**
+ * OS TRÊS SEGMENTOS FIXOS, MAIS QUALQUER SESSÃO NOVA CRIADA PELO
+ * CAMINHO (set/2026, pedido do dono do negócio: "queria a opção de
+ * salvar uma nova sanfona, com o nome de uma nova sessão").
+ *
+ * Não existe uma coleção separada de "segmentos" — o único lugar onde
+ * um segmento fica registrado é no próprio suprimento cadastrado com
+ * ele. Por isso quem decide quais sanfonas existem (aqui, e na tela de
+ * Suprimentos) é sempre esta função: os três de sempre, na ordem de
+ * sempre, e depois cada segmento diferente encontrado no catálogo, na
+ * ordem em que apareceu pela primeira vez.
+ */
+export function segmentosExibidos(
+  catalogo: Suprimento[]
+): { chave: string; rotulo: string; personalizado: boolean }[] {
+  const conhecidos = new Set(SEGMENTOS_SUPRIMENTO.map((s) => chaveDoSegmento(s.chave)));
+  const extras: { chave: string; rotulo: string; personalizado: boolean }[] = [];
+  const vistos = new Set<string>();
+
+  for (const sup of catalogo) {
+    const chave = chaveDoSegmento(sup.segmento);
+    if (chave === "" || conhecidos.has(chave) || vistos.has(chave)) continue;
+    vistos.add(chave);
+    extras.push({ chave, rotulo: rotuloDoSegmento(sup.segmento), personalizado: true });
+  }
+
+  return [
+    ...SEGMENTOS_SUPRIMENTO.map((s) => ({ ...s, personalizado: false })),
+    ...extras,
+  ];
+}
 
 export function agruparPorSegmento(
   itens: ItemPedidoSuprimento[],
   catalogo: Suprimento[]
 ): { chave: string; rotulo: string; itens: { nome: string; quantidade: number }[] }[] {
   const mapaCatalogo = new Map(catalogo.map((s) => [s.id, s]));
+  const segmentos = segmentosExibidos(catalogo);
 
   /**
    * A COMPARAÇÃO IGNORA A CAIXA, E EXISTE UM "OUTROS" — as duas coisas
@@ -127,10 +169,15 @@ export function agruparPorSegmento(
    * não ia para "Outros": ele desaparecia do papel, em silêncio, e a
    * loja ficaria sem o produto sem ninguém entender por quê.
    *
-   * Uma lista de compra que perde item é pior que uma lista feia.
+   * "OUTROS" agora só recebe item cujo id nem está mais no catálogo —
+   * todo segmento que existe em algum suprimento cadastrado já ganha
+   * grupo próprio via `segmentosExibidos`, sessão criada na hora
+   * inclusa. Uma lista de compra que perde item é pior que uma lista
+   * feia; e uma sessão nova que vira "Outros" no papel impresso é o
+   * mesmo problema com outra cara.
    */
   const gruposMap = new Map<string, { nome: string; quantidade: number }[]>();
-  for (const seg of SEGMENTOS_SUPRIMENTO) {
+  for (const seg of segmentos) {
     gruposMap.set(chaveDoSegmento(seg.chave), []);
   }
   gruposMap.set(OUTROS.chave, []);
@@ -146,7 +193,7 @@ export function agruparPorSegmento(
     gruposMap.get(destino)!.push({ nome, quantidade: item.quantidade });
   }
 
-  return [...SEGMENTOS_SUPRIMENTO, OUTROS]
+  return [...segmentos, OUTROS]
     .map((seg) => ({
       chave: seg.chave,
       rotulo: seg.rotulo,

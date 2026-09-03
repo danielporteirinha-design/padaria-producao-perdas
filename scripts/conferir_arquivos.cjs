@@ -191,6 +191,13 @@ const CONFERENCIAS = [
   ["api/notificar-atualizacao.ts", "requireInteraction", "Aviso de atualizacao fica na tela ate abrir"],
   [".github/workflows/notificar-atualizacao.yml", "notificar-atualizacao", "Deploy dispara o aviso de atualizacao sozinho"],
   ["src/lib/atualizacao.ts", "visibilitychange", "Checa versao nova ao reabrir o app, sem precisar reiniciar"],
+
+  // --- Suprimentos: sessao nova pela voz ou pela busca (set/2026)
+  ["src/lib/interpretarPedidoFalado.ts", "export function soONome", "So o nome, exportado para sugerir item novo"],
+  ["src/components/AssistenteDeVoz.tsx", "renderSobra", "Tela pode oferecer acao propria pro que a voz nao achou"],
+  ["src/types/suprimento.ts", "segmentosExibidos", "Sessao criada na hora vira sanfona propria"],
+  ["src/types/suprimento.ts", "personalizado", "Sessao propria nao cai mais em Outros"],
+  ["src/components/TelaSuprimentos.tsx", "opcoesDeIncluir", "Nao achou (por voz ou busca) oferece criar sessao nova"],
 ];
 
 /**

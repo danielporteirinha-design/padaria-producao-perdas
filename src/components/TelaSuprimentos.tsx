@@ -21,9 +21,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { Loja } from "../lib/lojas";
 import {
   agruparPorSegmento,
+  chaveDoSegmento,
   idDoPedidoSuprimentos,
   idDoSuprimento,
-  SEGMENTOS_SUPRIMENTO,
+  segmentosExibidos,
   type ItemPedidoSuprimento,
   type PedidoSuprimentos,
   type Suprimento,
@@ -35,6 +36,37 @@ import { CampoDeBusca } from "./CampoDeBusca";
 import { AssistenteDeVoz } from "./AssistenteDeVoz";
 import type { Produto } from "../types/produto";
 import { IconeCalendario, IconeConfere, IconeSeta } from "./Icones";
+
+/** "polpa de frutas" -> "Polpa De Frutas" — só para sugerir um nome
+ * legível a partir do que o microfone ouviu. */
+function capitalizarNome(bruto: string): string {
+  return bruto
+    .trim()
+    .split(/\s+/)
+    .map((parte) => (parte.length > 0 ? parte[0].toUpperCase() + parte.slice(1).toLowerCase() : parte))
+    .join(" ");
+}
+
+/**
+ * SÓ O QUE MEDE, PARA SUGERIR O NOME (set/2026, quando a voz não achou
+ * o item). Tira número e palavra de quantidade do que o microfone
+ * ouviu — mas, ao contrário de `soONome` (em interpretarPedidoFalado,
+ * feito para comparar com o catálogo), MANTÉM "de/da/do": aqui o texto
+ * vira o nome do item que vai para o catálogo, e sem a preposição
+ * "polpa de fruta" vira o errado "polpa fruta".
+ */
+const PALAVRAS_DE_QUANTIDADE = [
+  "UNIDADES", "UNIDADE", "UN",
+  "PECAS", "PECA", "ITENS", "ITEM",
+  "DUZIA", "DUZIAS",
+];
+function nomeSugeridoDaSobra(trecho: string): string {
+  const palavras = trecho
+    .replace(/\d+/g, " ")
+    .split(/\s+/)
+    .filter((p) => p.length > 0 && !PALAVRAS_DE_QUANTIDADE.includes(p.toUpperCase()));
+  return capitalizarNome(palavras.join(" "));
+}
 
 interface TelaSuprimentosProps {
   loja: Loja;
@@ -89,6 +121,16 @@ export function TelaSuprimentos({
   const [segmentoCadastrando, setSegmentoCadastrando] = useState<string | null>(null);
   const [nomeNovo, setNomeNovo] = useState("");
   const [salvandoNovo, setSalvandoNovo] = useState("");
+  /**
+   * "+ NOVA SESSÃO" (set/2026, pedido do dono do negócio: "queria a
+   * opção de salvar uma nova sanfona, com o nome de uma nova sessão").
+   *
+   * Guarda para QUAL item (o texto buscado, ou o que o microfone não
+   * achou) o campo de nome da sessão nova está aberto — o mesmo padrão
+   * de `segmentoCadastrando`, um de cada vez.
+   */
+  const [criandoSessaoPara, setCriandoSessaoPara] = useState<string | null>(null);
+  const [novaSessao, setNovaSessao] = useState("");
 
   /**
    * A lista do dia. Um pedido por loja por dia — reenviar corrige o
@@ -128,6 +170,11 @@ export function TelaSuprimentos({
   const totalItens = itens.filter((i) => i.quantidade > 0).length;
 
   const ativos = useMemo(() => catalogo.filter((s) => s.ativo), [catalogo]);
+  /**
+   * AS SANFONAS QUE EXISTEM HOJE — as três fixas mais qualquer sessão
+   * criada na hora por alguma loja (set/2026). Ver `segmentosExibidos`.
+   */
+  const segmentosCadastro = useMemo(() => segmentosExibidos(catalogo), [catalogo]);
   const buscando = busca.trim().length > 0;
 
   const resultados = useMemo(() => {
@@ -195,7 +242,9 @@ export function TelaSuprimentos({
       await onCadastrarSuprimento(novo);
       setSegmentoCadastrando(null);
       setNomeNovo("");
-      setExpandido({ [segmento]: true });
+      setCriandoSessaoPara(null);
+      setNovaSessao("");
+      setExpandido({ [chaveDoSegmento(segmento)]: true });
       // O item entra aberto para digitar a quantidade: quem cadastrou
       // veio pedir aquilo, não organizar catálogo.
       setItemAtivo(novo.id);
@@ -276,6 +325,103 @@ export function TelaSuprimentos({
     );
   }
 
+  /**
+   * OS BOTÕES DE "ONDE ESTE ITEM MORA" — usados tanto por quem digitou e
+   * não achou quanto pelo que o microfone não reconheceu (set/2026,
+   * pedido do dono do negócio: "sugerir ao usuário salvar o pedido em
+   * uma das sessões, inclusive... salvar uma nova sanfona, com o nome
+   * de uma nova sessão").
+   *
+   * Mesma pergunta, dois pontos de entrada. As sessões já existentes —
+   * fixas e as criadas na hora por qualquer loja — aparecem como
+   * pastilhas de um toque; "+ nova sessão" abre um campo para batizar
+   * uma sanfona que ainda não existe.
+   */
+  function opcoesDeIncluir(nome: string) {
+    const criandoAqui = criandoSessaoPara === nome;
+    return (
+      <div className="cadastro-relampago">
+        <p className="nota-rodape">
+          Incluir <strong>{nome}</strong> em:
+        </p>
+        <div className="setores-do-novo">
+          {segmentosCadastro.map((segmento) => {
+            const valorGravado = segmento.personalizado ? segmento.rotulo : segmento.chave;
+            return (
+              <button
+                key={segmento.chave}
+                type="button"
+                className="chip-setor"
+                disabled={salvandoNovo !== ""}
+                onClick={() => void cadastrar(nome, valorGravado)}
+              >
+                {salvandoNovo === valorGravado ? "Salvando..." : segmento.rotulo}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            className="chip-setor chip-setor-nova"
+            disabled={salvandoNovo !== ""}
+            onClick={() => {
+              setCriandoSessaoPara(criandoAqui ? null : nome);
+              setNovaSessao("");
+            }}
+          >
+            + nova sessão
+          </button>
+        </div>
+
+        {criandoAqui && (
+          <div className="incluir-item">
+            <input
+              type="text"
+              autoFocus
+              placeholder="Nome da nova sessão"
+              aria-label="Nome da nova sessão"
+              value={novaSessao}
+              onChange={(e) => setNovaSessao(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && novaSessao.trim().length >= 2) {
+                  void cadastrar(nome, novaSessao.trim());
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="primario"
+              disabled={novaSessao.trim().length < 2 || salvandoNovo !== ""}
+              onClick={() => void cadastrar(nome, novaSessao.trim())}
+            >
+              {salvandoNovo === novaSessao.trim() ? "..." : "Criar"}
+            </button>
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                setCriandoSessaoPara(null);
+                setNovaSessao("");
+              }}
+            >
+              cancelar
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /**
+   * O QUE OFERECER PARA UM TRECHO QUE O MICROFONE NÃO RECONHECEU
+   * (set/2026). `soONome` já tira número e palavra de medida — o que
+   * sobra é o nome candidato, só arrumado para exibição.
+   */
+  function opcoesParaSobra(trecho: string) {
+    const nome = nomeSugeridoDaSobra(trecho) || trecho.trim();
+    if (!nome) return null;
+    return opcoesDeIncluir(nome);
+  }
+
   const resumo = agruparPorSegmento(itens, catalogo);
 
   return (
@@ -331,9 +477,10 @@ export function TelaSuprimentos({
                   )
                 : [...atual, { suprimentoId: suprimento.id, quantidade: ditado.quantidade! }];
             });
-            setExpandido({ [suprimento.segmento]: true });
+            setExpandido({ [chaveDoSegmento(suprimento.segmento)]: true });
           }
         }}
+        renderSobra={opcoesParaSobra}
       />
 
       {!ouvindoVoz && (
@@ -365,30 +512,11 @@ export function TelaSuprimentos({
             A pergunta "em qual segmento?" desapareceu — a resposta É o
             botão que se toca.
           */}
-          {!jaExiste && busca.trim().length >= 2 && (
-            <div className="cadastro-relampago">
-              <p className="nota-rodape">
-                Incluir <strong>{busca.trim()}</strong> em:
-              </p>
-              <div className="setores-do-novo">
-                {SEGMENTOS_SUPRIMENTO.map((segmento) => (
-                  <button
-                    key={segmento.chave}
-                    type="button"
-                    className="chip-setor"
-                    disabled={salvandoNovo !== ""}
-                    onClick={() => void cadastrar(busca, segmento.chave)}
-                  >
-                    {salvandoNovo === segmento.chave ? "Salvando..." : segmento.rotulo}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {!jaExiste && busca.trim().length >= 2 && opcoesDeIncluir(busca.trim())}
         </>
       ) : (
-        SEGMENTOS_SUPRIMENTO.map((segmento) => {
-          const lista = ativos.filter((s) => s.segmento === segmento.chave);
+        segmentosCadastro.map((segmento) => {
+          const lista = ativos.filter((s) => chaveDoSegmento(s.segmento) === segmento.chave);
           const aberto = !!expandido[segmento.chave];
           const pedidosNoSegmento = lista.filter((s) => quantidadeDe(s.id) > 0).length;
 
@@ -437,16 +565,27 @@ export function TelaSuprimentos({
                         value={nomeNovo}
                         onChange={(e) => setNomeNovo(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") void cadastrar(nomeNovo, segmento.chave);
+                          if (e.key === "Enter")
+                            void cadastrar(
+                              nomeNovo,
+                              segmento.personalizado ? segmento.rotulo : segmento.chave
+                            );
                         }}
                       />
                       <button
                         type="button"
                         className="primario"
                         disabled={nomeNovo.trim().length < 2 || salvandoNovo !== ""}
-                        onClick={() => void cadastrar(nomeNovo, segmento.chave)}
+                        onClick={() =>
+                          void cadastrar(
+                            nomeNovo,
+                            segmento.personalizado ? segmento.rotulo : segmento.chave
+                          )
+                        }
                       >
-                        {salvandoNovo === segmento.chave ? "..." : "Incluir"}
+                        {salvandoNovo === (segmento.personalizado ? segmento.rotulo : segmento.chave)
+                          ? "..."
+                          : "Incluir"}
                       </button>
                       <button
                         type="button"

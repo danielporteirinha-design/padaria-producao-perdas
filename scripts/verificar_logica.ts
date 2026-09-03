@@ -75,12 +75,13 @@ import { somarDias } from "../src/lib/data";
 import { incluirItemProduzido, planoContemItem, planoDeHojeCom } from "../src/lib/producaoDeHoje";
 import { abaDaUrl, urlDaAba } from "../src/lib/rota";
 import { entenderQuantidade } from "../src/lib/vozRespostas";
-import { interpretarFrase } from "../src/lib/interpretarPedidoFalado";
+import { interpretarFrase, soONome } from "../src/lib/interpretarPedidoFalado";
 import {
   agruparPorSegmento,
   idDoPedidoSuprimentos,
   idDoSuprimento,
   itensComNome,
+  segmentosExibidos,
   type PedidoSuprimentos,
   variedadesDoPedidoSuprimentos,
   type Suprimento,
@@ -2988,6 +2989,69 @@ const perdas: RegistroPerda[] = [
   );
 
   afirmar(abaDaUrl("/?aba=suprimentos") === "suprimentos", "push de suprimentos abre a aba certa");
+
+  /**
+   * SEGMENTOS EXIBIDOS: os três fixos, mais qualquer sessão criada na
+   * hora (set/2026, pedido do dono do negócio: "salvar uma nova
+   * sanfona, com o nome de uma nova sessão").
+   */
+  {
+    const catalogoComSessaoNova: Suprimento[] = [
+      { id: "SACO_KRAFT", nome: "Saco kraft", segmento: "embalagens", ativo: true, criadoPor: "Sistema", criadoEm: new Date().toISOString() },
+      { id: "POLPA_MORANGO", nome: "Polpa de morango", segmento: "Polpa De Frutas", ativo: true, criadoPor: "Ana", criadoEm: new Date().toISOString() },
+      { id: "POLPA_ACAI", nome: "Polpa de açaí", segmento: "POLPA DE FRUTAS", ativo: true, criadoPor: "Ana", criadoEm: new Date().toISOString() },
+    ];
+    const segmentos = segmentosExibidos(catalogoComSessaoNova);
+    afirmar(
+      segmentos.length === 4 &&
+        segmentos[0].chave === "embalagens" &&
+        segmentos[1].chave === "sacolas" &&
+        segmentos[2].chave === "limpeza",
+      "os tres fixos continuam vindo primeiro, na ordem de sempre"
+    );
+    const nova = segmentos.find((s) => s.chave === "POLPA DE FRUTAS");
+    afirmar(
+      nova !== undefined && nova.rotulo === "Polpa De Frutas" && nova.personalizado,
+      "sessao criada na hora aparece uma vez so, com o nome de quem cadastrou primeiro"
+    );
+    afirmar(
+      segmentos.filter((s) => s.chave === "POLPA DE FRUTAS").length === 1,
+      "maiuscula e minuscula da mesma sessao nao viram duas sanfonas"
+    );
+
+    /**
+     * O FIX QUE ESTA MUDANÇA TROUXE: item de uma sessão criada na hora
+     * aparece com o NOME DA SESSÃO na lista de compra — não mais em
+     * "Outros". "Outros" agora é só para item cujo id sumiu do
+     * catálogo.
+     */
+    const gruposComSessaoNova = agruparPorSegmento(
+      [
+        { suprimentoId: "POLPA_MORANGO", quantidade: 2 },
+        { suprimentoId: "POLPA_ACAI", quantidade: 1 },
+        { suprimentoId: "ITEM_SUMIDO", quantidade: 3 },
+      ],
+      catalogoComSessaoNova
+    );
+    const grupoPolpa = gruposComSessaoNova.find((g) => g.chave === "POLPA DE FRUTAS");
+    afirmar(
+      grupoPolpa !== undefined && grupoPolpa.itens.length === 2,
+      "sessao criada na hora vira grupo proprio na lista de compra, nao 'Outros'"
+    );
+    const outrosComSessaoNova = gruposComSessaoNova.find((g) => g.chave === "OUTROS");
+    afirmar(
+      outrosComSessaoNova !== undefined && outrosComSessaoNova.itens[0]?.nome === "ITEM_SUMIDO",
+      "'Outros' continua reservado para item que sumiu do catalogo"
+    );
+  }
+
+  /**
+   * SÓ O NOME: o que sobra depois de tirar número e palavra de medida
+   * do que o microfone ouviu — usado para sugerir o nome de um
+   * suprimento novo quando a voz não encontrou o item (set/2026).
+   */
+  afirmar(soONome("3 rolo papel toalha") === "rolo papel toalha", "tira o numero, mantem o nome");
+  afirmar(soONome("polpa de fruta") === "polpa de fruta", "sem numero, o nome nao muda");
 }
 
 // ---------------------------------------------------------------
