@@ -257,6 +257,40 @@ export function reposicaoTotalmenteDecidida(pedido: PedidoFilial): boolean {
   return pedido.itens.every((i) => desfechoDoItem(pedido, i.codigoPdv) !== "pendente");
 }
 
+/**
+ * ACEITA DE UMA VEZ TODOS OS ITENS AINDA PENDENTES DO PEDIDO (set/2026,
+ * pedido do dono do negócio: imprimir o comprovante de reposição de uma
+ * filial deve aceitar o pedido inteiro, não item por item).
+ *
+ * Só "confirmado" — recusar exige motivo por item (ver
+ * `decidirItemDaReposicao`), e não faz sentido recusar vários itens
+ * diferentes com um motivo só. Item já decidido (confirmado ou
+ * recusado antes) fica como está: só o que ainda espera resposta muda.
+ *
+ * UMA ESCRITA SÓ NO DOCUMENTO, e não N chamadas de
+ * `decidirItemDaReposicao` em sequência — cada chamada parte do mesmo
+ * `pedido` recebido por parâmetro, e chamar a função várias vezes com o
+ * MESMO pedido base faria a última escrita apagar as decisões das
+ * anteriores (cada uma monta `atendimentoPorItem` a partir do pedido
+ * original, não do resultado da chamada anterior).
+ */
+export function decidirItensPendentesDaReposicao(
+  pedido: PedidoFilial,
+  decididoPor: string
+): PedidoFilial {
+  const agora = new Date().toISOString();
+  const atendimentoPorItem = { ...(pedido.atendimentoPorItem ?? {}) };
+  for (const item of pedido.itens) {
+    if (desfechoDoItem(pedido, item.codigoPdv) !== "pendente") continue;
+    atendimentoPorItem[String(item.codigoPdv)] = {
+      desfecho: "confirmado",
+      decididoPor,
+      decididoEm: agora,
+    };
+  }
+  return { ...pedido, atendimentoPorItem };
+}
+
 export function decidirReposicao(
   pedido: PedidoFilial,
   desfecho: "confirmado" | "cancelado",

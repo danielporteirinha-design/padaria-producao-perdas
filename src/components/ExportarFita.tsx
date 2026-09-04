@@ -42,6 +42,8 @@ interface ExportarFitaProps {
   }[];
   /** Ver DadosImpressaoFita.titulo — é o que distingue os dois documentos. */
   titulo: string;
+  /** Ver DadosImpressaoFita.subtitulo — linha extra abaixo do título, só no formato `continuo`. */
+  subtitulo?: string;
   /** Texto acima do preview, explicando o que fazer com este papel. */
   instrucao: string;
   dataFormatada: string;
@@ -65,6 +67,7 @@ interface ExportarFitaProps {
 export function ExportarFita({
   blocos,
   titulo,
+  subtitulo,
   instrucao,
   dataFormatada,
   produtos,
@@ -89,6 +92,7 @@ export function ExportarFita({
       const canvases = gerarCanvasesFita({
         sessoes: blocos,
         titulo,
+        subtitulo,
         dataFormatada,
         produtos,
         montadoPor,
@@ -121,6 +125,7 @@ export function ExportarFita({
       const canvases = gerarCanvasesFita({
         sessoes: blocos,
         titulo,
+        subtitulo,
         dataFormatada,
         produtos,
         montadoPor,
@@ -168,6 +173,7 @@ export function ExportarFita({
               const canvases = gerarCanvasesFita({
                 sessoes: blocos,
                 titulo,
+                subtitulo,
                 dataFormatada,
                 produtos,
                 montadoPor,

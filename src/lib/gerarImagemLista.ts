@@ -93,6 +93,8 @@ export const ALTURA_RODAPE_FINAL = 36;
    --------------------------------------------------------------- */
 /** Margem + nome da loja + data grande + régua. */
 export const ALTURA_CABECALHO_DOC = 132;
+/** Linha extra somada ao cabeçalho quando `subtitulo` está presente (ver `desenharPeca`). */
+export const ALTURA_SUBTITULO_CABECALHO = 32;
 /** Nome do setor, centrado e maior que os produtos, + régua. */
 export const ALTURA_SUBTITULO_SESSAO = 52;
 /** Respiro entre o fim de uma sessão e o subtítulo da próxima. */
@@ -151,6 +153,13 @@ export interface DadosImpressaoFita {
    * documento só, por loja, faria o padeiro somar de cabeça.
    */
   titulo: string;
+  /**
+   * Linha extra, menor, logo ABAIXO do título — só no formato `continuo`
+   * (ex.: "Pedido de Reposição", no comprovante de reposição da matriz
+   * para a filial). Ausente nos demais documentos (Lista de Produção,
+   * Suprimentos), que não ganham essa segunda linha no cabeçalho.
+   */
+  subtitulo?: string;
   dataFormatada: string; // já pronta para exibição, ex.: "Quarta-feira, 26/08/2026"
   sessoes: BlocoSessaoImpressao[];
   produtos: Produto[];
@@ -352,6 +361,8 @@ export interface BlocoContinuo {
 export interface PecaContinua {
   /** O destino, em destaque no alto: "Filial Arthur Bernardes". */
   titulo: string;
+  /** Ver `DadosImpressaoFita.subtitulo` — mesma linha, repetida em cada peça do lote. */
+  subtitulo?: string;
   blocos: BlocoContinuo[];
   /** Itens do destino inteiro — o rodapé conta o todo, não a folha. */
   totalDoDestino: number;
@@ -439,7 +450,8 @@ export function montarPecasContinuas(
   produtos: Produto[],
   tituloPadrao: string,
   alturaCabecalho: number,
-  alturaRodape: number
+  alturaRodape: number,
+  subtituloPadrao?: string
 ): PecaContinua[] {
   const destinos: { titulo: string; sessoes: BlocoSessaoImpressao[] }[] = [];
   for (const sessao of sessoes) {
@@ -457,6 +469,7 @@ export function montarPecasContinuas(
     folhas.forEach((folha, indice) => {
       pecas.push({
         titulo: destino.titulo,
+        subtitulo: subtituloPadrao,
         blocos: folha,
         totalDoDestino: total,
         folha: folhas.length > 1 ? { numero: indice + 1, total: folhas.length } : undefined,
@@ -497,12 +510,18 @@ export function agruparPecasEmImagens(pecas: PecaContinua[]): PecaContinua[][] {
 
 function gerarCanvasesContinuos(dados: DadosImpressaoFita): HTMLCanvasElement[] {
   const alturaRodape = dados.montadoPor ? ALTURA_RODAPE_DOC_ASSINADO : ALTURA_RODAPE_DOC;
+  // Com subtítulo, o cabeçalho ganha uma linha a mais — soma-se aqui, uma
+  // vez só, para a paginação (agruparBlocosContinuos) já contar com o
+  // espaço certo, em vez de estourar a folha no meio de um setor.
+  const alturaCabecalho =
+    ALTURA_CABECALHO_DOC + (dados.subtitulo ? ALTURA_SUBTITULO_CABECALHO : 0);
   const pecas = montarPecasContinuas(
     dados.sessoes,
     dados.produtos,
     dados.titulo,
-    ALTURA_CABECALHO_DOC,
-    alturaRodape
+    alturaCabecalho,
+    alturaRodape,
+    dados.subtitulo
   );
   return agruparPecasEmImagens(pecas).map((imagem) =>
     desenharImagemContinua(imagem, dados.dataFormatada, dados.montadoPor, alturaRodape)
@@ -559,6 +578,13 @@ function desenharPeca(
   ctx.font = "bold 30px system-ui, -apple-system, sans-serif";
   ctx.fillText(peca.titulo, LARGURA_PX / 2, y, LARGURA_PX - MARGEM * 2);
   y += 42;
+
+  if (peca.subtitulo) {
+    ctx.fillStyle = "#000000";
+    ctx.font = "bold 22px system-ui, -apple-system, sans-serif";
+    ctx.fillText(peca.subtitulo, LARGURA_PX / 2, y, LARGURA_PX - MARGEM * 2);
+    y += ALTURA_SUBTITULO_CABECALHO;
+  }
 
   ctx.fillStyle = "#000000";
   ctx.font = "bold 34px system-ui, -apple-system, sans-serif";

@@ -2106,6 +2106,27 @@ button.perigo:hover { background: #822525; }
 }
 .cadastro-relampago .nota-rodape { margin: 0; }
 .cadastro-relampago .acoes { align-items: center; }
+
+/* ---------------------------------------------------------------
+   Pergunta "imprimir o comprovante?" após aceitar o último item
+   pendente de um pedido de reposição (PainelFornoDeHoje.tsx, set/2026).
+   Fundo sólido — ao contrário do cadastro relâmpago, ESTA pergunta
+   pede uma decisão de verdade (o comprovante só sai se o operador
+   disser sim) e precisa ser notada, não passar batida.
+   --------------------------------------------------------------- */
+.pergunta-imprimir {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  background-color: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: var(--raio);
+  font-size: 0.95rem;
+}
+.pergunta-imprimir .acoes { align-items: center; }
 .nome-do-novo { font-size: 16px; overflow-wrap: anywhere; }
 /* Os cinco setores como pastilhas, e não um <select>: são cinco opções
    fixas, e escolher com um toque é mais rápido que abrir uma lista —

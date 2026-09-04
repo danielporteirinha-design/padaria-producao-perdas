@@ -21,6 +21,8 @@ import { BannerInstalar } from "./components/BannerInstalar";
 import { TelaPedidoFilial } from "./components/TelaPedidoFilial";
 import {
   decidirItemDaReposicao,
+  decidirItensPendentesDaReposicao,
+  desfechoDoItem,
   diferencasDoAjuste,
   ehReposicao,
   type PedidoFilial,
@@ -188,6 +190,13 @@ export default function App() {
   const [pedidosSuprimentos, setPedidosSuprimentos] = useState<PedidoSuprimentos[]>([]);
   const [suprimentosParaImprimir, setSuprimentosParaImprimir] = useState<PedidoSuprimentos | null>(null);
   const [reposicaoParaImprimir, setReposicaoParaImprimir] = useState<PedidoFilial | null>(null);
+  /**
+   * FILA DE IMPRESSÃO EM LOTE (set/2026, pedido do dono do negócio:
+   * "imprimir todos os itens que ainda estão sem resposta" — cada filial
+   * continua saindo num comprovante por vez, é só a navegação entre elas
+   * que fica automática em vez de reabrir a tela para cada uma.
+   */
+  const [filaReposicaoParaImprimir, setFilaReposicaoParaImprimir] = useState<PedidoFilial[]>([]);
   const [planos, setPlanos] = useState<PlanoDeProducaoDiario[]>([]);
   const [perdas, setPerdas] = useState<RegistroPerda[]>([]);
   const [pedidos, setPedidos] = useState<PedidoFilial[]>([]);
@@ -706,6 +715,59 @@ export default function App() {
   }
 
   /**
+   * ACEITA O PEDIDO INTEIRO DE UMA VEZ (set/2026, pedido do dono do
+   * negócio: imprimir o comprovante de reposição de uma filial aceita o
+   * pedido, não só o item onde o botão de imprimir mora). Só os itens
+   * AINDA PENDENTES mudam — o que já tinha sido confirmado ou recusado
+   * antes fica como está (ver `decidirItensPendentesDaReposicao`).
+   */
+  async function handleAceitarTodosDaReposicao(pedido: PedidoFilial): Promise<void> {
+    const itensPendentes = pedido.itens.filter(
+      (i) => desfechoDoItem(pedido, i.codigoPdv) === "pendente"
+    );
+    if (itensPendentes.length === 0) return;
+
+    const decidido = decidirItensPendentesDaReposicao(pedido, operador);
+    await comRetorno(
+      () => repositorio!.salvarPedido(decidido),
+      itensPendentes.length === 1
+        ? "Reposição confirmada."
+        : `${itensPendentes.length} itens confirmados.`
+    );
+    setPedidos((atual) => [...atual.filter((p) => p.id !== decidido.id), decidido]);
+
+    const soOsPendentes: PedidoFilial = { ...decidido, itens: itensPendentes };
+    await registrarReposicaoNaProducao(soOsPendentes, "confirmado");
+    // Um aviso por item, como no fluxo de um item só — `avisarDesfechoReposicao`
+    // fala de UM produto por vez (ver src/lib/avisarFiliais.ts).
+    for (const item of itensPendentes) {
+      await avisarFilialDoDesfecho({ ...decidido, itens: [item] }, "confirmado");
+    }
+  }
+
+  /**
+   * "IMPRIMIR TODOS" da sanfona Pedidos sem resposta: aceita cada pedido
+   * pendente e enfileira as filiais para impressão uma de cada vez — o
+   * mesmo comprovante de sempre, só que sem precisar reabrir a tela para
+   * cada filial (set/2026, pedido do dono do negócio).
+   */
+  async function handleImprimirTodasReposicoes(pedidos: PedidoFilial[]): Promise<void> {
+    for (const pedido of pedidos) {
+      await handleAceitarTodosDaReposicao(pedido);
+    }
+    if (pedidos.length === 0) return;
+    setReposicaoParaImprimir(pedidos[0]);
+    setFilaReposicaoParaImprimir(pedidos.slice(1));
+  }
+
+  /** Fecha o comprovante atual e avança para o próximo da fila, se houver. */
+  function avancarFilaDeImpressao() {
+    const [proxima, ...resto] = filaReposicaoParaImprimir;
+    setReposicaoParaImprimir(proxima ?? null);
+    setFilaReposicaoParaImprimir(resto);
+  }
+
+  /**
    * A RESPOSTA DA MATRIZ À LISTA DE SUPRIMENTOS (set/2026).
    *
    * Voltou junto com a aba Suprimentos, e agora mora na sanfona "Pedidos
@@ -1000,6 +1062,10 @@ export default function App() {
             <ExportarFita
               blocos={[{ rotuloSessao: "Reposição", itens: reposicaoParaImprimir.itens }]}
               titulo={nomeDaLoja(reposicaoParaImprimir.lojaId)}
+              // O nome da filial é o título; "Pedido de Reposição" é o
+              // subtítulo — os dois formam o cabeçalho do comprovante
+              // impresso (set/2026, pedido do dono do negócio).
+              subtitulo="Pedido de Reposição"
               instrucao="O que esta loja pediu agora. Separe e mande na próxima entrega."
               dataFormatada={formatarDataBr(reposicaoParaImprimir.data)}
               produtos={produtos}
@@ -1011,7 +1077,26 @@ export default function App() {
               }
             />
             <div className="acoes">
-              <button type="button" className="secundario" onClick={() => setReposicaoParaImprimir(null)}>Voltar</button>
+              <button
+                type="button"
+                className="secundario"
+                onClick={() => {
+                  setReposicaoParaImprimir(null);
+                  setFilaReposicaoParaImprimir([]);
+                }}
+              >
+                {filaReposicaoParaImprimir.length > 0 ? "Encerrar" : "Voltar"}
+              </button>
+              {/* "IMPRIMIR TODOS" avança sozinho pela fila — cada filial
+                  continua saindo no seu próprio comprovante (decisão do
+                  dono do negócio), só sem precisar reabrir a tela a cada
+                  vez. */}
+              {filaReposicaoParaImprimir.length > 0 && (
+                <button type="button" className="primario" onClick={avancarFilaDeImpressao}>
+                  Próxima filial ({filaReposicaoParaImprimir.length} restante
+                  {filaReposicaoParaImprimir.length === 1 ? "" : "s"})
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1057,7 +1142,17 @@ export default function App() {
                 pedidosSuprimentos={pedidosSuprimentos}
                 catalogoSuprimentos={suprimentos}
                 onDecidirSuprimentos={handleDecidirSuprimentos}
-                onImprimirReposicao={setReposicaoParaImprimir}
+                onImprimirReposicao={async (pedido) => {
+                  // Imprimir aceita o pedido inteiro primeiro (set/2026,
+                  // pedido do dono do negócio) — idempotente quando já
+                  // não sobra item pendente, então serve tanto para o
+                  // botão "Imprimir" quanto para o "Sim, imprimir" do
+                  // aviso pós-confirmação, sem duplicar lógica.
+                  await handleAceitarTodosDaReposicao(pedido);
+                  setReposicaoParaImprimir(pedido);
+                  setFilaReposicaoParaImprimir([]);
+                }}
+                onImprimirTodasReposicoes={handleImprimirTodasReposicoes}
                 onImprimirSuprimentos={setSuprimentosParaImprimir}
               />
             </>

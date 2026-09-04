@@ -241,6 +241,16 @@ const CONFERENCIAS = [
   // --- Horario de silencio no aviso de atualizacao (set/2026)
   [".github/workflows/notificar-atualizacao.yml", "Confere se esta dentro do horario permitido", "Push de atualizacao respeita horario de silencio"],
   ["api/notificar-atualizacao.ts", "dentroDoHorarioPermitido", "Endpoint tambem respeita o horario de silencio"],
+
+  // --- Impressao do comprovante de Reposicao (set/2026)
+  ["src/types/pedido.ts", "decidirItensPendentesDaReposicao", "Aceitar de uma vez todos os itens pendentes de um pedido"],
+  ["src/lib/gerarImagemLista.ts", "ALTURA_SUBTITULO_CABECALHO", "Impressao continua aceita um subtitulo no cabecalho"],
+  ["src/lib/gerarImagemLista.ts", "subtituloPadrao", "Subtitulo repassado as pecas do formato continuo"],
+  ["src/components/ExportarFita.tsx", "subtitulo?: string", "Tela de exportar fita repassa o subtitulo"],
+  ["src/components/PainelFornoDeHoje.tsx", "onImprimirTodasReposicoes", "Botao Imprimir todos na sanfona Pedidos sem resposta"],
+  ["src/components/PainelFornoDeHoje.tsx", "perguntaImprimir", "Pergunta se imprime apos aceitar o ultimo item pendente"],
+  ["src/App.tsx", "handleImprimirTodasReposicoes", "Fila de impressao: um comprovante por filial"],
+  ["src/App.tsx", "subtitulo=\"Pedido de Reposição\"", "Comprovante de reposicao mostra o subtitulo no cabecalho"],
 ];
 
 /**

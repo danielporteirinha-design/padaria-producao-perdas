@@ -9,6 +9,7 @@ import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { FornadaPronta } from "../types/fornada";
 import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
+import { desfechoDoItem } from "../types/pedido";
 import type { PedidoSuprimentos, Suprimento } from "../types/suprimento";
 import type { LinhaDaMatriz } from "../lib/reposicaoDoDia";
 import { anuncioPendente, montarLinhasDaMatriz } from "../lib/reposicaoDoDia";
@@ -81,6 +82,13 @@ interface PainelFornoDeHojeProps {
    * de onde vier.
    */
   onImprimirReposicao?: (pedido: PedidoFilial) => void;
+  /**
+   * "Imprimir todos" da sanfona Pedidos sem resposta (set/2026, pedido
+   * do dono do negócio): aceita e imprime, uma filial de cada vez, todos
+   * os pedidos de reposição ainda pendentes — sem reabrir a tela a cada
+   * filial. Ver `avancarFilaDeImpressao` em App.tsx.
+   */
+  onImprimirTodasReposicoes?: (pedidos: PedidoFilial[]) => void;
   /** Imprimir ou compartilhar a lista de suprimentos de uma filial. */
   onImprimirSuprimentos?: (pedido: PedidoSuprimentos) => void;
 }
@@ -99,6 +107,7 @@ export function PainelFornoDeHoje({
   onDecidirReposicao,
   onDecidirSuprimentos,
   onImprimirReposicao,
+  onImprimirTodasReposicoes,
   onImprimirSuprimentos,
 }: PainelFornoDeHojeProps) {
   const [marcando, setMarcando] = useState<number | null>(null);
@@ -142,6 +151,12 @@ export function PainelFornoDeHoje({
   /** Qual linha está sendo respondida agora, e o motivo em digitação. */
   const [decidindo, setDecidindo] = useState<string | null>(null);
   const [recusa, setRecusa] = useState<{ chave: string; motivo: string } | null>(null);
+  /**
+   * A PERGUNTA "IMPRIMIR O COMPROVANTE?" depois de aceitar o ÚLTIMO item
+   * pendente de um pedido (set/2026, pedido do dono do negócio) — ver o
+   * disparo em `responder()`.
+   */
+  const [perguntaImprimir, setPerguntaImprimir] = useState<PedidoFilial | null>(null);
 
   const nomeDaLoja = (lojaId: string | undefined) =>
     LOJAS.find((l) => l.id === lojaId)?.nomeCurto ?? "Filial";
@@ -158,6 +173,26 @@ export function PainelFornoDeHoje({
         await onDecidirSuprimentos(linha.suprimentos, desfecho, motivo);
       } else if (onDecidirReposicao && linha.pedido) {
         await onDecidirReposicao(linha.pedido, linha.codigoPdv, desfecho, motivo);
+        /**
+         * PERGUNTA DE IMPRESSÃO SÓ NO ÚLTIMO ITEM PENDENTE (set/2026,
+         * pedido do dono do negócio: "após aceitar o pedido da filial,
+         * receberá uma mensagem perguntando se deseja imprimir").
+         *
+         * Recusar não pergunta nada — só se imprime pedido aceito. E
+         * enquanto sobrar item pendente no MESMO pedido, a pergunta
+         * espera: senão o operador veria uma pergunta a cada produto,
+         * numa filial que pediu vários.
+         *
+         * `linha.pedido` aqui é o retrato de ANTES desta decisão — serve
+         * porque só olhamos os OUTROS itens, que esta chamada não muda.
+         */
+        if (desfecho === "confirmado" && onImprimirReposicao) {
+          const pedidoAntes = linha.pedido;
+          const restaPendente = pedidoAntes.itens.some(
+            (i) => i.codigoPdv !== linha.codigoPdv && desfechoDoItem(pedidoAntes, i.codigoPdv) === "pendente"
+          );
+          if (!restaPendente) setPerguntaImprimir(pedidoAntes);
+        }
       }
       setRecusa(null);
     } finally {
@@ -198,6 +233,23 @@ export function PainelFornoDeHoje({
       .join(", ");
   }
   const semResposta = useMemo(() => linhas.filter(anuncioPendente), [linhas]);
+  /**
+   * Pedidos ÚNICOS de reposição ainda pendentes, para o botão "Imprimir
+   * todos" (set/2026) — a linha é uma por ITEM, mas o botão imprime um
+   * comprovante por FILIAL, então dois itens do mesmo pedido não podem
+   * virar dois cliques.
+   */
+  const pedidosPendentesDeReposicao = useMemo(() => {
+    const vistos = new Set<string>();
+    const unicos: PedidoFilial[] = [];
+    for (const linha of semResposta) {
+      if (linha.tipo !== "pedido" || !linha.pedido) continue;
+      if (vistos.has(linha.pedido.id)) continue;
+      vistos.add(linha.pedido.id);
+      unicos.push(linha.pedido);
+    }
+    return unicos;
+  }, [semResposta]);
   /**
    * O HISTÓRICO É SÓ DOS PEDIDOS DAS FILIAIS (set/2026, decisão do dono
    * do negócio: tirar do histórico linhas como "Anunciei BISCOITO
@@ -312,6 +364,19 @@ export function PainelFornoDeHoje({
         </div>
         {abertaAgora && (
           <div className="corpo-sessao">
+            {chave === "semResposta" &&
+              onImprimirTodasReposicoes &&
+              pedidosPendentesDeReposicao.length > 0 && (
+                <button
+                  type="button"
+                  className="botao-fornada largura-cheia"
+                  onClick={() => onImprimirTodasReposicoes(pedidosPendentesDeReposicao)}
+                >
+                  <IconeImpressora tamanho={15} /> Imprimir todos (
+                  {pedidosPendentesDeReposicao.length}{" "}
+                  {pedidosPendentesDeReposicao.length === 1 ? "pedido" : "pedidos"})
+                </button>
+              )}
             {lista.length === 0 ? (
               <p className="nota-rodape">Nada aqui hoje.</p>
             ) : chave === "concluidos" ? (
@@ -708,6 +773,30 @@ export function PainelFornoDeHoje({
             )}
           </>
         ) : null}
+
+        {perguntaImprimir && onImprimirReposicao && (
+          <div className="pergunta-imprimir" role="status">
+            <span>
+              Pedido de <strong>{nomeDaLoja(perguntaImprimir.lojaId)}</strong> aceito. Imprimir o
+              comprovante de pedido de Reposição?
+            </span>
+            <span className="acoes">
+              <button
+                type="button"
+                className="primario"
+                onClick={() => {
+                  onImprimirReposicao(perguntaImprimir);
+                  setPerguntaImprimir(null);
+                }}
+              >
+                Sim, imprimir
+              </button>
+              <button type="button" className="link" onClick={() => setPerguntaImprimir(null)}>
+                Não
+              </button>
+            </span>
+          </div>
+        )}
 
         {sanfona("semResposta", "Pedidos sem resposta", semResposta, { cobraResposta: true })}
         {sanfona("concluidos", "Pedidos concluídos", concluidos)}
