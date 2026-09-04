@@ -12,6 +12,7 @@ import type { PedidoFilial } from "../types/pedido";
 import { desfechoDoItem } from "../types/pedido";
 import type { PedidoSuprimentos, Suprimento } from "../types/suprimento";
 import type { LinhaDaMatriz } from "../lib/reposicaoDoDia";
+import type { BlocoSessaoImpressao } from "../lib/gerarImagemLista";
 import { anuncioPendente, montarLinhasDaMatriz } from "../lib/reposicaoDoDia";
 import { horaDoInstante } from "../lib/data";
 import {
@@ -91,6 +92,17 @@ interface PainelFornoDeHojeProps {
   onImprimirTodasReposicoes?: (pedidos: PedidoFilial[]) => void;
   /** Imprimir ou compartilhar a lista de suprimentos de uma filial. */
   onImprimirSuprimentos?: (pedido: PedidoSuprimentos) => void;
+  /**
+   * "Imprimir selecionados" da sanfona Pedidos concluídos (set/2026,
+   * pedido do dono do negócio): o operador marca itens de reposição e/ou
+   * listas de suprimentos já CONFIRMADOS, de qualquer filial, e recebe
+   * um comprovante único — uma seção por filial, na mesma impressão.
+   *
+   * Devolve as sessões já montadas (ver `montarSessoesSelecionadas`)
+   * porque quem sabe desenhar o comprovante é a mesma tela que já
+   * desenha o de Reposição e o de Suprimentos.
+   */
+  onImprimirSelecionados?: (sessoes: BlocoSessaoImpressao[]) => void;
 }
 
 export function PainelFornoDeHoje({
@@ -109,6 +121,7 @@ export function PainelFornoDeHoje({
   onImprimirReposicao,
   onImprimirTodasReposicoes,
   onImprimirSuprimentos,
+  onImprimirSelecionados,
 }: PainelFornoDeHojeProps) {
   const [marcando, setMarcando] = useState<number | null>(null);
   const [busca, setBusca] = useState("");
@@ -157,6 +170,19 @@ export function PainelFornoDeHoje({
    * disparo em `responder()`.
    */
   const [perguntaImprimir, setPerguntaImprimir] = useState<PedidoFilial | null>(null);
+  /**
+   * Chaves de linha marcadas em Pedidos concluídos para a lista
+   * personalizada (set/2026) — ver `montarSessoesSelecionadas`.
+   */
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  function alternarSelecao(chave: string) {
+    setSelecionados((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(chave)) novo.delete(chave);
+      else novo.add(chave);
+      return novo;
+    });
+  }
 
   const nomeDaLoja = (lojaId: string | undefined) =>
     LOJAS.find((l) => l.id === lojaId)?.nomeCurto ?? "Filial";
@@ -265,6 +291,58 @@ export function PainelFornoDeHoje({
     () => linhas.filter((l) => !anuncioPendente(l) && l.tipo !== "anuncio"),
     [linhas]
   );
+
+  /**
+   * Monta o comprovante da LISTA PERSONALIZADA a partir do que está
+   * marcado em `selecionados` (set/2026, pedido do dono do negócio):
+   * reposição e suprimentos misturados, agrupados por filial — uma
+   * seção "Reposição" e uma seção "Suprimentos" por loja que tiver item
+   * marcado, com `inicioDeDestino` só na PRIMEIRA seção de cada loja
+   * (é o que desenha o nome da filial e separa uma da outra no papel).
+   *
+   * Só chega aqui item com `situacao === "pedido"` (confirmado) — o
+   * checkbox nem aparece nos recusados (ver `historicoPorLoja`).
+   */
+  function montarSessoesSelecionadas(): BlocoSessaoImpressao[] {
+    const porLoja = new Map<string, LinhaDaMatriz[]>();
+    for (const linha of concluidos) {
+      if (!selecionados.has(linha.chave)) continue;
+      const loja = linha.lojaId ?? "";
+      porLoja.set(loja, [...(porLoja.get(loja) ?? []), linha]);
+    }
+
+    const sessoes: BlocoSessaoImpressao[] = [];
+    for (const [lojaId, doGrupo] of porLoja) {
+      let ehAPrimeiraDaLoja = true;
+      const itensReposicao = doGrupo.filter((l) => l.tipo === "pedido");
+      if (itensReposicao.length > 0) {
+        sessoes.push({
+          rotuloSessao: "Reposição",
+          itens: itensReposicao.map((l) => ({
+            codigoPdv: l.codigoPdv,
+            quantidadeUnidades: l.pedidoUnidades ?? 0,
+          })),
+          inicioDeDestino: nomeDaLoja(lojaId),
+        });
+        ehAPrimeiraDaLoja = false;
+      }
+      for (const linha of doGrupo.filter((l) => l.tipo === "suprimentos")) {
+        sessoes.push({
+          rotuloSessao: "Suprimentos",
+          itens: [],
+          linhasProntas: (linha.suprimentos?.itens ?? [])
+            .filter((i) => i.quantidade > 0)
+            .map((i) => ({
+              nome: nomePorSuprimentoId.get(i.suprimentoId) ?? i.suprimentoId,
+              unidades: i.quantidade,
+            })),
+          inicioDeDestino: ehAPrimeiraDaLoja ? nomeDaLoja(lojaId) : undefined,
+        });
+        ehAPrimeiraDaLoja = false;
+      }
+    }
+    return sessoes;
+  }
 
   async function cadastrarEAnunciar() {
     const nome = busca.trim();
@@ -377,6 +455,22 @@ export function PainelFornoDeHoje({
                   {pedidosPendentesDeReposicao.length === 1 ? "pedido" : "pedidos"})
                 </button>
               )}
+            {/* LISTA PERSONALIZADA (set/2026, pedido do dono do negócio):
+                marca itens confirmados de reposição e/ou suprimentos, de
+                qualquer filial, e imprime tudo junto num comprovante só
+                — uma seção por filial. */}
+            {chave === "concluidos" && onImprimirSelecionados && selecionados.size > 0 && (
+              <button
+                type="button"
+                className="botao-fornada largura-cheia"
+                onClick={() => {
+                  onImprimirSelecionados(montarSessoesSelecionadas());
+                  setSelecionados(new Set());
+                }}
+              >
+                <IconeImpressora tamanho={15} /> Imprimir selecionados ({selecionados.size})
+              </button>
+            )}
             {lista.length === 0 ? (
               <p className="nota-rodape">Nada aqui hoje.</p>
             ) : chave === "concluidos" ? (
@@ -546,30 +640,52 @@ export function PainelFornoDeHoje({
     return [...porLoja.entries()].map(([lojaId, doGrupo]) => (
       <div key={lojaId} className="grupo-historico">
         <strong className="loja-do-historico">{nomeDaLoja(lojaId)}</strong>
-        {doGrupo.map((linha) => (
-          <div key={linha.chave} className="linha-historico">
-            <span className="produto-historico">
-              {linha.tipo === "suprimentos"
-                ? `Suprimentos · ${linha.variedades ?? 0} ${(linha.variedades ?? 0) === 1 ? "item" : "itens"}`
-                : nomeDoProduto(linha.codigoPdv)}
-              <em className="hora-historico">{horaDoInstante(linha.quando)}</em>
-              {linha.tipo === "suprimentos" && itensDaLista(linha).length > 0 && (
-                <em className="itens-do-historico">{itensDaLista(linha)}</em>
-              )}
-            </span>
-            <span className="qtd-historico">
-              {linha.pedidoUnidades !== undefined ? `${linha.pedidoUnidades} un` : ""}
-            </span>
-            <span
-              className={`status-historico ${linha.situacao === "pedido" ? "confirmado" : "recusado"}`}
+        {doGrupo.map((linha) => {
+          /**
+           * SÓ CONFIRMADO ENTRA NA LISTA PERSONALIZADA (set/2026, pedido
+           * do dono do negócio) — recusado não vai para separação nem
+           * entrega, então nem ganha checkbox.
+           */
+          const podeSelecionar = !!onImprimirSelecionados && linha.situacao === "pedido";
+          return (
+            <div
+              key={linha.chave}
+              className={`linha-historico ${podeSelecionar ? "selecionavel" : ""}`}
             >
-              {linha.situacao === "pedido" ? "Confirmado" : "Recusado"}
-            </span>
-            {linha.situacao === "encerrado" && linha.motivo && (
-              <span className="motivo-historico">{linha.motivo}</span>
-            )}
-          </div>
-        ))}
+              {podeSelecionar && (
+                <input
+                  type="checkbox"
+                  className="selecionar-historico"
+                  checked={selecionados.has(linha.chave)}
+                  onChange={() => alternarSelecao(linha.chave)}
+                  aria-label={`Selecionar ${
+                    linha.tipo === "suprimentos" ? "suprimentos" : nomeDoProduto(linha.codigoPdv)
+                  } para a lista personalizada`}
+                />
+              )}
+              <span className="produto-historico">
+                {linha.tipo === "suprimentos"
+                  ? `Suprimentos · ${linha.variedades ?? 0} ${(linha.variedades ?? 0) === 1 ? "item" : "itens"}`
+                  : nomeDoProduto(linha.codigoPdv)}
+                <em className="hora-historico">{horaDoInstante(linha.quando)}</em>
+                {linha.tipo === "suprimentos" && itensDaLista(linha).length > 0 && (
+                  <em className="itens-do-historico">{itensDaLista(linha)}</em>
+                )}
+              </span>
+              <span className="qtd-historico">
+                {linha.pedidoUnidades !== undefined ? `${linha.pedidoUnidades} un` : ""}
+              </span>
+              <span
+                className={`status-historico ${linha.situacao === "pedido" ? "confirmado" : "recusado"}`}
+              >
+                {linha.situacao === "pedido" ? "Confirmado" : "Recusado"}
+              </span>
+              {linha.situacao === "encerrado" && linha.motivo && (
+                <span className="motivo-historico">{linha.motivo}</span>
+              )}
+            </div>
+          );
+        })}
       </div>
     ));
   }

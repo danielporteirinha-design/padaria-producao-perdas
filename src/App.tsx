@@ -53,6 +53,7 @@ import { PainelFornoDeHoje } from "./components/PainelFornoDeHoje";
 import { PainelFornadasFilial } from "./components/PainelFornadasFilial";
 import { TelaSuprimentos } from "./components/TelaSuprimentos";
 import { ExportarFita } from "./components/ExportarFita";
+import type { BlocoSessaoImpressao } from "./lib/gerarImagemLista";
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "./lib/fornadasVistas";
 import { abaDaUrl } from "./lib/rota";
 import { useDiaCorrente } from "./lib/useDiaCorrente";
@@ -94,7 +95,11 @@ const ABAS_LIBERADAS: Aba[] = [
   "cronograma", // (matriz — Lista de Produção)
   "pedido", // (filial — Lista de Produção)
   // "perdas",
-  // "cadastro",     (matriz — Produtos)
+  // A MATRIZ VOLTOU A CADASTRAR PRODUTOS (set/2026, pedido do dono do
+  // negócio) — reabre a aba "Produtos", com o cadastro completo E a
+  // aba Suprimentos (com exclusão) que foi construída junto, em
+  // ago/2026, mas que tinha ficado esperando esta liberação.
+  "cadastro", // (matriz — Produtos)
   // "analises",
 ];
 
@@ -197,6 +202,16 @@ export default function App() {
    * que fica automática em vez de reabrir a tela para cada uma.
    */
   const [filaReposicaoParaImprimir, setFilaReposicaoParaImprimir] = useState<PedidoFilial[]>([]);
+  /**
+   * A LISTA PERSONALIZADA da sanfona Pedidos concluídos (set/2026,
+   * pedido do dono do negócio): itens de reposição e/ou suprimentos já
+   * confirmados, escolhidos à mão pelo operador, de qualquer filial —
+   * já chega aqui pronta (ver `montarSessoesSelecionadas` em
+   * PainelFornoDeHoje.tsx), um comprovante só, com uma seção por loja.
+   */
+  const [listaSelecionadaParaImprimir, setListaSelecionadaParaImprimir] = useState<
+    BlocoSessaoImpressao[] | null
+  >(null);
   const [planos, setPlanos] = useState<PlanoDeProducaoDiario[]>([]);
   const [perdas, setPerdas] = useState<RegistroPerda[]>([]);
   const [pedidos, setPedidos] = useState<PedidoFilial[]>([]);
@@ -1101,7 +1116,35 @@ export default function App() {
           </div>
         )}
 
-        {!suprimentosParaImprimir && !reposicaoParaImprimir && (
+        {listaSelecionadaParaImprimir && (
+          <div className="tela">
+            <h2>Lista personalizada</h2>
+            <ExportarFita
+              blocos={listaSelecionadaParaImprimir}
+              titulo="Lista personalizada"
+              instrucao="Itens marcados nos pedidos concluídos de hoje, agrupados por filial."
+              dataFormatada={formatarDataBr(diaCorrente)}
+              produtos={produtos}
+              montadoPor={operador}
+              formato="continuo"
+              nomeArquivoBase={`lista-personalizada-${diaCorrente}`}
+              onImprimirNoCaixa={(canvases) =>
+                handleImprimirNoCaixa(canvases, "Lista personalizada", `lista-personalizada-${diaCorrente}`)
+              }
+            />
+            <div className="acoes">
+              <button
+                type="button"
+                className="secundario"
+                onClick={() => setListaSelecionadaParaImprimir(null)}
+              >
+                Voltar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!suprimentosParaImprimir && !reposicaoParaImprimir && !listaSelecionadaParaImprimir && (
         <>
         {abaAtual === "cronograma" && (
           <TelaCronograma
@@ -1153,6 +1196,7 @@ export default function App() {
                   setFilaReposicaoParaImprimir([]);
                 }}
                 onImprimirTodasReposicoes={handleImprimirTodasReposicoes}
+                onImprimirSelecionados={setListaSelecionadaParaImprimir}
                 onImprimirSuprimentos={setSuprimentosParaImprimir}
               />
             </>

@@ -265,6 +265,9 @@ const CONFERENCIAS = [
   ["src/data/novidades.ts", "export const NOVIDADES", "Lista do que mudou, entrega por entrega"],
   ["src/components/NovidadesDoApp.tsx", "novidades-ultima-vista", "Aviso de novidades guarda o que o aparelho ja viu"],
   ["src/main.tsx", "NovidadesDoApp", "Aviso de novidades montado fora do App"],
+
+  // --- Matriz volta a cadastrar produtos (set/2026)
+  ["src/App.tsx", '"cadastro", // (matriz — Produtos)', "Aba Produtos liberada de novo para a matriz"],
 ];
 
 /**

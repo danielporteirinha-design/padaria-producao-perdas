@@ -39,6 +39,13 @@ interface ExportarFitaProps {
     itens: ItemPlanoProducao[];
     /** Para listas que não são de produto de padaria — ver BlocoSessaoImpressao. */
     linhasProntas?: { nome: string; unidades: number }[];
+    /**
+     * Marca o início de OUTRA filial dentro do mesmo comprovante — ver
+     * BlocoSessaoImpressao. Usado pela lista personalizada (set/2026):
+     * itens de lojas diferentes, escolhidos à mão, saem juntos, um
+     * agrupamento por filial, na mesma impressão.
+     */
+    inicioDeDestino?: string;
   }[];
   /** Ver DadosImpressaoFita.titulo — é o que distingue os dois documentos. */
   titulo: string;
