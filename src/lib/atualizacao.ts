@@ -62,6 +62,7 @@ export function observarAtualizacao(aoTerVersaoNova: () => void): Recarregar {
   const atualizar = registerSW({
     onNeedRefresh() {
       aoTerVersaoNova();
+      armarAplicacaoSozinha();
     },
     onRegisteredSW(_url, registro) {
       if (!registro) return;
@@ -91,12 +92,46 @@ export function observarAtualizacao(aoTerVersaoNova: () => void): Recarregar {
     },
   });
 
+  /**
+   * APLICA SOZINHO, SÓ QUANDO NINGUÉM ESTÁ OLHANDO (set/2026, pedido do
+   * dono do negócio: atualizar sem exigir o toque no botão da faixa).
+   *
+   * A ideia da faixa continua de pé — "não some sozinha" é sobre NÃO
+   * trocar de versão embaixo dos dedos de alguém no meio de uma tela.
+   * O que muda é que a pessoa não precisa mais tocar em nada: assim que
+   * a aba fica em segundo plano — troca de aplicativo, tela apaga,
+   * minimiza —, ninguém está olhando, e é a hora de trocar de versão.
+   * O botão "Atualizar agora" continua funcionando, para quem quer
+   * forçar na hora (ex.: uma correção urgente).
+   *
+   * O ATRASO DE 3s depois de ficar oculta evita recarregar no meio de
+   * um alt-tab de um segundo: se a pessoa voltar antes disso, o
+   * temporizador é cancelado e a tentativa seguinte espera a aba sair
+   * de vista de novo.
+   */
+  function armarAplicacaoSozinha() {
+    const aoMudarVisibilidade = () => {
+      if (document.visibilityState !== "hidden") return;
+      const temporizador = setTimeout(() => {
+        void atualizar(true);
+      }, 3000);
+      const cancelarSeVoltou = () => {
+        if (document.visibilityState !== "visible") return;
+        clearTimeout(temporizador);
+        document.removeEventListener("visibilitychange", cancelarSeVoltou);
+      };
+      document.addEventListener("visibilitychange", cancelarSeVoltou);
+    };
+    document.addEventListener("visibilitychange", aoMudarVisibilidade);
+  }
+
   return async () => {
     // `true` = ativa o service worker que está esperando e recarrega a
     // página. É o "reiniciar o aplicativo" que o operador precisaria
     // fazer na mão — e que, na mão, ninguém faz direito num PWA
     // instalado (fechar a janela não basta; o service worker antigo
-    // continua no controle até todas as abas fecharem).
+    // continua no controle até todas as abas fecharem). Também é o que
+    // `armarAplicacaoSozinha` chama sozinha, sem esperar o toque.
     await atualizar(true);
   };
 }

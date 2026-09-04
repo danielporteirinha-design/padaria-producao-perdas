@@ -869,6 +869,49 @@ button.perigo:hover { background: #822525; }
 .faixa-atualizacao .primario:disabled { opacity: 0.7; }
 
 /* ---------------------------------------------------------------
+   "O que mudou" — avisa as melhorias depois que a versão nova entra
+   (NovidadesDoApp.tsx, set/2026). Mesma posição fixa no topo do aviso
+   de atualização, mas azul: aqui não é preciso decidir nada, só ler e
+   fechar — cor de aviso informativo, não de ação pendente.
+   --------------------------------------------------------------- */
+.faixa-novidades {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 70;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+  padding: 10px 14px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  background: #1565c0;
+  color: #ffffff;
+  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.25);
+}
+.faixa-novidades > svg { flex-shrink: 0; margin-top: 2px; }
+.texto-novidades {
+  flex: 1 1 auto;
+  min-width: 55%;
+  font-size: 14px;
+  line-height: 1.35;
+}
+.texto-novidades ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.texto-novidades li { margin-bottom: 2px; }
+.faixa-novidades .primario {
+  flex: 0 0 100%;
+  background: #ffffff;
+  color: #0d47a1;
+  border-color: #ffffff;
+  padding: 10px 14px;
+  font-size: 15px;
+}
+
+/* ---------------------------------------------------------------
    Caixa de confirmação sobreposta (senha para excluir produto, anulação
    de perda). Sobreposição em vez de expandir a tela: são ações
    irreversíveis, e tirar o resto da interface do caminho força o
@@ -1881,6 +1924,17 @@ button.perigo:hover { background: #822525; }
   color: #9b2c2c;
 }
 /* O motivo ocupa a linha inteira, embaixo: ele é frase, não coluna. */
+/* Checkbox da lista personalizada (set/2026) — só entra na grade
+   quando a linha pode ser selecionada; as demais continuam com as
+   três colunas de sempre. */
+.linha-historico.selecionavel {
+  grid-template-columns: 18px 1fr 58px 92px;
+}
+.selecionar-historico {
+  align-self: center;
+  width: 16px;
+  height: 16px;
+}
 .motivo-historico {
   grid-column: 1 / -1;
   font-size: 13px;

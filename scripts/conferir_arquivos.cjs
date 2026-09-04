@@ -251,6 +251,20 @@ const CONFERENCIAS = [
   ["src/components/PainelFornoDeHoje.tsx", "perguntaImprimir", "Pergunta se imprime apos aceitar o ultimo item pendente"],
   ["src/App.tsx", "handleImprimirTodasReposicoes", "Fila de impressao: um comprovante por filial"],
   ["src/App.tsx", "subtitulo=\"Pedido de Reposição\"", "Comprovante de reposicao mostra o subtitulo no cabecalho"],
+
+  // --- Lista personalizada na sanfona Pedidos concluidos (set/2026)
+  ["src/components/PainelFornoDeHoje.tsx", "montarSessoesSelecionadas", "Selecionar itens concluidos e montar comprovante unico"],
+  ["src/components/PainelFornoDeHoje.tsx", "onImprimirSelecionados", "Botao Imprimir selecionados na sanfona Pedidos concluidos"],
+  ["src/components/PainelFornoDeHoje.tsx", "podeSelecionar", "Checkbox so aparece em item confirmado"],
+  ["src/components/ExportarFita.tsx", "inicioDeDestino?: string", "Fita aceita agrupar mais de uma filial no mesmo comprovante"],
+  ["src/App.tsx", "listaSelecionadaParaImprimir", "Tela da lista personalizada, agrupada por filial"],
+
+  // --- Atualizacao automatica + aviso de novidades (set/2026)
+  ["src/lib/atualizacao.ts", "armarAplicacaoSozinha", "Atualiza sozinho quando a aba fica em segundo plano"],
+  ["src/components/AvisoDeAtualizacao.tsx", "ou toque para já", "Faixa explica que nao precisa mais tocar para atualizar"],
+  ["src/data/novidades.ts", "export const NOVIDADES", "Lista do que mudou, entrega por entrega"],
+  ["src/components/NovidadesDoApp.tsx", "novidades-ultima-vista", "Aviso de novidades guarda o que o aparelho ja viu"],
+  ["src/main.tsx", "NovidadesDoApp", "Aviso de novidades montado fora do App"],
 ];
 
 /**

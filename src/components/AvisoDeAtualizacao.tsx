@@ -69,7 +69,11 @@ export function AvisoDeAtualizacao() {
       <IconeConfere tamanho={20} />
       <span className="texto-atualizacao">
         <strong>Nova versão disponível</strong>
-        <span>Reinicie para aplicar.</span>
+        {/* NÃO EXIGE MAIS O TOQUE (set/2026, pedido do dono do negócio):
+            aplica sozinha assim que a tela sai de vista — ver
+            `armarAplicacaoSozinha` em src/lib/atualizacao.ts. O botão
+            continua aqui para quem quer forçar na hora. */}
+        <span>Aplicamos sozinhos assim que você sair desta tela, ou toque para já.</span>
       </span>
       <button type="button" className="primario" disabled={reiniciando} onClick={reiniciar}>
         {reiniciando ? "Reiniciando..." : "Atualizar agora"}
