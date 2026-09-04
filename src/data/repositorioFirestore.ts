@@ -266,6 +266,16 @@ export class RepositorioFirestore implements Repositorio {
     return suprimento;
   }
 
+  async excluirSuprimentos(ids: string[]): Promise<void> {
+    // Sequencial de propósito, mesmo padrão de excluirProdutos: são
+    // poucos itens numa ação manual rara, e uma falha no meio deixa um
+    // estado parcial mais fácil de entender do que um lote atômico que
+    // some inteiro.
+    for (const id of ids) {
+      await deleteDoc(doc(db, COL_SUPRIMENTOS, id));
+    }
+  }
+
   observarPedidosSuprimentos(
     lojaId: string | undefined,
     aoMudar: (pedidos: PedidoSuprimentos[]) => void

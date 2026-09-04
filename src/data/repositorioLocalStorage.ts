@@ -146,6 +146,12 @@ export class RepositorioLocalStorage implements Repositorio {
     return () => {};
   }
 
+  async excluirSuprimentos(ids: string[]): Promise<void> {
+    const todos = ler<Suprimento[]>(CHAVE_SUPRIMENTOS, []);
+    const remover = new Set(ids);
+    escrever(CHAVE_SUPRIMENTOS, todos.filter((s) => !remover.has(s.id)));
+  }
+
   async salvarSuprimento(suprimento: Suprimento): Promise<Suprimento> {
     const todos = ler<Suprimento[]>(CHAVE_SUPRIMENTOS, []);
     escrever(CHAVE_SUPRIMENTOS, [...todos.filter((s) => s.id !== suprimento.id), suprimento]);

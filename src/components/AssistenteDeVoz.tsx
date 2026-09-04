@@ -349,7 +349,19 @@ export function AssistenteDeVoz({
           conferência logo abaixo mostra o que foi entendido — as duas
           linhas de texto ocupavam a dobra da tela repetindo isso. */}
 
-      {pensando && <p className="nota-rodape">Entendendo o que você disse...</p>}
+      {/* MAIS QUE UMA NOTA DE RODAPÉ (set/2026, queixa do dono do negócio:
+          "o usuário tem a impressão de que o app travou" — a IA pode
+          levar alguns segundos para tentar reconhecer o que não bateu
+          direto com o catálogo, e até aqui nada na tela se mexia
+          enquanto isso). `role="status"`/`aria-live="polite"` também
+          avisa quem usa leitor de tela, que do contrário não saberia que
+          algo está em andamento. */}
+      {pensando && (
+        <p className="processando-voz" role="status" aria-live="polite">
+          <span className="spinner-processando" aria-hidden="true" />
+          Entendendo o que você disse...
+        </p>
+      )}
       {erro && <p className="erro-conversao">{erro}</p>}
 
       {/* O BLOCO VERMELHO VEM ANTES DA CONFERÊNCIA, E FORA DELA

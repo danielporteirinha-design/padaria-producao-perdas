@@ -68,6 +68,8 @@ export interface Repositorio {
    */
   observarSuprimentos(aoMudar: (suprimentos: Suprimento[]) => void): () => void;
   salvarSuprimento(suprimento: Suprimento): Promise<Suprimento>;
+  /** Remove definitivamente os suprimentos informados do catálogo (matriz, set/2026). */
+  excluirSuprimentos(ids: string[]): Promise<void>;
   observarPedidosSuprimentos(
     lojaId: string | undefined,
     aoMudar: (pedidos: PedidoSuprimentos[]) => void

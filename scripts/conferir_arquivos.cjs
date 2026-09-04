@@ -223,6 +223,24 @@ const CONFERENCIAS = [
   ["src/components/TelaCronograma.tsx", "cadastrarProduto", "Matriz cadastra produto novo direto na Lista de Producao"],
   ["src/components/TelaPedidoFilial.tsx", "cadastrarProduto", "Filial cadastra produto novo direto na Lista de Producao"],
   ["src/App.tsx", "onCadastrarProduto={handleCadastroRelampago}", "Cadastro relampago ligado nas tres telas novas"],
+
+  // --- Sanfona exclusiva na Lista de Producao da matriz (set/2026)
+  ["src/components/TelaCronograma.tsx", "UM CARD ABERTO POR VEZ", "So uma sanfona aberta por vez, matriz ou filial"],
+
+  // --- Bug: item cadastrado por voz/busca sumia da sanfona (set/2026)
+  ["src/types/suprimento.ts", "BUG CORRIGIDO (set/2026)", "Segmento fixo normalizado, item nao some mais da sanfona"],
+  ["src/components/TelaSuprimentos.tsx", "quantidadeSugeridaDaSobra", "Quantidade falada aproveitada ao cadastrar suprimento por voz"],
+
+  // --- Caption de busca por voz com movimento (set/2026)
+  ["src/components/AssistenteDeVoz.tsx", "processando-voz", "Aviso de IA pensando com spinner, nao so texto parado"],
+
+  // --- Exclusao de suprimentos pela matriz (set/2026)
+  ["src/data/repositorio.ts", "excluirSuprimentos", "Repositorio sabe excluir suprimento"],
+  ["src/components/TelaCadastroProdutos.tsx", "onExcluirSuprimentos", "Matriz exclui suprimento cadastrado"],
+
+  // --- Horario de silencio no aviso de atualizacao (set/2026)
+  [".github/workflows/notificar-atualizacao.yml", "Confere se esta dentro do horario permitido", "Push de atualizacao respeita horario de silencio"],
+  ["api/notificar-atualizacao.ts", "dentroDoHorarioPermitido", "Endpoint tambem respeita o horario de silencio"],
 ];
 
 /**

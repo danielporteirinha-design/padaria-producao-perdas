@@ -48,7 +48,32 @@ jobs:
       - name: Espera o deploy da Vercel terminar
         run: sleep 90
 
+      # HORARIO DE SILENCIO (set/2026, pedido do dono do negocio): parte
+      # da equipe tem o app no celular pessoal, e um push as 23h ou de
+      # madrugada incomoda gente que nao esta trabalhando naquele
+      # horario. A checagem e feita AQUI, no workflow, e nao só no
+      # endpoint — o arquivo YAML usado é sempre o da versão que acabou
+      # de subir para main, então este gate vale já no push de agora,
+      # sem depender de o deploy da Vercel ter terminado antes.
+      #
+      # Fora da janela, o aviso (push) simplesmente não sai — ninguém
+      # perde a atualização: o app já confere sozinho se há versão nova
+      # ao reabrir ou a cada 1h (ver App.tsx), então quem abrir o
+      # aplicativo de manhã vê o aviso na tela do mesmo jeito.
+      - name: Confere se esta dentro do horario permitido (7h-21h, Brasilia)
+        id: horario
+        run: |
+          hora=$(TZ="America/Sao_Paulo" date +%H)
+          hora=$((10#$hora))
+          if [ "$hora" -ge 7 ] && [ "$hora" -lt 21 ]; then
+            echo "permitido=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "permitido=false" >> "$GITHUB_OUTPUT"
+            echo "Fora do horario permitido (agora sao ${hora}h em Brasilia) — aviso nao sera enviado."
+          fi
+
       - name: Avisa o servidor que ha uma versao nova
+        if: steps.horario.outputs.permitido == 'true'
         run: |
           curl -sS -f -X POST "https://padaria-producao-perdas.vercel.app/api/notificar-atualizacao" \
             -H "X-Chave-Atualizacao: ${{ secrets.CHAVE_NOTIFICAR_ATUALIZACAO }}"

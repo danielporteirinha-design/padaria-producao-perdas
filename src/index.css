@@ -1671,6 +1671,43 @@ button.perigo:hover { background: #822525; }
 .botao-assistente.ouvindo {
   background: #9b2c2c;
 }
+/* "ENTENDENDO O QUE VOCÊ DISSE..." COM MOVIMENTO (set/2026, queixa do
+   dono do negócio: "o usuário tem a impressão de que o app travou" — a
+   chamada para a IA tentar reconhecer o que não bateu com o catálogo
+   pode levar alguns segundos, e antes essa espera era uma linha cinza
+   parada, do mesmo peso visual de qualquer nota de rodapé. Fundo e texto
+   na cor de alerta (a mesma do sino de aviso) chamam mais atenção que uma
+   nota comum, e o spinner girando prova que algo está de fato
+   acontecendo, sem precisar ler a frase para saber. */
+.processando-voz {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border-radius: var(--raio);
+  background: var(--cor-alerta-fundo);
+  color: var(--cor-alerta);
+  font-size: 14px;
+  font-weight: 600;
+}
+.spinner-processando {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid rgba(0, 0, 0, 0.12);
+  border-top-color: var(--cor-alerta);
+  animation: girar-spinner-processando 0.8s linear infinite;
+}
+@keyframes girar-spinner-processando {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Sem o giro, o fundo e o texto em destaque já bastam para avisar que
+     tem algo em andamento — o essencial não depende da animação. */
+  .spinner-processando { animation: none; }
+}
 /* A escolha da loja na tela de entrada: três alvos grandes, um por
    unidade. Substituiu a lista suspensa quando a entrada passou a ser de
    um toque só — lista suspensa exige dois toques e uma leitura. */

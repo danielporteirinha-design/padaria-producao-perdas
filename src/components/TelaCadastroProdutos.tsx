@@ -11,6 +11,7 @@
 
 import { useMemo, useState } from "react";
 import type { NovoProdutoInput, Produto, UnidadeProducao } from "../types/produto";
+import type { Suprimento } from "../types/suprimento";
 import { ConfirmarComSenha } from "./ConfirmarComSenha";
 import { CampoDeBusca } from "./CampoDeBusca";
 import { IconeLixeira } from "./Icones";
@@ -22,6 +23,15 @@ interface TelaCadastroProdutosProps {
   onCriarProduto: (input: NovoProdutoInput) => Promise<void>;
   onAtualizarProduto: (produto: Produto) => Promise<void>;
   onExcluirProdutos: (codigosPdv: number[]) => Promise<void>;
+  /**
+   * Catálogo de suprimentos (embalagens, sacolas, material de limpeza) —
+   * cresce sozinho com o uso das filiais (ver TelaSuprimentos.tsx). A
+   * matriz não cadastra suprimento aqui, só PODA o catálogo quando um
+   * item entrou duplicado ou errado (set/2026, pedido do dono do
+   * negócio: "possibilite a exclusão de suprimentos cadastrados").
+   */
+  suprimentos: Suprimento[];
+  onExcluirSuprimentos: (ids: string[]) => Promise<void>;
 }
 
 /**
@@ -45,6 +55,8 @@ export function TelaCadastroProdutos({
   onCriarProduto,
   onAtualizarProduto,
   onExcluirProdutos,
+  suprimentos,
+  onExcluirSuprimentos,
 }: TelaCadastroProdutosProps) {
   const [form, setForm] = useState<NovoProdutoInput>(VALOR_INICIAL);
   const [salvando, setSalvando] = useState(false);
@@ -57,7 +69,7 @@ export function TelaCadastroProdutos({
    * escolha, a importação de planilha filtra, e o catálogo semente já vem
    * limpo. Manter as abas era oferecer duas telas que nunca teriam nada.
    */
-  const [abaAtiva, setAbaAtiva] = useState<"novo" | "lista">("novo");
+  const [abaAtiva, setAbaAtiva] = useState<"novo" | "lista" | "suprimentos">("novo");
 
   // Edição inline do catálogo — nome, categoria, unidade, peso médio e
   // validade (decisão do dono do negócio — set/2026: esses 5 campos podem
@@ -81,6 +93,11 @@ export function TelaCadastroProdutos({
    */
   const [produtoAExcluir, setProdutoAExcluir] = useState<Produto | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+
+  // --- Catálogo de suprimentos: só busca e exclusão (set/2026) ---
+  const [buscaSuprimento, setBuscaSuprimento] = useState("");
+  const [suprimentoAExcluir, setSuprimentoAExcluir] = useState<Suprimento | null>(null);
+  const [excluindoSuprimento, setExcluindoSuprimento] = useState(false);
 
 
   async function handleSalvar(e: React.FormEvent) {
@@ -158,6 +175,13 @@ export function TelaCadastroProdutos({
     );
   }, [produtos, busca]);
 
+  const suprimentosFiltrados = useMemo(() => {
+    const termo = buscaSuprimento.trim();
+    const base = [...suprimentos].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    if (!termo) return base;
+    return base.filter((s) => contemBusca(s.nome, termo) || contemBusca(s.segmento, termo));
+  }, [suprimentos, buscaSuprimento]);
+
 
 
   // Vocabulário restrito às 5 categorias de produção — sugerir uma categoria de
@@ -174,6 +198,13 @@ export function TelaCadastroProdutos({
         </button>
         <button type="button" className={abaAtiva === "lista" ? "aba ativa" : "aba"} onClick={() => setAbaAtiva("lista")}>
           Catálogo ({produtos.length})
+        </button>
+        <button
+          type="button"
+          className={abaAtiva === "suprimentos" ? "aba ativa" : "aba"}
+          onClick={() => setAbaAtiva("suprimentos")}
+        >
+          Suprimentos ({suprimentos.length})
         </button>
       </div>
 
@@ -369,6 +400,66 @@ export function TelaCadastroProdutos({
         </div>
       )}
 
+      {/*
+        CATÁLOGO DE SUPRIMENTOS — SÓ BUSCA E EXCLUSÃO (set/2026, pedido do
+        dono do negócio: "possibilite a exclusão de suprimentos
+        cadastrados"). O catálogo cresce sozinho com o uso das filiais
+        (ver TelaSuprimentos.tsx) — a matriz não precisa de um formulário
+        de cadastro aqui, só de podar o que entrou duplicado ou errado.
+      */}
+      {abaAtiva === "suprimentos" && (
+        <div>
+          <CampoDeBusca
+            className="campo-busca"
+            valor={buscaSuprimento}
+            onMudar={setBuscaSuprimento}
+            placeholder="Buscar por nome ou segmento..."
+            rotulo="Buscar suprimento por nome ou segmento"
+          />
+          <div className="tabela-scroll">
+            <table className="tabela-simples">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Segmento</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {suprimentosFiltrados.slice(0, 200).map((s) => (
+                  <tr key={s.id}>
+                    <td>{s.nome}</td>
+                    <td>{s.segmento}</td>
+                    <td className="acoes-linha">
+                      <button
+                        type="button"
+                        className="botao-limpar-sessao"
+                        title={`Excluir ${s.nome}`}
+                        aria-label={`Excluir ${s.nome}`}
+                        onClick={() => setSuprimentoAExcluir(s)}
+                      >
+                        <IconeLixeira tamanho={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {suprimentosFiltrados.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="nota-rodape">
+                      Nada cadastrado ainda.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {suprimentosFiltrados.length > 200 && (
+            <p className="nota-rodape">
+              Mostrando 200 de {suprimentosFiltrados.length} resultados — refine a busca.
+            </p>
+          )}
+        </div>
+      )}
 
       {produtoAExcluir && (
         <ConfirmarComSenha
@@ -385,6 +476,26 @@ export function TelaCadastroProdutos({
               // Mensagem vem do aviso global (ver App.tsx).
             } finally {
               setExcluindo(false);
+            }
+          }}
+        />
+      )}
+
+      {suprimentoAExcluir && (
+        <ConfirmarComSenha
+          titulo="Excluir suprimento"
+          descricao={`"${suprimentoAExcluir.nome}" sai do catálogo das três lojas. Pedidos de suprimentos já enviados continuam no histórico, mas o item não poderá mais ser escolhido. Não há como desfazer.`}
+          rotuloConfirmar={excluindoSuprimento ? "Excluindo..." : "Excluir definitivamente"}
+          onCancelar={() => setSuprimentoAExcluir(null)}
+          onConfirmado={async () => {
+            setExcluindoSuprimento(true);
+            try {
+              await onExcluirSuprimentos([suprimentoAExcluir.id]);
+              setSuprimentoAExcluir(null);
+            } catch {
+              // Mensagem vem do aviso global (ver App.tsx).
+            } finally {
+              setExcluindoSuprimento(false);
             }
           }}
         />

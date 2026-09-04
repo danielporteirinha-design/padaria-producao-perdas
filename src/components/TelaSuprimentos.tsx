@@ -66,6 +66,21 @@ function nomeSugeridoDaSobra(trecho: string): string {
   return capitalizarNome(palavras.join(" "));
 }
 
+/**
+ * A QUANTIDADE JÁ FOI DITA — NÃO PEDIR DE NOVO (set/2026, corrigindo
+ * queixa do dono do negócio: cadastrar um item pela voz não estava
+ * aproveitando o número que a pessoa já tinha falado, e obrigava digitar
+ * a quantidade uma segunda vez logo depois de cadastrar). O padrão de
+ * fala aqui é sempre "número + nome" — o mesmo que todo o resto do app
+ * já assume ao interpretar voz —, então o primeiro número no trecho é a
+ * quantidade.
+ */
+function quantidadeSugeridaDaSobra(trecho: string): number | null {
+  const encontrado = trecho.match(/\d+(?:[.,]\d+)?/);
+  if (!encontrado || !ehNumeroValidoPositivo(encontrado[0])) return null;
+  return paraNumero(encontrado[0]);
+}
+
 interface TelaSuprimentosProps {
   loja: Loja;
   catalogo: Suprimento[];
@@ -221,7 +236,7 @@ export function TelaSuprimentos({
    * campo dentro da sanfona e os botões da busca — porque são a mesma
    * operação com o segmento vindo de lugares diferentes.
    */
-  async function cadastrar(nome: string, segmento: string) {
+  async function cadastrar(nome: string, segmento: string, quantidadeInicial?: number | null) {
     const limpo = nome.trim();
     if (!limpo || salvandoNovo) return;
     setSalvandoNovo(segmento);
@@ -240,11 +255,20 @@ export function TelaSuprimentos({
       setCriandoSessaoPara(null);
       setNovaSessao("");
       setExpandido({ [chaveDoSegmento(segmento)]: true });
-      // O item entra aberto para digitar a quantidade: quem cadastrou
-      // veio pedir aquilo, não organizar catálogo.
-      setItemAtivo(novo.id);
-      setValor("");
       setBusca("");
+      if (quantidadeInicial && quantidadeInicial > 0) {
+        // A pessoa já falou a quantidade — pedir de novo seria fazer o
+        // mesmo trabalho duas vezes. O item entra direto na lista, já
+        // com o valor dito (e continua editável, como qualquer outro).
+        setItens((atual) => [...atual, { suprimentoId: novo.id, quantidade: quantidadeInicial }]);
+        setItemAtivo(null);
+        setValor("");
+      } else {
+        // O item entra aberto para digitar a quantidade: quem cadastrou
+        // veio pedir aquilo, não organizar catálogo.
+        setItemAtivo(novo.id);
+        setValor("");
+      }
     } catch {
       /* o aviso global cuida da mensagem */
     } finally {
@@ -362,12 +386,13 @@ export function TelaSuprimentos({
    * pastilhas de um toque; "+ nova sessão" abre um campo para batizar
    * uma sanfona que ainda não existe.
    */
-  function opcoesDeIncluir(nome: string) {
+  function opcoesDeIncluir(nome: string, quantidadeInicial?: number | null) {
     const criandoAqui = criandoSessaoPara === nome;
     return (
       <div className="cadastro-relampago">
         <p className="nota-rodape">
-          Incluir <strong>{nome}</strong> em:
+          Incluir {quantidadeInicial ? `${quantidadeInicial} ` : ""}
+          <strong>{nome}</strong> em:
         </p>
         <div className="setores-do-novo">
           {segmentosCadastro.map((segmento) => {
@@ -378,7 +403,7 @@ export function TelaSuprimentos({
                 type="button"
                 className="chip-setor"
                 disabled={salvandoNovo !== ""}
-                onClick={() => void cadastrar(nome, valorGravado)}
+                onClick={() => void cadastrar(nome, valorGravado, quantidadeInicial)}
               >
                 {salvandoNovo === valorGravado ? "Salvando..." : segmento.rotulo}
               </button>
@@ -408,7 +433,7 @@ export function TelaSuprimentos({
               onChange={(e) => setNovaSessao(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && novaSessao.trim().length >= 2) {
-                  void cadastrar(nome, novaSessao.trim());
+                  void cadastrar(nome, novaSessao.trim(), quantidadeInicial);
                 }
               }}
             />
@@ -416,7 +441,7 @@ export function TelaSuprimentos({
               type="button"
               className="primario"
               disabled={novaSessao.trim().length < 2 || salvandoNovo !== ""}
-              onClick={() => void cadastrar(nome, novaSessao.trim())}
+              onClick={() => void cadastrar(nome, novaSessao.trim(), quantidadeInicial)}
             >
               {salvandoNovo === novaSessao.trim() ? "..." : "Criar"}
             </button>
@@ -444,7 +469,7 @@ export function TelaSuprimentos({
   function opcoesParaSobra(trecho: string) {
     const nome = nomeSugeridoDaSobra(trecho) || trecho.trim();
     if (!nome) return null;
-    return opcoesDeIncluir(nome);
+    return opcoesDeIncluir(nome, quantidadeSugeridaDaSobra(trecho));
   }
 
   return (
@@ -522,7 +547,14 @@ export function TelaSuprimentos({
         </>
       ) : (
         segmentosCadastro.map((segmento) => {
-          const lista = ativos.filter((s) => chaveDoSegmento(s.segmento) === segmento.chave);
+          // chaveDoSegmento nos dois lados de propósito (set/2026, bug
+          // corrigido em src/types/suprimento.ts): comparar uma chave já
+          // normalizada com uma que não é normalizada é exatamente o tipo
+          // de mismatch de maiúsculas/minúsculas que fez item cadastrado
+          // sumir da sanfona mesmo existindo no catálogo.
+          const lista = ativos.filter(
+            (s) => chaveDoSegmento(s.segmento) === chaveDoSegmento(segmento.chave)
+          );
           const aberto = !!expandido[segmento.chave];
           const pedidosNoSegmento = lista.filter((s) => quantidadeDe(s.id) > 0).length;
 

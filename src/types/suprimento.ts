@@ -146,7 +146,21 @@ export function segmentosExibidos(
   }
 
   return [
-    ...SEGMENTOS_SUPRIMENTO.map((s) => ({ ...s, personalizado: false })),
+    /**
+     * BUG CORRIGIDO (set/2026): os três segmentos fixos são declarados
+     * em minúsculas em `SEGMENTOS_SUPRIMENTO` ("embalagens"), mas todo
+     * suprimento gravado tem `segmento` comparado via `chaveDoSegmento`
+     * (que devolve MAIÚSCULAS). Sem normalizar aqui também, a chave
+     * exposta para a tela ("embalagens") nunca batia com a chave usada
+     * para filtrar os itens de cada sanfona ("EMBALAGENS") — o item
+     * cadastrado sumia da sessão em que deveria aparecer, mesmo
+     * existindo de verdade no catálogo (por isso a busca sempre achava).
+     */
+    ...SEGMENTOS_SUPRIMENTO.map((s) => ({
+      chave: chaveDoSegmento(s.chave),
+      rotulo: s.rotulo,
+      personalizado: false,
+    })),
     ...extras,
   ];
 }

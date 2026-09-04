@@ -610,6 +610,15 @@ export default function App() {
     ]);
   }
 
+  async function handleExcluirSuprimentos(ids: string[]) {
+    await comRetorno(
+      () => repositorio!.excluirSuprimentos(ids),
+      `${ids.length} ${ids.length === 1 ? "suprimento excluído" : "suprimentos excluídos"} do catálogo.`
+    );
+    const remover = new Set(ids);
+    setSuprimentos((atual) => atual.filter((s) => !remover.has(s.id)));
+  }
+
   async function handleEnviarSuprimentos(pedido: PedidoSuprimentos) {
     await comRetorno(
       () => repositorio!.salvarPedidoSuprimentos(pedido),
@@ -1099,6 +1108,8 @@ export default function App() {
             onCriarProduto={handleCriarProduto}
             onAtualizarProduto={handleAtualizarProduto}
             onExcluirProdutos={handleExcluirProdutos}
+            suprimentos={suprimentos}
+            onExcluirSuprimentos={handleExcluirSuprimentos}
           />
         )}
         {abaAtual === "perdas" && (

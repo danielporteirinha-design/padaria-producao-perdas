@@ -128,6 +128,41 @@ function chaveConfere(recebida: string | undefined): boolean {
   return timingSafeEqual(bufA, bufB);
 }
 
+/**
+ * HORÁRIO DE SILÊNCIO (set/2026, pedido do dono do negócio: parte da
+ * equipe tem o app no celular pessoal, e um push tarde da noite ou de
+ * madrugada incomoda quem não está trabalhando naquele horário).
+ *
+ * O GATE PRINCIPAL já vive no workflow do GitHub Actions (ver
+ * .github/workflows/notificar-atualizacao.yml) — ele evita a própria
+ * chamada. Este aqui é o SEGUNDO gate, para quando alguém chamar este
+ * endereço fora do workflow normal (o botão "Run workflow" manual do
+ * Actions, ou uma chamada direta com a chave em mãos): o endpoint não
+ * confia que quem o chamou já filtrou o horário.
+ *
+ * Sem versão nova perdida: fora da janela, só o EMPURRÃO (push) não sai
+ * — o aviso na tela do app (a faixa "Atualizar agora") continua
+ * aparecendo sozinho, porque o app confere isso ao reabrir e a cada 1h
+ * (ver App.tsx), sem depender deste envio.
+ */
+const INICIO_JANELA_HORAS = 7;
+const FIM_JANELA_HORAS = 21;
+
+function horaEmBrasilia(): number {
+  const hora = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    hour: "numeric",
+    hour12: false,
+  }).format(new Date());
+  // "24" às vezes aparece no lugar de "0" à meia-noite, dependendo do runtime.
+  return Number(hora) % 24;
+}
+
+function dentroDoHorarioPermitido(): boolean {
+  const hora = horaEmBrasilia();
+  return hora >= INICIO_JANELA_HORAS && hora < FIM_JANELA_HORAS;
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ erro: "Método não permitido — use POST." });
@@ -138,6 +173,22 @@ export default async function handler(req: any, res: any) {
     const chaveRecebida = (req.headers?.["x-chave-atualizacao"] as string | undefined) ?? undefined;
     if (!chaveConfere(chaveRecebida)) {
       throw new ErroNotificacao("Chave de atualização ausente ou incorreta.", 401);
+    }
+
+    /**
+     * `X-Ignorar-Horario` só existe para o teste manual do "Run
+     * workflow" no GitHub Actions — quem já provou que tem a chave certa
+     * pode escolher testar fora da janela. Nunca é enviado pelo push
+     * automático (ver o workflow), que respeita a janela sozinho antes
+     * de chegar aqui.
+     */
+    const ignorarHorario = req.headers?.["x-ignorar-horario"] === "1";
+    if (!ignorarHorario && !dentroDoHorarioPermitido()) {
+      res.status(200).json({
+        enviados: 0,
+        aviso: `Fora do horário permitido (${INICIO_JANELA_HORAS}h-${FIM_JANELA_HORAS}h, Brasília) — aviso não enviado. O app confere a versão nova sozinho ao reabrir.`,
+      });
+      return;
     }
 
     const modulos = await carregarAdmin();

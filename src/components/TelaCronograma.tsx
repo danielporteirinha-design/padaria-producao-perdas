@@ -149,8 +149,15 @@ export function TelaCronograma({
    * que pé está". Quem vai agir toca uma vez e entra.
    */
   const [cardsAbertos, setCardsAbertos] = useState<Record<string, boolean>>({});
+  /**
+   * UM CARD ABERTO POR VEZ — matriz ou qualquer filial (set/2026, pedido
+   * do dono do negócio). Mesmo padrão já usado em PainelFornadasFilial:
+   * abrir substitui em vez de somar, porque duas listas abertas juntas
+   * empurram uma para fora da tela do celular, e quem toca esperando
+   * ver a loja que abriu acaba lendo a lista errada por engano.
+   */
   const alternarCard = (chave: string) =>
-    setCardsAbertos((atual) => ({ ...atual, [chave]: !atual[chave] }));
+    setCardsAbertos((atual) => (atual[chave] ? {} : { [chave]: true }));
 
   const planoExistente = useMemo(() => planos.find((p) => p.data === dataAlvo), [planos, dataAlvo]);
 
