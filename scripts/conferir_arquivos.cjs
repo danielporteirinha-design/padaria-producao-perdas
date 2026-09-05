@@ -65,7 +65,6 @@ const CONFERENCIAS = [
 
   // --- Reposição da filial: montar a lista e enviar de uma vez
   ["src/lib/rascunhoReposicao.ts", "gravarRascunhoReposicao", "Reposição: lista em montagem"],
-  ["src/components/PainelFornadasFilial.tsx", "Limpar pedido", "Reposição: limpar e enviar"],
   ["src/lib/reposicaoDoDia.ts", "montarLinhasDoDia", "Reposição: as duas sanfonas"],
   ["src/components/PainelFornadasFilial.tsx", "etiqueta-origem", "Reposição: avisos da matriz nas sanfonas"],
   ["src/components/AssistenteDeVoz.tsx", "NÃO LIMPA A LISTA", "Voz: falar de novo acrescenta"],
@@ -284,6 +283,19 @@ const CONFERENCIAS = [
   ["src/App.tsx", "onCadastrarSuprimento={handleCadastrarSuprimento}", "Reposicao da filial ganha os handlers de suprimentos"],
   ["src/lib/rota.ts", "ALIAS_DE_ABA", "Push antigo de suprimentos cai na Reposicao"],
   ["src/index.css", "chip-setor.sugerido", "Pastilha do segmento sugerido"],
+
+  // --- Ajustes finos pos-teste da Reposicao combinada (set/2026)
+  ["src/components/PainelFornadasFilial.tsx", "etiqueta-tipo-discreta", "Etiqueta de suprimento discreta, abaixo do nome"],
+  ["src/components/PainelFornadasFilial.tsx", "confirmarInclusaoFixa", "Incluir e Enviar migraram para a barra fixa do polegar"],
+  ["src/index.css", ".acao-fixa-secundaria {", "Barra fixa secundaria, acima do microfone"],
+  ["src/index.css", ".nome-montagem.com-etiqueta-tipo", "Nome do item empilha com a etiqueta de tipo no carrinho"],
+  ["src/components/AssistenteDeVoz.tsx", "rotuloFalar", "Rotulo do microfone pode ser trocado por tela"],
+  ["src/components/AssistenteDeVoz.tsx", "autoIncluirQuandoCompleto", "O que a voz entendeu certo pula a conferencia"],
+  ["src/components/TelaCronograma.tsx", 'rotuloFalar="Monte a lista falando"', "Lista de Producao (matriz): rotulo do microfone"],
+  ["src/components/TelaPedidoFilial.tsx", 'rotuloFalar="Monte a lista falando"', "Lista de Producao (filial): rotulo do microfone"],
+  ["src/components/TelaPedidoFilial.tsx", "com-acao-fixa", "Enviar pedido (filial) na barra fixa do polegar"],
+  ["src/components/TelaCronograma.tsx", "cardsAbertos[LOJA_MATRIZ.id] && totalItens > 0", "Confirmar producao (matriz) na barra fixa do polegar"],
+  ["api/interpretar-busca.ts", "material ou a cor de um item da lista", "Voz entende sinonimo de material (saco kraft = saco de papel)"],
 ];
 
 /**

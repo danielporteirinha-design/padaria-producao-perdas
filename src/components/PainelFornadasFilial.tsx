@@ -135,14 +135,6 @@ interface PainelFornadasFilialProps {
   onCadastrarSuprimento: (suprimento: Suprimento) => Promise<void>;
   /** Envia (soma ao que a loja já mandou hoje) a lista de suprimentos. */
   onEnviarLista: (pedido: PedidoSuprimentos) => Promise<void>;
-  /**
-   * Manda a lista em montagem para a impressão (set/2026, pedido do dono
-   * do negócio). Quem vai buscar a mercadoria na matriz anda com o papel
-   * na mão — conferir pelo celular com as mãos ocupadas não funciona.
-   */
-  onImprimir?: (pedido: PedidoFilial) => void;
-  /** Mesma ideia, para a lista de suprimentos em montagem. */
-  onImprimirSuprimentos?: (pedido: PedidoSuprimentos) => void;
 }
 
 export function PainelFornadasFilial({
@@ -158,8 +150,6 @@ export function PainelFornadasFilial({
   onCadastrarProduto,
   onCadastrarSuprimento,
   onEnviarLista,
-  onImprimir,
-  onImprimirSuprimentos,
 }: PainelFornadasFilialProps) {
   const hoje = dataDeHojeIso();
   const [busca, setBusca] = useState("");
@@ -169,7 +159,6 @@ export function PainelFornadasFilial({
   const [salvandoNovo, setSalvandoNovo] = useState(false);
   const [quantidade, setQuantidade] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false);
   const [aberta, setAberta] = useState<Record<string, boolean>>({});
 
   // --- SUPRIMENTOS, na mesma tela (set/2026) -----------------------------
@@ -436,6 +425,39 @@ export function PainelFornadasFilial({
           : i
       )
     );
+  }
+
+  /**
+   * INCLUIR/CANCELAR NUM LUGAR SÓ, PERTO DO POLEGAR (set/2026, pedido do
+   * dono do negócio: "esses botões devem ficar na mesma localização
+   * próxima ao polegar"). Antes, cada editor de quantidade (fornada da
+   * matriz, resultado de busca de produto, resultado de busca de
+   * suprimento) tinha o seu próprio par de botões Incluir/cancelar,
+   * espalhados pela tela conforme o que estava sendo editado. Os TRÊS
+   * editores continuam existindo — cada um mostra o campo de quantidade
+   * no lugar certo, junto do item — mas o toque final é um par de botões
+   * só, sempre na mesma barra fixa embaixo da tela: `codigoPedindo` e
+   * `itemSuprimentoAtivo` nunca ficam abertos ao mesmo tempo, então esta
+   * função sempre sabe para qual carrinho mandar.
+   */
+  function confirmarInclusaoFixa() {
+    if (!ehNumeroValidoPositivo(quantidade)) return;
+    const valor = paraNumero(quantidade);
+    if (codigoPedindo !== null) {
+      acrescentar([{ codigoPdv: codigoPedindo, quantidadeUnidades: valor }]);
+    } else if (itemSuprimentoAtivo !== null) {
+      acrescentarSuprimentos([{ suprimentoId: itemSuprimentoAtivo, quantidade: valor }]);
+    }
+    setCodigoPedindo(null);
+    setItemSuprimentoAtivo(null);
+    setQuantidade("");
+    setBusca("");
+  }
+
+  function cancelarEdicaoFixa() {
+    setCodigoPedindo(null);
+    setItemSuprimentoAtivo(null);
+    setQuantidade("");
   }
 
   /**
@@ -858,30 +880,6 @@ export function PainelFornadasFilial({
                 onChange={(e) => setQuantidade(sanitizarEntradaNumerica(e.target.value))}
               />
               <span className="unidade-fixa">un</span>
-              <button
-                type="button"
-                className="primario"
-                disabled={!ehNumeroValidoPositivo(quantidade)}
-                onClick={() => {
-                  acrescentar([
-                    { codigoPdv: linha.codigoPdv, quantidadeUnidades: paraNumero(quantidade) },
-                  ]);
-                  setCodigoPedindo(null);
-                  setQuantidade("");
-                }}
-              >
-                Incluir
-              </button>
-              <button
-                type="button"
-                className="link"
-                onClick={() => {
-                  setCodigoPedindo(null);
-                  setQuantidade("");
-                }}
-              >
-                cancelar
-              </button>
             </span>
           )}
         </span>
@@ -900,7 +898,7 @@ export function PainelFornadasFilial({
       <div key={suprimento.id} className="linha-fornada">
         <div className="info-fornada">
           <strong>{suprimento.nome}</strong>
-          <em className="etiqueta-origem suprimentos">Suprimento</em>
+          <em className="etiqueta-tipo-discreta">Suprimento</em>
         </div>
         {ativo ? (
           <div className="editor-quantidade">
@@ -914,31 +912,6 @@ export function PainelFornadasFilial({
               onChange={(e) => setQuantidade(sanitizarEntradaNumerica(e.target.value))}
             />
             <span className="unidade-fixa">un</span>
-            <button
-              type="button"
-              className="primario"
-              disabled={!ehNumeroValidoPositivo(quantidade)}
-              onClick={() => {
-                acrescentarSuprimentos([
-                  { suprimentoId: suprimento.id, quantidade: paraNumero(quantidade) },
-                ]);
-                setItemSuprimentoAtivo(null);
-                setQuantidade("");
-                setBusca("");
-              }}
-            >
-              Incluir
-            </button>
-            <button
-              type="button"
-              className="link"
-              onClick={() => {
-                setItemSuprimentoAtivo(null);
-                setQuantidade("");
-              }}
-            >
-              cancelar
-            </button>
           </div>
         ) : (
           <div className="acoes-fornada">
@@ -963,7 +936,13 @@ export function PainelFornadasFilial({
     busca.trim().length > 0 && resultados.length === 0 && resultadosSuprimentos.length === 0;
 
   return (
-    <div className="painel-fornadas">
+    <div
+      className={`painel-fornadas ${
+        codigoPedindo !== null || itemSuprimentoAtivo !== null || totalDeItens > 0
+          ? "com-acao-fixa"
+          : ""
+      }`}
+    >
       <div className="corpo-fornadas">
         {/* O CARTÃO SOLTO DE SUPRIMENTOS SAIU DAQUI (set/2026, pedido do
             dono do negócio: a lista de suprimentos "deve também ser
@@ -1046,34 +1025,6 @@ export function PainelFornadasFilial({
                         onChange={(e) => setQuantidade(sanitizarEntradaNumerica(e.target.value))}
                       />
                       <span className="unidade-fixa">un</span>
-                      <button
-                        type="button"
-                        className="primario"
-                        disabled={!ehNumeroValidoPositivo(quantidade)}
-                        onClick={() => {
-                          acrescentar([
-                            {
-                              codigoPdv: produto.codigoPdv,
-                              quantidadeUnidades: paraNumero(quantidade),
-                            },
-                          ]);
-                          setCodigoPedindo(null);
-                          setQuantidade("");
-                          setBusca("");
-                        }}
-                      >
-                        Incluir
-                      </button>
-                      <button
-                        type="button"
-                        className="link"
-                        onClick={() => {
-                          setCodigoPedindo(null);
-                          setQuantidade("");
-                        }}
-                      >
-                        cancelar
-                      </button>
                     </div>
                   ) : (
                     <div className="acoes-fornada">
@@ -1128,9 +1079,9 @@ export function PainelFornadasFilial({
 
             {itensSuprimentos.map((item) => (
               <div key={item.suprimentoId} className="linha-montagem">
-                <span className="nome-montagem">
-                  {nomePorSuprimentoId.get(item.suprimentoId) ?? item.suprimentoId}
-                  <em className="etiqueta-origem suprimentos">Suprimento</em>
+                <span className="nome-montagem com-etiqueta-tipo">
+                  <span>{nomePorSuprimentoId.get(item.suprimentoId) ?? item.suprimentoId}</span>
+                  <em className="etiqueta-tipo-discreta">Suprimento</em>
                 </span>
                 <input
                   type="text"
@@ -1164,92 +1115,6 @@ export function PainelFornadasFilial({
             {faltaQuantidade && (
               <p className="nota-rodape">Informe a quantidade dos itens em branco.</p>
             )}
-
-            <div className="acoes-montagem">
-              {confirmandoLimpeza ? (
-                <>
-                  <button
-                    type="button"
-                    className="perigo"
-                    onClick={() => {
-                      setItens([]);
-                      setItensSuprimentos([]);
-                      setConfirmandoLimpeza(false);
-                    }}
-                  >
-                    Apagar os {totalDeItens}?
-                  </button>
-                  <button
-                    type="button"
-                    className="link"
-                    onClick={() => setConfirmandoLimpeza(false)}
-                  >
-                    não
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="secundario"
-                  onClick={() => setConfirmandoLimpeza(true)}
-                >
-                  Limpar pedido
-                </button>
-              )}
-
-              {/* IMPRIMIR O QUE ESTÁ MONTADO, enviado ou não: quem vai
-                  buscar a mercadoria precisa do papel antes de a matriz
-                  responder. Produto e suprimento imprimem separado
-                  porque viram comprovantes diferentes — cada botão só
-                  aparece quando há o que imprimir daquele tipo. */}
-              {onImprimir && itens.length > 0 && (
-                <button
-                  type="button"
-                  className="secundario"
-                  onClick={() =>
-                    onImprimir({
-                      id: idDaReposicao(hoje, loja.id, new Date().toISOString()),
-                      lojaId: loja.id,
-                      data: hoje,
-                      itens: itens.filter((i) => i.quantidadeUnidades > 0),
-                      status: "rascunho",
-                      tipo: "reposicao",
-                      criadoPor: operador,
-                      criadoEm: new Date().toISOString(),
-                    })
-                  }
-                >
-                  Imprimir pedido
-                </button>
-              )}
-              {onImprimirSuprimentos && itensSuprimentos.some((i) => i.quantidade > 0) && (
-                <button
-                  type="button"
-                  className="secundario"
-                  onClick={() =>
-                    onImprimirSuprimentos({
-                      id: idDoPedidoSuprimentos(hoje, loja.id),
-                      lojaId: loja.id,
-                      data: hoje,
-                      itens: itensSuprimentos.filter((i) => i.quantidade > 0),
-                      status: "rascunho",
-                      criadoPor: operador,
-                      criadoEm: new Date().toISOString(),
-                    })
-                  }
-                >
-                  Imprimir suprimentos
-                </button>
-              )}
-              <button
-                type="button"
-                className="primario"
-                disabled={enviando || faltaQuantidade}
-                onClick={() => void enviarTudo()}
-              >
-                {enviando ? "Enviando..." : `Enviar (${totalDeItens})`}
-              </button>
-            </div>
           </div>
         )}
 
@@ -1257,6 +1122,44 @@ export function PainelFornadasFilial({
         {sanfona("concluidos", "Pedidos concluídos", concluidos)}
 
       </div>
+
+      {/* BARRA FIXA PERTO DO POLEGAR (set/2026, pedido do dono do
+          negócio: "enviar / adicionar... devem ficar na mesma
+          localização próxima ao polegar"). Um lugar só, sempre no mesmo
+          canto da tela, para o toque final: confirmar a quantidade de um
+          item (produto ou suprimento, os três editores acima só mostram
+          o campo — quem confirma é este par de botões) ou, sem editor
+          aberto, mandar a lista embora. Fica empilhada ACIMA do botão do
+          microfone (não dentro dele) para não arriscar o comportamento
+          das outras 4 telas que reaproveitam o AssistenteDeVoz. */}
+      {(codigoPedindo !== null || itemSuprimentoAtivo !== null) ? (
+        <div className="acao-fixa-secundaria">
+          <button type="button" className="link" onClick={cancelarEdicaoFixa}>
+            cancelar
+          </button>
+          <button
+            type="button"
+            className="primario"
+            disabled={!ehNumeroValidoPositivo(quantidade)}
+            onClick={confirmarInclusaoFixa}
+          >
+            Incluir
+          </button>
+        </div>
+      ) : (
+        totalDeItens > 0 && (
+          <div className="acao-fixa-secundaria">
+            <button
+              type="button"
+              className="primario"
+              disabled={enviando || faltaQuantidade}
+              onClick={() => void enviarTudo()}
+            >
+              {enviando ? "Enviando..." : `Enviar (${totalDeItens})`}
+            </button>
+          </div>
+        )
+      )}
     </div>
   );
 }

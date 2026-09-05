@@ -1241,8 +1241,6 @@ export default function App() {
               onCadastrarProduto={handleCadastroRelampago}
               onCadastrarSuprimento={handleCadastrarSuprimento}
               onEnviarLista={handleEnviarSuprimentos}
-              onImprimir={setReposicaoParaImprimir}
-              onImprimirSuprimentos={setSuprimentosParaImprimir}
             />
           ))}
 

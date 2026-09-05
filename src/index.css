@@ -1734,6 +1734,46 @@ button.perigo:hover { background: #822525; }
 }
 .botao-assistente:disabled { opacity: 0.6; cursor: not-allowed; }
 
+/* BARRA FIXA SECUNDARIA - PERTO DO POLEGAR, ACIMA DO MICROFONE (set/2026,
+   pedido do dono do negocio: os botoes de confirmar/enviar "devem ficar
+   na mesma localizacao proxima ao polegar", sem precisar rolar a tela
+   ate o fim). Empilhada ACIMA de `.botao-assistente` (que fica em
+   `bottom: 12px`, com 72px de altura) - nunca dentro dela, para nao
+   arriscar o comportamento das outras telas que reaproveitam aquele
+   botao. Reaproveitada por Reposicao, Lista de Producao (filial) e
+   Lista de Producao (matriz) - telas diferentes, mesmo gesto de fechar
+   uma tarefa com o polegar sem precisar rolar. */
+.acao-fixa-secundaria {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + 72px + 10px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.acao-fixa-secundaria button {
+  min-height: 56px;
+  padding: 12px 20px;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: var(--raio);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+}
+.acao-fixa-secundaria .link {
+  box-shadow: none;
+  min-height: auto;
+  padding: 8px 4px;
+}
+
+/* Espaco extra no fim da tela para a barra acima nao tampar a ultima
+   linha - as telas onde `.acao-fixa-secundaria` aparece precisam de mais
+   folego que as demais, que so reservam espaco para o microfone. */
+.tela.com-acao-fixa { padding-bottom: 76px; }
+.painel-fornadas.com-acao-fixa .corpo-fornadas { padding-bottom: 76px; }
+
 /* O BOTÃO COMO SINALIZADOR (set/2026). Dois segundos de resposta no
    lugar para onde o olho já está olhando — ver AssistenteDeVoz.tsx.
    A opacidade do :disabled é anulada de propósito: durante o sinal o
@@ -1851,6 +1891,14 @@ button.perigo:hover { background: #822525; }
   flex: 1 1 auto;
   min-width: 0;
   font-size: 15px;
+}
+/* Quando o item do carrinho carrega a etiqueta de tipo discreta embaixo
+   do nome (suprimento, set/2026), o nome empilha em vez de ficar lado a
+   lado - o normal (produto, sem etiqueta) continua em linha unica. */
+.nome-montagem.com-etiqueta-tipo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 .acoes-montagem {
   display: flex;
@@ -2023,6 +2071,21 @@ button.perigo:hover { background: #822525; }
 .etiqueta-origem.suprimentos {
   background: var(--cor-acento);
   color: var(--cor-acento-texto);
+}
+/* A ETIQUETA DE TIPO, DISCRETA (set/2026, pedido do dono do negocio: "o
+   espaco e pequeno para tanta informacao" quando o suprimento aparece ao
+   lado do produto na busca e no carrinho). Diferente de
+   `.etiqueta-origem` (pastilha colorida, para distinguir de relance na
+   sanfona de historico, onde sobra espaco) - aqui e so uma legenda
+   pequena e neutra, abaixo do nome, e nao ao lado dele. */
+.etiqueta-tipo-discreta {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--cor-texto-suave);
+  text-transform: none;
+  letter-spacing: 0;
 }
 /* Os itens escritos embaixo da linha. Menores e mais suaves que o
    título: quem procura a pendência lê a linha de cima; quem já decidiu

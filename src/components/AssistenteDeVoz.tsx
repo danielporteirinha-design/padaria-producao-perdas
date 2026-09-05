@@ -96,6 +96,30 @@ interface AssistenteDeVozProps {
    * "não entrou" — o resto da fala continua de pé.
    */
   renderSobra?: (trecho: string, remover: () => void) => React.ReactNode;
+  /**
+   * Troca o texto do botão parado (set/2026, pedido do dono do negócio:
+   * na aba Lista de Produção o rótulo "Pedir falando" não transmitia a
+   * ideia — o rótulo passa a ser "Monte a lista falando" só ali).
+   * Sem este prop, o texto continua o de sempre ("Pedir falando" /
+   * "Anunciar falando", conforme `modo`) — as outras telas que usam este
+   * componente não precisam saber que a opção existe.
+   */
+  rotuloFalar?: string;
+  /**
+   * PULA A CONFERÊNCIA PARA O QUE FOI ENTENDIDO CERTO (set/2026, pedido do
+   * dono do negócio, na Lista de Produção: "o que deu certo ele não
+   * precisa conferir, conferir somente o que deu errado"). Item com nome
+   * batido no catálogo E quantidade dita na mesma frase vai direto para a
+   * lista assim que a fala termina, sem passar pelo cartão de
+   * conferência; só o que faltou entender — sem quantidade, ou sem bater
+   * com nenhum produto — continua pedindo revisão manual.
+   *
+   * Fica de fora por padrão porque em Reposição e no Anúncio de fornada a
+   * conferência escrita É o freio antes de mandar mercadoria errada pro
+   * caminhão ou anunciar a fornada errada — ali o toque extra vale a
+   * pena, e não é o que este pedido do dono do negócio mirava.
+   */
+  autoIncluirQuandoCompleto?: boolean;
 }
 
 export function AssistenteDeVoz({
@@ -105,6 +129,8 @@ export function AssistenteDeVoz({
   onConfirmar,
   onOuvindoMudou,
   renderSobra,
+  rotuloFalar,
+  autoIncluirQuandoCompleto = false,
 }: AssistenteDeVozProps) {
   const [ouvindo, setOuvindo] = useState(false);
   useEffect(() => {
@@ -251,26 +277,46 @@ export function AssistenteDeVoz({
       setPensando(false);
     }
 
+    const novos = paraItens(encontrados);
+
+    /**
+     * O CAMINHO CURTO: nome batido E quantidade dita vão direto para a
+     * lista de verdade, sem passar pela conferência escrita — ver o
+     * comentário de `autoIncluirQuandoCompleto` na interface. O que
+     * faltou entender (sem quantidade) continua acumulando em `itens`,
+     * exatamente como antes, para a pessoa completar à mão.
+     */
+    if (autoIncluirQuandoCompleto && pedindo) {
+      const prontos = novos.filter((i) => i.quantidade !== null && i.quantidade > 0);
+      const pendentes = novos.filter((i) => !(i.quantidade !== null && i.quantidade > 0));
+      if (prontos.length > 0) {
+        try {
+          await onConfirmar(prontos);
+        } catch {
+          /* o aviso global cuida da mensagem — o item fica de fora da
+             lista de conferência mesmo assim, para não pedir de novo
+             algo que o app já tentou incluir. */
+        }
+        if (!montado.current) return;
+      }
+      setItens((atual) => mesclarDitados(atual, pendentes));
+      setSobras(sobrando);
+      if (encontrados.length === 0) {
+        setErro(`Não achei nenhum produto em "${dito}".`);
+        sinalizar("errado");
+      } else {
+        sinalizar(sobrando.length === 0 && pendentes.length === 0 ? "certo" : "errado");
+      }
+      return;
+    }
+
     /**
      * ACUMULA. O mesmo produto dito duas vezes SOMA, em vez de virar
      * duas linhas: quem falou "10 pão francês" e depois "mais 5 pão
      * francês" está pedindo 15. A quantidade continua editável na
      * linha, então a soma nunca é irreversível.
      */
-    const novos = paraItens(encontrados);
-    setItens((atual) => {
-      const lista = [...atual];
-      for (const novo of novos) {
-        const onde = lista.findIndex((i) => i.produto.codigoPdv === novo.produto.codigoPdv);
-        if (onde >= 0) {
-          const somado = (lista[onde].quantidade ?? 0) + (novo.quantidade ?? 0);
-          lista[onde] = { ...lista[onde], quantidade: somado > 0 ? somado : null };
-        } else {
-          lista.push(novo);
-        }
-      }
-      return lista;
-    });
+    setItens((atual) => mesclarDitados(atual, novos));
     setSobras(sobrando);
     /**
      * O sinal é sobre ESTA fala, e não sobre a lista acumulada: quem
@@ -284,6 +330,23 @@ export function AssistenteDeVoz({
     } else {
       sinalizar(sobrando.length === 0 ? "certo" : "errado");
     }
+  }
+
+  /** Soma o mesmo produto dito duas vezes em vez de duplicar a linha —
+   * usado tanto na conferência normal quanto no que sobra do caminho
+   * curto acima. */
+  function mesclarDitados(atual: ItemDitado[], novos: ItemDitado[]): ItemDitado[] {
+    const lista = [...atual];
+    for (const novo of novos) {
+      const onde = lista.findIndex((i) => i.produto.codigoPdv === novo.produto.codigoPdv);
+      if (onde >= 0) {
+        const somado = (lista[onde].quantidade ?? 0) + (novo.quantidade ?? 0);
+        lista[onde] = { ...lista[onde], quantidade: somado > 0 ? somado : null };
+      } else {
+        lista.push(novo);
+      }
+    }
+    return lista;
   }
 
   function paraItens(lidos: ItemFalado[]): ItemDitado[] {
@@ -346,9 +409,7 @@ export function AssistenteDeVoz({
             ? "Não entendi"
             : ouvindo
               ? "Ouvindo..."
-              : pedindo
-                ? "Pedir falando"
-                : "Anunciar falando"}
+              : (rotuloFalar ?? (pedindo ? "Pedir falando" : "Anunciar falando"))}
       </button>
 
       {/* A instrução escrita e o exemplo saíram (ago/2026, decisão do

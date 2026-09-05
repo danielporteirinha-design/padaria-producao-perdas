@@ -1120,6 +1120,8 @@ export function TelaCronograma({
           produtos={produtos}
           modo="pedir"
           acao="adicionar"
+          rotuloFalar="Monte a lista falando"
+          autoIncluirQuandoCompleto
           onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
         />
 
@@ -1311,8 +1313,25 @@ export function TelaCronograma({
           >
             <IconeImpressora tamanho={17} /> Imprimir
           </button>
+        </div>
+      </CardCronograma>
+
+      {/* CONFIRMAR PRODUÇÃO PERTO DO POLEGAR (set/2026, pedido do dono do
+          negócio: "o próximo botão disponível para clicar será o ENVIAR
+          PEDIDO... quero que o botão fique fácil" — aqui o equivalente é
+          Confirmar produção). Ele morava lá embaixo, depois das 5
+          sessões de categoria — com a lista crescendo sozinha por voz
+          (auto-incluir, acima), rolar até o fim para confirmar era o
+          único toque manual que sobrava. Só aparece com o card da matriz
+          aberto E com algo lançado: fora disso ficaria flutuando sobre o
+          card errado (o de uma filial) sem servir para nada ali. */}
+      {!!cardsAbertos[LOJA_MATRIZ.id] && totalItens > 0 && (
+        <div className="acao-fixa-secundaria">
           {matrizAConfirmar ? (
-            <span className="confirmar-limpeza">
+            <>
+              <button type="button" className="link" onClick={() => setMatrizAConfirmar(false)}>
+                não
+              </button>
               <button
                 type="button"
                 className="primario"
@@ -1321,22 +1340,18 @@ export function TelaCronograma({
               >
                 {salvando ? "Salvando..." : `Confirmar ${contagemDeItens(totalItens)}?`}
               </button>
-              <button type="button" className="link" onClick={() => setMatrizAConfirmar(false)}>
-                não
-              </button>
-            </span>
+            </>
           ) : (
             <button
               type="button"
               className="primario"
-              disabled={totalItens === 0}
               onClick={() => setMatrizAConfirmar(true)}
             >
               Confirmar produção
             </button>
           )}
         </div>
-      </CardCronograma>
+      )}
 
       {/*
         O BOTÃO DA LISTA DA COZINHA — NO FIM DA PÁGINA (ago/2026, pedido

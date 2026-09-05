@@ -381,7 +381,7 @@ export function TelaPedidoFilial({
   }
 
   return (
-    <div className="tela">
+    <div className={`tela ${itens.length > 0 ? "com-acao-fixa" : ""}`}>
       <AtivarAvisos loja={loja} operador={operador} />
 
       {/*
@@ -464,6 +464,8 @@ export function TelaPedidoFilial({
         produtos={produtos}
         modo="pedir"
         acao="adicionar"
+        rotuloFalar="Monte a lista falando"
+        autoIncluirQuandoCompleto
         onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
       />
 
@@ -695,18 +697,6 @@ export function TelaPedidoFilial({
         </div>
       )}
 
-      <button
-        type="button"
-        className="primario largura-cheia"
-        disabled={enviando || itens.length === 0}
-        onClick={enviar}
-      >
-        {/* "Atualizar", e não "Enviar pedido atualizado" (ago/2026): a
-            frase longa fazia o botão quebrar em duas linhas no celular e
-            ainda repetia "pedido", que é o assunto da tela inteira. Uma
-            palavra diz o que o toque faz. */}
-        {enviando ? "Enviando..." : jaEnviado ? "Atualizar" : "Enviar pedido"}
-      </button>
       {/* A frase sobre a impressora saiu (ago/2026): a lista não vai mais
           sozinha para o caixa da matriz — quem imprime é a matriz, depois
           de confirmar o cronograma. Prometer um papel que não sai é pior
@@ -714,6 +704,30 @@ export function TelaPedidoFilial({
       <p className="nota-rodape">
         Enviando como {operador}, pela {loja.nome}.
       </p>
+
+      {/* ENVIAR PERTO DO POLEGAR (set/2026, pedido do dono do negócio: "a
+          página deve ser rolada até o final para que o usuário possa
+          clicar e enviar a lista" — com a lista ditada por voz crescendo
+          por conta própria (auto-incluir, acima), rolar até o fim para
+          mandar era o passo que sobrava manual numa tela pensada para
+          não precisar de toque nenhum). Some da tela quando não há nada
+          para enviar, para não ocupar a zona do polegar à toa. */}
+      {itens.length > 0 && (
+        <div className="acao-fixa-secundaria">
+          <button
+            type="button"
+            className="primario"
+            disabled={enviando}
+            onClick={enviar}
+          >
+            {/* "Atualizar", e não "Enviar pedido atualizado" (ago/2026): a
+                frase longa fazia o botão quebrar em duas linhas no celular
+                e ainda repetia "pedido", que é o assunto da tela inteira.
+                Uma palavra diz o que o toque faz. */}
+            {enviando ? "Enviando..." : jaEnviado ? "Atualizar" : "Enviar pedido"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

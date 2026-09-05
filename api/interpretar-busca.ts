@@ -134,20 +134,21 @@ function extrairNome(texto: string): string {
 }
 
 function montarPrompt(falado: string, nomes: string[]): string {
-  return `Você ajuda funcionários de uma padaria a encontrar um produto no catálogo pelo que eles falaram em voz alta, em português do Brasil.
+  return `Você ajuda funcionários de uma padaria a encontrar, no catálogo dela, o item (produto de padaria OU suprimento — embalagem, limpeza, sacola) que a pessoa quis dizer ao falar em voz alta, em português do Brasil.
 
 O que a pessoa falou (transcrito automaticamente, pode ter erro de reconhecimento):
 "${falado}"
 
-Nomes EXATOS dos produtos cadastrados:
+Nomes EXATOS dos itens cadastrados:
 ${JSON.stringify(nomes)}
 
-Escolha o produto que a pessoa quis dizer. Considere que:
+Escolha o item que a pessoa quis dizer. Considere que:
 - o transcritor erra acento, junta e separa palavras;
 - a fala é coloquial ("pãozinho", "fubá com goiabada") e o cadastro é formal e em maiúsculas;
-- pode faltar parte do nome ("pão de queijo" para "PAO DE QUEIJO CONGELADO GRANDE").
+- pode faltar parte do nome ("pão de queijo" para "PAO DE QUEIJO CONGELADO GRANDE");
+- para embalagens e materiais, a pessoa costuma descrever a aparência ou o material em vez do nome técnico do cadastro ("saco kraft de 1kg", "saquinho marrom de 1 kg") — trate como o mesmo item cadastrado quando a descrição bate com o material ou a cor de um item da lista (kraft é o papel pardo/marrom usado em sacos de papel, por exemplo).
 
 Responda SOMENTE com JSON no formato {"nome": "..."}.
 O valor de "nome" tem que ser copiado LETRA POR LETRA de um dos nomes da lista acima.
-Se nenhum produto corresponder com clareza, responda {"nome": ""} — é melhor não escolher do que escolher errado.`;
+Se nenhum item corresponder com clareza, responda {"nome": ""} — é melhor não escolher do que escolher errado.`;
 }
