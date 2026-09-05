@@ -360,11 +360,24 @@ const CONFERENCIAS = [
   // --- Cadastro relampago pergunta o tipo (nao adivinha) e revisa nome
   // e categoria antes de salvar de verdade (set/2026, pedido do dono do
   // negocio)
-  ["src/components/TelaPedidoFilial.tsx", "revisaoCadastro", "Lista de Producao (filial): revisao de nome/categoria antes de cadastrar"],
-  ["src/components/TelaCronograma.tsx", "revisaoCadastro", "Lista de Producao (matriz): revisao de nome/categoria antes de cadastrar"],
+  ["src/components/TelaPedidoFilial.tsx", "cadastroEmAndamento", "Lista de Producao (filial): revisao de nome/categoria antes de cadastrar"],
+  ["src/components/TelaCronograma.tsx", "cadastroEmAndamento", "Lista de Producao (matriz): revisao de nome/categoria antes de cadastrar"],
   ["src/components/PainelFornadasFilial.tsx", "É produto de padaria ou suprimento?", "Reposicao (filial): pergunta o tipo em vez de adivinhar"],
   ["src/components/PainelFornoDeHoje.tsx", "É produto de padaria ou suprimento?", "Reposicao (matriz): pergunta o tipo em vez de adivinhar"],
   ["src/index.css", ".campo-revisao-nome input", "Campo de nome editavel na revisao do cadastro relampago"],
+
+  // --- Lista de Producao tambem pergunta produto ou suprimento
+  // (set/2026, pedido do dono do negocio: reportado como "bug" nas duas
+  // telas de Lista de Producao apos a pergunta ja existir em Reposicao)
+  ["src/components/TelaPedidoFilial.tsx", "É produto de padaria ou suprimento?", "Lista de Producao (filial): tambem pergunta o tipo"],
+  ["src/components/TelaPedidoFilial.tsx", "cadastrarSuprimentoDaBusca", "Lista de Producao (filial): cadastra suprimento no catalogo"],
+  ["src/components/TelaCronograma.tsx", "É produto de padaria ou suprimento?", "Lista de Producao (matriz): tambem pergunta o tipo"],
+  ["src/components/TelaCronograma.tsx", "cadastrarSuprimentoDaBuscaMatriz", "Lista de Producao (matriz): cadastra suprimento no catalogo"],
+  ["src/App.tsx", "onCadastrarSuprimento={handleCadastrarSuprimento}", "App: Lista de Producao (filial e matriz) recebem onCadastrarSuprimento"],
+
+  // --- Rodape (versao do app) sempre abaixo da pilha de barras fixas
+  // (set/2026, pedido do dono do negocio)
+  ["src/index.css", "RODAPE (versao do app) SEMPRE ABAIXO DE TUDO", "Rodape nao fica mais tapado pela barra de busca/acao fixa"],
 ];
 
 /**

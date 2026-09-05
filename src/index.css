@@ -42,7 +42,25 @@ body {
 
 button, input, select, textarea { font: inherit; }
 
-.app { max-width: 720px; margin: 0 auto; padding-bottom: 96px; }
+/* RODAPE (versao do app) SEMPRE ABAIXO DE TUDO, INCLUSIVE DA BARRA DE
+   BUSCA (set/2026, pedido do dono do negocio). O rodape e conteudo
+   normal, depois de tudo — mas "depois" so garante "abaixo na tela" se
+   sobrar espaco reservado maior que a pilha INTEIRA de elementos fixos
+   do rodape (busca+microfone e, quando aparece, a barra secundaria de
+   Enviar/Confirmar por cima dela). 96px cobria só a barra de busca
+   sozinha; com a barra secundaria em cima (Lista de Producao, Reposicao)
+   o rodape ficava tapado. Calculado com as mesmas variaveis que
+   posicionam aquelas barras (--altura-barra-busca-fixa e
+   --altura-acao-fixa-secundaria, no :root acima) para nunca ficar
+   dessincronizado se uma delas crescer de novo. */
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding-bottom: calc(
+    12px + var(--altura-barra-busca-fixa) + 10px + var(--altura-acao-fixa-secundaria) + 12px +
+      env(safe-area-inset-bottom, 0px)
+  );
+}
 
 .cabecalho-app {
   display: flex;

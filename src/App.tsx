@@ -1185,6 +1185,8 @@ export default function App() {
             onSalvarPlano={handleSalvarPlano}
             onAjustarPedido={handleAjustarPedido}
             onCadastrarProduto={handleCadastroRelampago}
+            onCadastrarSuprimento={handleCadastrarSuprimento}
+            catalogoSuprimentos={suprimentos}
           />
         )}
         {abaAtual === "fornada" &&
@@ -1256,6 +1258,8 @@ export default function App() {
             hoje={diaCorrente}
             onSalvarPedido={handleSalvarPedido}
             onCadastrarProduto={handleCadastroRelampago}
+            onCadastrarSuprimento={handleCadastrarSuprimento}
+            catalogoSuprimentos={suprimentos}
           />
         )}
         {abaAtual === "cadastro" && (
