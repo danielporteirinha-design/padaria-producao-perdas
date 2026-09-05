@@ -409,16 +409,19 @@ export function TelaPedidoFilial({
               <span className="titulo-planejamento">
                 Pedido para {rotuloDoDia(diaDaSemana)}, {formatarDataBr(dataAlvo)}
               </span>
-              <span className="estado-pedido">
-                {jaEnviado ? (
-                  <>
-                    <IconeConfere tamanho={14} /> enviado ·{" "}
-                    {pedidoExistente?.itens.length ?? 0} produtos
-                  </>
-                ) : (
-                  "não enviado — a quantidade ainda não entra na produção"
-                )}
-              </span>
+              {/* SÓ AVISA QUANDO JÁ ENVIOU (set/2026, pedido do dono do
+                  negócio: "essa mensagem gera ruído"). "Não enviado" era
+                  o estado inicial de toda lista nova — a frase aparecia
+                  sempre que a pessoa abria a tela para montar o pedido
+                  do zero, avisando de algo que ainda nem tinha começado
+                  a acontecer. O que vale avisar é o oposto: que já foi
+                  enviado, e quantos produtos foram. */}
+              {jaEnviado && (
+                <span className="estado-pedido">
+                  <IconeConfere tamanho={14} /> enviado ·{" "}
+                  {pedidoExistente?.itens.length ?? 0} produtos
+                </span>
+              )}
             </span>
           </span>
         </div>

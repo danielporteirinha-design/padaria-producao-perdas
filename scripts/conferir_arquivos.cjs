@@ -303,6 +303,7 @@ const CONFERENCIAS = [
   ["src/components/TelaCronograma.tsx", "proximoDiaUtilMatriz(dataDeAmanhaIso())", "Producao (matriz) mira o proximo dia util, nao so amanha"],
   ["src/components/TelaPedidoFilial.tsx", "itensIguais(itens, pedidoExistente.itens)", "Atualizar so habilita quando a lista mudou de fato"],
   ["src/lib/dataAlvoDoDia.ts", "proximoDiaAlvo", "proximaDataAlvo recebe o proximo dia util de fora"],
+  ["src/components/TelaPedidoFilial.tsx", 'jaEnviado && (\n                <span className="estado-pedido">', "Mensagem 'nao enviado' removida do titulo (ruido)"],
 ];
 
 /**
