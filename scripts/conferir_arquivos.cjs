@@ -296,6 +296,13 @@ const CONFERENCIAS = [
   ["src/components/TelaPedidoFilial.tsx", "com-acao-fixa", "Enviar pedido (filial) na barra fixa do polegar"],
   ["src/components/TelaCronograma.tsx", "cardsAbertos[LOJA_MATRIZ.id] && totalItens > 0", "Confirmar producao (matriz) na barra fixa do polegar"],
   ["api/interpretar-busca.ts", "material ou a cor de um item da lista", "Voz entende sinonimo de material (saco kraft = saco de papel)"],
+
+  // --- Proximo dia util (feriados) e data fixa na Lista de Producao (set/2026)
+  ["src/lib/feriados.ts", "proximoDiaUtilFilial", "Feriados nacionais e proximo dia util da padaria"],
+  ["src/components/TelaPedidoFilial.tsx", "proximoDiaUtilFilial(dataDeAmanhaIso())", "Pedido (filial) mira o proximo dia util, nao so amanha"],
+  ["src/components/TelaCronograma.tsx", "proximoDiaUtilMatriz(dataDeAmanhaIso())", "Producao (matriz) mira o proximo dia util, nao so amanha"],
+  ["src/components/TelaPedidoFilial.tsx", "itensIguais(itens, pedidoExistente.itens)", "Atualizar so habilita quando a lista mudou de fato"],
+  ["src/lib/dataAlvoDoDia.ts", "proximoDiaAlvo", "proximaDataAlvo recebe o proximo dia util de fora"],
 ];
 
 /**

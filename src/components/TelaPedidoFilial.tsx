@@ -30,6 +30,7 @@ import type { Loja } from "../lib/lojas";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 import { proximaDataAlvo } from "../lib/dataAlvoDoDia";
+import { proximoDiaUtilFilial } from "../lib/feriados";
 import { diferencasDoAjuste, itensIguais } from "../types/pedido";
 import {
   apagarRascunhoPedido,
@@ -80,8 +81,7 @@ export function TelaPedidoFilial({
   onSalvarPedido,
   onCadastrarProduto,
 }: TelaPedidoFilialProps) {
-  const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
-  const [mostrarSeletorData, setMostrarSeletorData] = useState(false);
+  const [dataAlvo, setDataAlvo] = useState(proximoDiaUtilFilial(dataDeAmanhaIso()));
   const [expandido, setExpandido] = useState<Record<string, boolean>>({});
   const [produtoAtivo, setProdutoAtivo] = useState<number | null>(null);
   const [valorEditando, setValorEditando] = useState("");
@@ -193,7 +193,7 @@ export function TelaPedidoFilial({
    */
   useEffect(() => {
     const temRascunho = itens.length > 0 && !jaEnviado;
-    const proxima = proximaDataAlvo(dataAlvo, hoje, temRascunho);
+    const proxima = proximaDataAlvo(dataAlvo, hoje, proximoDiaUtilFilial(dataDeAmanhaIso()), temRascunho);
     if (proxima) setDataAlvo(proxima);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoje]);
@@ -392,25 +392,17 @@ export function TelaPedidoFilial({
         como uma frase só — que é como a informação existe na cabeça de
         quem opera.
       */}
-      {/* O ALVO É A PRÓPRIA DATA, como no Cronograma da matriz (ago/2026,
-          pedido do dono do negócio: "o usuário clica no título 'pedido
-          para dia tal' para mudar a data").
-
-          Havia um link solto embaixo do bloco, "pedir para outra data",
-          que precisava ser lido e ainda ficava longe da informação que ele
-          muda. As duas telas agora se operam do mesmo jeito: toca-se no
-          dia para trocar o dia. Mesmas classes de propósito — ver
-          .linha-titulo-do-dia em src/index.css. */}
+      {/* A DATA DEIXOU DE SER EDITÁVEL (set/2026, pedido do dono do
+          negócio): o "próximo dia" já é calculado sozinho — pula domingo
+          e feriado nacional (ver src/lib/feriados.ts) — e não fazia
+          sentido deixar a pessoa escolher outro dia à mão para uma lista
+          que é, por definição, a de suprimento/produção da PRÓXIMA
+          abertura da loja. O calendário e o toque para abrir saíram
+          junto; sobrou só a informação, sem convite a mexer nela. */}
       <div
         className={`destaque-data titulo-do-dia bloco-pedido ${jaEnviado ? "enviado" : ""}`}
       >
-        <button
-          type="button"
-          className={`linha-titulo-do-dia ${mostrarSeletorData ? "aberta" : ""}`}
-          aria-expanded={mostrarSeletorData}
-          title="Tocar na data para pedir para outro dia"
-          onClick={() => setMostrarSeletorData((v) => !v)}
-        >
+        <div className="linha-titulo-do-dia">
           <span className="marca-titulo-do-dia">
             <IconeCalendario tamanho={20} />
             <span className="texto-bloco-pedido">
@@ -429,31 +421,7 @@ export function TelaPedidoFilial({
               </span>
             </span>
           </span>
-          <IconeSeta className="seta-sessao" />
-        </button>
-
-        {mostrarSeletorData && (
-          <div className="escolha-de-data">
-            <input
-              type="date"
-              aria-label="Data do pedido"
-              value={dataAlvo}
-              onChange={(e) => setDataAlvo(e.target.value)}
-            />
-            {/* O caminho de volta ao dia normal de trabalho. Sem ele,
-                voltar de uma data distante exigiria lembrar qual é a data
-                de amanhã e digitá-la. */}
-            {dataAlvo !== dataDeAmanhaIso() && (
-              <button
-                type="button"
-                className="link"
-                onClick={() => setDataAlvo(dataDeAmanhaIso())}
-              >
-                voltar para amanhã
-              </button>
-            )}
-          </div>
-        )}
+        </div>
       </div>
 
       {/* MONTAR FALANDO (ago/2026, pedido do dono do negócio). Vem antes
@@ -717,13 +685,18 @@ export function TelaPedidoFilial({
           <button
             type="button"
             className="primario"
-            disabled={enviando}
+            disabled={enviando || (jaEnviado && !!pedidoExistente && itensIguais(itens, pedidoExistente.itens))}
             onClick={enviar}
           >
             {/* "Atualizar", e não "Enviar pedido atualizado" (ago/2026): a
                 frase longa fazia o botão quebrar em duas linhas no celular
                 e ainda repetia "pedido", que é o assunto da tela inteira.
-                Uma palavra diz o que o toque faz. */}
+                Uma palavra diz o que o toque faz.
+
+                DESABILITADO QUANDO NÃO MUDOU NADA (set/2026, pedido do
+                dono do negócio): já enviado e a lista igual ao que está
+                gravado é "Atualizar" sem nada para atualizar — um toque
+                que reenviaria o mesmo pedido de novo, sem motivo. */}
             {enviando ? "Enviando..." : jaEnviado ? "Atualizar" : "Enviar pedido"}
           </button>
         </div>

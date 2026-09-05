@@ -39,6 +39,7 @@ import type { ItemPlanoProducao, PlanoDeProducaoDiario, SessaoProducao } from ".
 import type { RegistroPerda } from "../types/perda";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 import { proximaDataAlvo } from "../lib/dataAlvoDoDia";
+import { proximoDiaUtilMatriz } from "../lib/feriados";
 import {
   apagarRascunho,
   gravarRascunho,
@@ -133,8 +134,7 @@ export function TelaCronograma({
   onAjustarPedido,
   onCadastrarProduto,
 }: TelaCronogramaProps) {
-  const [dataAlvo, setDataAlvo] = useState(dataDeAmanhaIso());
-  const [mostrarSeletorData, setMostrarSeletorData] = useState(false);
+  const [dataAlvo, setDataAlvo] = useState(proximoDiaUtilMatriz(dataDeAmanhaIso()));
   /**
    * CINCO CARDS IGUAIS, TODOS NASCENDO FECHADOS (ago/2026)
    * ------------------------------------------------------
@@ -404,7 +404,7 @@ export function TelaCronograma({
    * cada guarda, está em src/lib/dataAlvoDoDia.ts.
    */
   useEffect(() => {
-    const proxima = proximaDataAlvo(dataAlvo, hoje, totalItens > 0);
+    const proxima = proximaDataAlvo(dataAlvo, hoje, proximoDiaUtilMatriz(dataDeAmanhaIso()), totalItens > 0);
     if (proxima) trocarData(proxima);
     // `trocarData` e `totalItens` são recalculados a cada render; o que
     // dispara isto é a virada do dia, e é só ela que precisa estar aqui.
@@ -879,50 +879,20 @@ export function TelaCronograma({
         dentro de cada um seria ruído. Ela fica aqui em cima, uma vez, e
         é por ela que se troca o dia programado.
       */}
+      {/* A DATA DEIXOU DE SER EDITÁVEL (set/2026, pedido do dono do
+          negócio): o "próximo dia" já pula sozinho o 1º de janeiro (ver
+          src/lib/feriados.ts) — único dia em que a matriz não abre — e
+          não fazia sentido oferecer um calendário para escolher outro
+          dia numa lista que é, por definição, a produção da PRÓXIMA
+          abertura. O calendário e o toque para abrir saíram junto;
+          sobrou só a informação, sem convite a mexer nela. */}
       <div className="destaque-data titulo-do-dia">
-        {/* O ALVO É A PRÓPRIA DATA (ago/2026, pedido do dono do negócio).
-            Havia um botão "outra data" ao lado do título: dois alvos, um
-            assunto só, e o rótulo alternando entre "outra data" e
-            "amanhã" — texto que precisava ser LIDO para se entender, e
-            que dizia "amanhã" quando a data na tela já era outra.
-
-            Tocar no dia para trocar o dia dispensa a leitura. A seta é
-            o que avisa que ali abre alguma coisa. */}
-        <button
-          type="button"
-          className={`linha-titulo-do-dia ${mostrarSeletorData ? "aberta" : ""}`}
-          aria-expanded={mostrarSeletorData}
-          title="Tocar na data para programar outro dia"
-          onClick={() => setMostrarSeletorData((v) => !v)}
-        >
-          {/* Ícone e data num invólucro só: quando a seta desce para a
-              linha de baixo, o calendário desce COM o texto dele. Soltos
-              no mesmo flex, o ícone ficava sozinho numa linha. */}
+        <div className="linha-titulo-do-dia">
           <span className="marca-titulo-do-dia">
             <IconeCalendario tamanho={20} />
             <span className="titulo-planejamento">Produção de {dataFormatada}</span>
           </span>
-          <IconeSeta className="seta-sessao" />
-        </button>
-
-        {mostrarSeletorData && (
-          <div className="escolha-de-data">
-            <input
-              type="date"
-              aria-label="Data da produção"
-              value={dataAlvo}
-              onChange={(e) => trocarData(e.target.value)}
-            />
-            {/* O caminho de volta ao dia normal de trabalho. Sem ele,
-                voltar de uma data distante exigiria lembrar qual é a data
-                de amanhã e digitá-la. */}
-            {dataAlvo !== dataDeAmanhaIso() && (
-              <button type="button" className="link" onClick={() => trocarData(dataDeAmanhaIso())}>
-                voltar para amanhã
-              </button>
-            )}
-          </div>
-        )}
+        </div>
       </div>
 
       {/*

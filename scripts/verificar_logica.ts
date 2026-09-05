@@ -90,6 +90,13 @@ import { corpoDaListaDeSuprimentos } from "../api/notificar-fornada";
 import { agruparPorCategoria } from "../src/lib/blocosDeImpressao";
 import { proximaDataAlvo } from "../src/lib/dataAlvoDoDia";
 import {
+  ehFeriadoNacional,
+  filialFechadaEm,
+  matrizFechadaEm,
+  proximoDiaUtilFilial,
+  proximoDiaUtilMatriz,
+} from "../src/lib/feriados";
+import {
   chaveDoRascunho,
   mapaDoPlano,
   mapasIguais,
@@ -2249,25 +2256,71 @@ const perdas: RegistroPerda[] = [
   const QUARTA = "2026-08-26";
 
   afirmar(
-    proximaDataAlvo(QUINTA, QUINTA, false) === SEXTA,
-    `data-alvo que virou hoje avanca para amanha (obtido: ${proximaDataAlvo(QUINTA, QUINTA, false)})`
+    proximaDataAlvo(QUINTA, QUINTA, SEXTA, false) === SEXTA,
+    `data-alvo que virou hoje avanca para o proximo dia util (obtido: ${proximaDataAlvo(QUINTA, QUINTA, SEXTA, false)})`
   );
-  afirmar(proximaDataAlvo(QUARTA, QUINTA, false) === SEXTA, "data-alvo no passado tambem avanca");
+  afirmar(proximaDataAlvo(QUARTA, QUINTA, SEXTA, false) === SEXTA, "data-alvo no passado tambem avanca");
 
-  afirmar(proximaDataAlvo(SEXTA, QUINTA, false) === null, "data-alvo ja em amanha nao muda");
+  afirmar(proximaDataAlvo(SEXTA, QUINTA, SEXTA, false) === null, "data-alvo ja no proximo dia util nao muda");
 
   afirmar(
-    proximaDataAlvo(QUINTA, QUINTA, true) === null,
+    proximaDataAlvo(QUINTA, QUINTA, SEXTA, true) === null,
     "com item digitado na tela, a data NAO vira sozinha"
   );
 
   afirmar(
-    proximaDataAlvo("2026-09-05", QUINTA, false) === null,
+    proximaDataAlvo("2026-09-05", QUINTA, SEXTA, false) === null,
     "data futura escolhida a mao e preservada"
   );
 
-  afirmar(proximaDataAlvo("2026-08-31", "2026-08-31", false) === "2026-09-01", "vira o mes");
-  afirmar(proximaDataAlvo("2026-12-31", "2026-12-31", false) === "2027-01-01", "vira o ano");
+  afirmar(proximaDataAlvo("2026-08-31", "2026-08-31", "2026-09-01", false) === "2026-09-01", "vira o mes");
+  afirmar(proximaDataAlvo("2026-12-31", "2026-12-31", "2027-01-01", false) === "2027-01-01", "vira o ano");
+}
+
+// ---------------------------------------------------------------
+// Caso 28: feriados nacionais e o proximo dia util da padaria (set/2026)
+// ---------------------------------------------------------------
+{
+  // Feriados fixos e moveis de 2026, todos conferidos contra o calendario
+  // civil (Carnaval 17/02, Sexta-feira Santa 03/04, Corpus Christi 04/06).
+  afirmar(ehFeriadoNacional("2026-01-01"), "1 de janeiro e feriado nacional");
+  afirmar(ehFeriadoNacional("2026-02-17"), "Carnaval (terca) e feriado tratado como fechado");
+  afirmar(ehFeriadoNacional("2026-04-03"), "Sexta-feira Santa e feriado tratado como fechado");
+  afirmar(ehFeriadoNacional("2026-06-04"), "Corpus Christi e feriado tratado como fechado");
+  afirmar(!ehFeriadoNacional("2026-02-18"), "dia comum nao e feriado");
+
+  // FILIAL: fecha domingo e feriado, menos feriado em cima de sabado.
+  afirmar(filialFechadaEm("2026-11-15"), "filial fecha na Proclamacao (domingo em 2026)");
+  afirmar(filialFechadaEm("2026-08-30"), "filial fecha todo domingo comum");
+  afirmar(!filialFechadaEm("2026-08-29"), "filial abre no sabado comum");
+  afirmar(
+    !filialFechadaEm("2027-05-01"),
+    "feriado (Dia do Trabalho) caindo num sabado nao fecha a filial"
+  );
+  afirmar(!filialFechadaEm("2026-08-31"), "filial abre em dia util comum");
+
+  // MATRIZ: so fecha 1 de janeiro, mesmo em feriado ou domingo comum.
+  afirmar(matrizFechadaEm("2026-01-01"), "matriz fecha 1 de janeiro");
+  afirmar(!matrizFechadaEm("2026-11-15"), "matriz abre na Proclamacao, mesmo caindo domingo");
+  afirmar(!matrizFechadaEm("2026-02-17"), "matriz abre no Carnaval");
+
+  // proximoDiaUtilFilial pula domingo + feriado ate achar um dia aberto.
+  afirmar(
+    proximoDiaUtilFilial("2026-11-14") === "2026-11-14",
+    "sabado comum e o proprio proximo dia util da filial"
+  );
+  afirmar(
+    proximoDiaUtilFilial("2026-11-15") === "2026-11-16",
+    "domingo (tambem feriado) pula pra segunda"
+  );
+  afirmar(
+    proximoDiaUtilMatriz("2026-01-01") === "2026-01-02",
+    "matriz pula so o 1 de janeiro"
+  );
+  afirmar(
+    proximoDiaUtilMatriz("2026-11-15") === "2026-11-15",
+    "matriz nao pula domingo comum"
+  );
 }
 
 // ---------------------------------------------------------------
