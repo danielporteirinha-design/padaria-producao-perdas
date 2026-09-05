@@ -78,7 +78,7 @@ const CONFERENCIAS = [
   // --- O aviso é desenhado pelo NAVEGADOR, e não pelo service worker
   ["api/notificar-fornada.ts", "webpush: {", "Aviso com bloco notification"],
   ["src/lib/concluidosVistos.ts", "marcarConcluidosVistos", "Sino nos concluidos nao lidos"],
-  ["src/lib/somDeAviso.ts", "não um teto de repetições", "Campainha toca ate abrir a notificacao"],
+  ["src/lib/somDeAviso.ts", "TOCA NO MÁXIMO 3 VEZES E PARA SOZINHA", "Campainha: comentario da funcao reflete o comportamento atual"],
   ["src/types/pedido.ts", "decidirItemDaReposicao", "Matriz decide item por item"],
   ["src/App.tsx", "handleDecidirSuprimentos", "Matriz responde a lista de suprimentos"],
   ["firestore.rules", "A MATRIZ RESPONDE À LISTA DE SUPRIMENTOS", "Regra: matriz responde suprimentos (COLAR NO CONSOLE!)"],
@@ -378,6 +378,10 @@ const CONFERENCIAS = [
   // --- Rodape (versao do app) sempre abaixo da pilha de barras fixas
   // (set/2026, pedido do dono do negocio)
   ["src/index.css", "RODAPE (versao do app) SEMPRE ABAIXO DE TUDO", "Rodape nao fica mais tapado pela barra de busca/acao fixa"],
+
+  // --- Campainha toca no maximo 3 vezes e para sozinha (set/2026,
+  // pedido do dono do negocio)
+  ["src/lib/somDeAviso.ts", "MAXIMO_TOQUES", "Campainha toca no maximo 3 vezes, sem depender de clique para parar"],
 ];
 
 /**

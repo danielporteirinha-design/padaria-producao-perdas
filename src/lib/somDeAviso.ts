@@ -27,6 +27,10 @@
 let contexto: AudioContext | null = null;
 let loopToque: number | null = null; // Guarda a referência do loop contínuo
 
+/** Quantas badaladas a campainha toca antes de parar sozinha — ver
+ * `tocarAvisoSonoro` abaixo. */
+const MAXIMO_TOQUES = 3;
+
 type ConstrutorDeContexto = typeof AudioContext;
 
 function construtor(): ConstrutorDeContexto | undefined {
@@ -69,23 +73,21 @@ export function pararAvisoSonoro(): void {
  * Uma badalada de campainha, e não dois bipes (ago/2026, pedido do dono
  * do negócio: no PC do balcão o aviso precisa soar como campainha).
  *
- * TOCA EM LOOP ATÉ ALGUÉM ABRIR A NOTIFICAÇÃO (set/2026, de volta por
- * pedido do dono do negócio).
+ * TOCA NO MÁXIMO 3 VEZES E PARA SOZINHA (set/2026, pedido do dono do
+ * negócio: "o som da campainha tocará por 3 vezes, diferente de hoje
+ * que só para de tocar quando o usuário clica na notificação").
  *
- * Chegou a ganhar um teto de repetições, por um defeito relatado no
- * celular: sem nada que avisasse o app de que a notificação tinha sido
- * aberta, a campainha tocava para sempre em segundo plano, e a única
- * forma de calar era abrir a notificação mesmo — o que, para quem não
- * via o celular na hora, virava um alarme sem fim.
- *
- * O teto resolvia isso escondendo o problema: um aviso que para sozinho
- * em poucos segundos também deixa de cumprir o papel dele, que é
- * insistir até alguém perceber. A correção de verdade é a notificação
- * do sistema avisar o app quando é aberta — ver `notificationclick` em
- * public/firebase-messaging-sw.js, que manda `parar-aviso` para as
- * janelas abertas — e é isso, não um teto de repetições, que faz a
- * campainha parar. Fechar o aviso dentro do app (ver AvisoGlobal em
- * App.tsx) também para, para quem está com a janela em primeiro plano.
+ * Já tocou em loop sem teto (pedido anterior do dono do negócio) e já
+ * teve teto (por um defeito relatado no celular: sem nada que avisasse
+ * o app de que a notificação tinha sido aberta, a campainha tocava para
+ * sempre em segundo plano). O que mudou desde então é que a notificação
+ * do sistema já avisa o app quando é aberta — ver `notificationclick`
+ * em public/firebase-messaging-sw.js, que manda `parar-aviso` para as
+ * janelas abertas — então um teto de 3 não esconde mais aquele defeito,
+ * só limita quanto tempo o som insiste sozinho. `pararAvisoSonoro()`
+ * continua funcionando para parar ANTES das 3 (clique na notificação ou
+ * fechar o aviso dentro do app, ver AvisoGlobal em App.tsx) — o teto só
+ * garante que, se ninguém clicar em nada, o som não toca para sempre.
  */
 export function tocarAvisoSonoro(): void {
   try {
@@ -97,18 +99,21 @@ export function tocarAvisoSonoro(): void {
 
     const iniciarToqueContinuo = () => {
       if (!contexto || contexto.state !== "running") return;
-      
-      // Toca a primeira vez imediatamente
-      badaladas(contexto);
-      
-      // A cada 3 segundos (tempo suficiente para o som decair), sem
-      // teto — só para com `pararAvisoSonoro()` (clique na notificação,
-      // ou fechar o aviso dentro do app).
-      loopToque = window.setInterval(() => {
-        if (contexto && contexto.state === "running") {
-          badaladas(contexto);
-        }
-      }, 3000);
+
+      let toques = 0;
+      const tocarUmaVez = () => {
+        if (!contexto || contexto.state !== "running") return;
+        badaladas(contexto);
+        toques += 1;
+        // Terceira badalada: para sozinha, sem esperar clique nenhum.
+        if (toques >= MAXIMO_TOQUES) pararAvisoSonoro();
+      };
+
+      // Toca a primeira vez imediatamente...
+      tocarUmaVez();
+      // ...e mais duas, a cada 3 segundos (tempo suficiente para o som
+      // decair) — a própria `tocarUmaVez` encerra o loop na terceira.
+      loopToque = window.setInterval(tocarUmaVez, 3000);
     };
 
     /**
