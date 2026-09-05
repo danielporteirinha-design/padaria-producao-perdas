@@ -366,7 +366,9 @@ export function AssistenteDeVoz({
       setItens((atual) => mesclarDitados(atual, pendentes));
       setSobras(sobrando);
       if (encontrados.length === 0) {
-        setErro(`Não achei nenhum produto em "${dito}".`);
+        if (sobrando.length === 0) {
+          setErro(`Não achei nenhum produto em "${dito}".`);
+        }
         sinalizar("errado");
       } else {
         sinalizar(sobrando.length === 0 && pendentes.length === 0 ? "certo" : "errado");
@@ -389,7 +391,9 @@ export function AssistenteDeVoz({
      * entrou é o que vai faltar na entrega.
      */
     if (encontrados.length === 0) {
-      setErro(`Não achei nenhum produto em "${dito}".`);
+      if (sobrando.length === 0) {
+        setErro(`Não achei nenhum produto em "${dito}".`);
+      }
       sinalizar("errado");
     } else {
       sinalizar(sobrando.length === 0 ? "certo" : "errado");

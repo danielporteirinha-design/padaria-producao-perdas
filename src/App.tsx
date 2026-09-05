@@ -1204,10 +1204,12 @@ export default function App() {
                 fornadas={fornadas}
                 pedidos={pedidos}
                 dataHoje={diaCorrente}
+                operador={operador}
                 encerrados={codigosEncerrados(anunciosEncerrados, diaCorrente)}
                 onEncerrarAnuncio={handleEncerrarAnuncio}
                 onMarcarFornada={handleMarcarFornada}
                 onCadastrarProduto={handleCadastroRelampago}
+                onCadastrarSuprimento={handleCadastrarSuprimento}
                 onDecidirReposicao={handleDecidirReposicao}
                 pedidosSuprimentos={pedidosSuprimentos}
                 catalogoSuprimentos={suprimentos}

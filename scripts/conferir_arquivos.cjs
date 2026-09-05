@@ -125,7 +125,7 @@ const CONFERENCIAS = [
   ["scripts/gerar_icones.py", "cinza_claro", "Logo recortada por regiao (sem casca clara)"],
 
   // --- Reposição: cadastro relâmpago e botões da filial
-  ["src/components/PainelFornoDeHoje.tsx", "cadastrarEAnunciar", "Matriz: cadastrar produto na hora"],
+  ["src/components/PainelFornoDeHoje.tsx", "cadastrarProdutoNovo", "Matriz: cadastrar produto na hora"],
   ["src/components/PainelFornadasFilial.tsx", "botao-fornada", "Filial: Pedir e Excluir do mesmo tamanho"],
   ["src/index.css", "chip-setor", "Estilo do cadastro relampago"],
 
@@ -348,6 +348,15 @@ const CONFERENCIAS = [
   ["src/components/TelaCronograma.tsx", "renderSobra={opcoesParaSobraBuscaMatriz}", "Lista de Producao (matriz): microfone sugere cadastro quando nao reconhece"],
   ["src/index.css", ".botao-assistente-compacto.sinal-certo {\n  width: auto", "Microfone compacto vira pastilha com texto quando a captacao da certo"],
   ["firestore.rules", "CADASTRAR ITEM NOVO agora é de qualquer loja", "Regra: filial cadastra produto novo (COLAR NO CONSOLE!)"],
+
+  // --- Reposicao da matriz: cadastro relampago de produto OU suprimento
+  // pela busca e pela voz; botao de teste removido; ruido do balao de
+  // erro reduzido (set/2026, pedido do dono do negocio)
+  ["src/components/PainelFornoDeHoje.tsx", "onCadastrarSuprimento", "Reposicao (matriz): cadastro relampago tambem aceita suprimento"],
+  ["src/components/PainelFornoDeHoje.tsx", "cadastroRelampago(busca.trim())", "Reposicao (matriz): busca sem resultado sugere cadastro (produto ou suprimento)"],
+  ["src/components/PainelFornoDeHoje.tsx", "renderSobra={opcoesParaSobra}", "Reposicao (matriz): microfone sugere cadastro quando nao reconhece"],
+  ["src/App.tsx", "onCadastrarSuprimento={handleCadastrarSuprimento}\n                onDecidirReposicao", "App: Reposicao da matriz recebe onCadastrarSuprimento"],
+  ["src/components/AssistenteDeVoz.tsx", "if (sobrando.length === 0) {", "Balao de erro generico so aparece quando nao ha sobra para oferecer cadastro"],
 ];
 
 /**
@@ -378,6 +387,7 @@ const DEVEM_TER_SIDO_APAGADOS = [
   ["src/components/PainelPedidosFiliais.tsx", "card de pedidos das filiais — virou linha na sanfona da matriz, e o imprimir voltou para dentro dela"],
   ["src/components/ConfirmarProducao.tsx", "card 'Confirmar o que foi produzido' retirado — pedido do dono do negocio (set/2026), nao precisa mais dele"],
   ["src/components/AvisoPerdaPendente.tsx", "lembrete de lancamento de perdas retirado — pedido do dono do negocio (set/2026), nao precisa mais dele"],
+  ["src/components/TesteDeAvisos.tsx", "botao de teste retirado da Reposicao — pedido do dono do negocio (set/2026)"],
 ];
 
 /**

@@ -11,6 +11,9 @@ import { fornadasDoProduto, horaDaUltimaFornada } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
 import { desfechoDoItem } from "../types/pedido";
 import type { PedidoSuprimentos, Suprimento } from "../types/suprimento";
+import { idDoSuprimento, segmentosExibidos } from "../types/suprimento";
+import { adivinharSegmentoSuprimento } from "../lib/adivinharSuprimento";
+import { nomeSugeridoDaSobra, quantidadeSugeridaDaSobra } from "../lib/sobraDeVoz";
 import type { LinhaDaMatriz } from "../lib/reposicaoDoDia";
 import type { BlocoSessaoImpressao } from "../lib/gerarImagemLista";
 import { anuncioPendente, montarLinhasDaMatriz } from "../lib/reposicaoDoDia";
@@ -24,7 +27,6 @@ import {
 import { LOJAS } from "../lib/lojas";
 import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { contemBusca } from "../lib/texto";
-import { TesteDeAvisos } from "./TesteDeAvisos";
 import { CampoDeBusca } from "./CampoDeBusca";
 import { AssistenteDeVoz } from "./AssistenteDeVoz";
 import { IconeConfere, IconeImpressora, IconeLixeira, IconeSeta, IconeSino } from "./Icones";
@@ -54,6 +56,9 @@ interface PainelFornoDeHojeProps {
     quantidade?: number
   ) => Promise<void>;
   onCadastrarProduto: (input: NovoProdutoInput) => Promise<Produto | undefined>;
+  /** Cadastro relâmpago de suprimento a partir da busca/voz na Reposição
+   * da matriz (set/2026) — mesma operação de PainelFornadasFilial.tsx. */
+  onCadastrarSuprimento: (suprimento: Suprimento) => Promise<void>;
   /**
    * A resposta da matriz ao pedido de uma filial (set/2026).
    *
@@ -103,6 +108,9 @@ interface PainelFornoDeHojeProps {
    * desenha o de Reposição e o de Suprimentos.
    */
   onImprimirSelecionados?: (sessoes: BlocoSessaoImpressao[]) => void;
+  /** Quem está operando o aparelho — carimbado em suprimentos cadastrados
+   * por aqui (mesmo uso de PainelFornadasFilial.tsx). */
+  operador: string;
 }
 
 export function PainelFornoDeHoje({
@@ -113,9 +121,11 @@ export function PainelFornoDeHoje({
   catalogoSuprimentos = [],
   dataHoje,
   encerrados,
+  operador,
   onEncerrarAnuncio,
   onMarcarFornada,
   onCadastrarProduto,
+  onCadastrarSuprimento,
   onDecidirReposicao,
   onDecidirSuprimentos,
   onImprimirReposicao,
@@ -130,9 +140,22 @@ export function PainelFornoDeHoje({
    * dono do negócio) — mesma ideia de TelaPedidoFilial.tsx. */
   const [painelExtraNode, setPainelExtraNode] = useState<HTMLDivElement | null>(null);
   /** O microfone está aberto? Enquanto estiver, a busca some da tela. */
-  const [cadastrando, setCadastrando] = useState(false);
-  const [categoriaNova, setCategoriaNova] = useState("");
   const [salvandoNovo, setSalvandoNovo] = useState(false);
+  const [salvandoSuprimentoNovo, setSalvandoSuprimentoNovo] = useState("");
+  /**
+   * QUANDO A PESSOA DISCORDA DO PALPITE (set/2026, mesma ideia de
+   * PainelFornadasFilial.tsx): o app tenta adivinhar se o que não foi
+   * achado é produto de padaria ou suprimento; um link troca o tipo
+   * sugerido sem reiniciar a busca. `null` = confia no palpite.
+   */
+  const [tipoForcadoPara, setTipoForcadoPara] = useState<{
+    texto: string;
+    tipo: "produto" | "suprimento";
+  } | null>(null);
+  const segmentosCadastro = useMemo(
+    () => segmentosExibidos(catalogoSuprimentos),
+    [catalogoSuprimentos]
+  );
 
   const [aberta, setAberta] = useState<Record<string, boolean>>({});
   /**
@@ -347,26 +370,156 @@ export function PainelFornoDeHoje({
     return sessoes;
   }
 
-  async function cadastrarEAnunciar() {
-    const nome = busca.trim();
-    if (!nome || !categoriaNova || salvandoNovo) return;
+  async function cadastrarProdutoNovo(
+    nome: string,
+    categoria: string,
+    quantidadeInicial?: number | null
+  ) {
+    const limpo = nome.trim();
+    if (!limpo || salvandoNovo) return;
     setSalvandoNovo(true);
     try {
       const novo = await onCadastrarProduto({
-        nome,
-        categoria: categoriaNova,
+        nome: limpo,
+        categoria,
         unidadeProducao: "un",
         ativoNaProducao: true,
-        prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[categoriaNova] ?? null,
+        prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[categoria] ?? null,
       });
       if (!novo) return;
-      await onMarcarFornada(novo.codigoPdv, novo.nome);
-      setCadastrando(false);
-      setCategoriaNova("");
+      await onMarcarFornada(novo.codigoPdv, novo.nome, quantidadeInicial ?? undefined);
+      setBusca("");
+      setTipoForcadoPara(null);
     } catch {
+      // Mensagem já vem do aviso global (ver App.tsx).
     } finally {
       setSalvandoNovo(false);
     }
+  }
+
+  /** Cadastro relâmpago de SUPRIMENTO na Reposição da matriz (set/2026)
+   * — mesma operação de PainelFornadasFilial.tsx. Sem "anunciar" e sem
+   * lista de pedido: a matriz só está incluindo o item no catálogo. */
+  async function cadastrarSuprimentoNovo(nome: string, segmento: string) {
+    const limpo = nome.trim();
+    if (!limpo || salvandoSuprimentoNovo) return;
+    setSalvandoSuprimentoNovo(segmento);
+    try {
+      const novo: Suprimento = {
+        id: idDoSuprimento(limpo),
+        nome: limpo,
+        segmento,
+        ativo: true,
+        criadoPor: operador,
+        criadoEm: new Date().toISOString(),
+      };
+      await onCadastrarSuprimento(novo);
+      setBusca("");
+      setTipoForcadoPara(null);
+    } catch {
+      // Mensagem já vem do aviso global (ver App.tsx).
+    } finally {
+      setSalvandoSuprimentoNovo("");
+    }
+  }
+
+  /**
+   * O CARTÃO EM SI — produto ou suprimento, um toque cadastra (set/2026).
+   * `adivinharSegmentoSuprimento` chuta pelo nome; um link deixa trocar o
+   * palpite sem reiniciar a busca. Aparece tanto na busca digitada
+   * quanto na sobra de voz — por isso recebe `remover`.
+   */
+  function cadastroRelampago(
+    nomeBruto: string,
+    quantidadeInicialSugerida?: number | null,
+    remover?: () => void
+  ) {
+    const nome = nomeBruto.trim();
+    if (!nome) return null;
+
+    const sugestao = adivinharSegmentoSuprimento(nome);
+    const substituindo = tipoForcadoPara?.texto === nome ? tipoForcadoPara.tipo : null;
+    const tipo = substituindo ?? (sugestao ? "suprimento" : "produto");
+
+    function cancelar() {
+      if (remover) remover();
+      else setBusca("");
+      setTipoForcadoPara(null);
+    }
+
+    return (
+      <div className="cadastro-relampago">
+        <p className="nota-rodape">
+          {quantidadeInicialSugerida ? `${quantidadeInicialSugerida} ` : ""}
+          <strong>{nome}</strong> não está no catálogo.
+        </p>
+
+        {tipo === "produto" ? (
+          <>
+            <p className="nota-rodape">Em qual categoria (produto de padaria)?</p>
+            <div className="setores-do-novo">
+              {CATEGORIAS_PRODUCAO.map((categoria) => (
+                <button
+                  key={categoria.chave}
+                  type="button"
+                  className="chip-setor"
+                  disabled={salvandoNovo}
+                  onClick={() =>
+                    void cadastrarProdutoNovo(nome, categoria.chave, quantidadeInicialSugerida)
+                  }
+                >
+                  {categoria.rotulo}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="nota-rodape">
+              {sugestao ? "Parece suprimento — incluir em:" : "Suprimento — incluir em:"}
+            </p>
+            <div className="setores-do-novo">
+              {segmentosCadastro.map((segmento) => {
+                const valorGravado = segmento.personalizado ? segmento.rotulo : segmento.chave;
+                return (
+                  <button
+                    key={segmento.chave}
+                    type="button"
+                    className={`chip-setor ${sugestao === segmento.chave ? "sugerido" : ""}`}
+                    disabled={salvandoSuprimentoNovo !== ""}
+                    onClick={() => void cadastrarSuprimentoNovo(nome, valorGravado)}
+                  >
+                    {salvandoSuprimentoNovo === valorGravado ? "Salvando..." : segmento.rotulo}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <div className="acoes">
+          <button type="button" className="link" onClick={cancelar}>
+            {remover ? "descartar" : "cancelar"}
+          </button>
+          <button
+            type="button"
+            className="link"
+            onClick={() =>
+              setTipoForcadoPara({ texto: nome, tipo: tipo === "produto" ? "suprimento" : "produto" })
+            }
+          >
+            {tipo === "produto" ? "na verdade é suprimento" : "na verdade é produto de padaria"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /** O que oferecer para um trecho que o microfone não reconheceu. */
+  function opcoesParaSobra(trecho: string, remover: () => void) {
+    const nome = nomeSugeridoDaSobra(trecho) || trecho.trim();
+    if (!nome) return null;
+    return cadastroRelampago(nome, quantidadeSugeridaDaSobra(trecho), remover);
   }
 
   function linhaDoProduto(codigoPdv: number) {
@@ -769,58 +922,7 @@ export function PainelFornoDeHoje({
           {buscando ? (
             <>
               {resultados.length === 0 ? (
-                <div className="cadastro-relampago">
-                  {!cadastrando ? (
-                    <>
-                      <p className="nota-rodape">Não está no catálogo.</p>
-                      <button
-                        type="button"
-                        className="secundario"
-                        onClick={() => {
-                          setCadastrando(true);
-                          setCategoriaNova("");
-                        }}
-                      >
-                        Cadastrar "{busca.trim()}"
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <strong className="nome-do-novo">{busca.trim()}</strong>
-                      <p className="nota-rodape">Em qual setor?</p>
-                      <div className="setores-do-novo">
-                        {CATEGORIAS_PRODUCAO.map((categoria) => (
-                          <button
-                            key={categoria.chave}
-                            type="button"
-                            className={`chip-setor ${categoriaNova === categoria.chave ? "ativo" : ""}`}
-                            aria-pressed={categoriaNova === categoria.chave}
-                            onClick={() => setCategoriaNova(categoria.chave)}
-                          >
-                            {categoria.rotulo}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="acoes">
-                        <button
-                          type="button"
-                          className="link"
-                          onClick={() => setCadastrando(false)}
-                        >
-                          cancelar
-                        </button>
-                        <button
-                          type="button"
-                          className="primario"
-                          disabled={!categoriaNova || salvandoNovo}
-                          onClick={() => void cadastrarEAnunciar()}
-                        >
-                          {salvandoNovo ? "Salvando..." : "Cadastrar e anunciar"}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
+                cadastroRelampago(busca.trim())
               ) : (
                 <div className="grupo-forno">{resultados.map((p) => linhaDoProduto(p.codigoPdv))}</div>
               )}
@@ -846,6 +948,7 @@ export function PainelFornoDeHoje({
               portalConteudoExtra={painelExtraNode}
               produtos={produtos}
               modo="anunciar"
+              renderSobra={opcoesParaSobra}
               onConfirmar={async (itens) => {
                 if (!itens || itens.length === 0) {
                   setFeedbackVoz({
@@ -935,7 +1038,6 @@ export function PainelFornoDeHoje({
           </div>
         )}
 
-        <TesteDeAvisos destino="filial" />
       </div>
     </div>
   );
