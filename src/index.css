@@ -1224,6 +1224,11 @@ button.perigo:hover { background: #822525; }
 .titulo-forno { flex: 1; font-size: 16px; font-weight: 700; }
 .painel-forno.aberto .seta-sessao { transform: rotate(180deg); }
 .corpo-forno { padding: 14px; }
+/* Espaco extra no fim da lista quando o botao fixo "Imprimir
+   selecionados" esta na tela (set/2026) - mesma ideia de
+   `.tela.com-acao-fixa` e `.painel-fornadas.com-acao-fixa`, aqui para
+   a raiz propria deste painel (`.painel-forno`). */
+.painel-forno.com-acao-fixa .corpo-forno { padding-bottom: 76px; }
 .grupo-forno h4 {
   margin: 14px 0 6px;
   font-size: 13px;

@@ -329,6 +329,8 @@ const CONFERENCIAS = [
   ["src/components/TelaRegistroPerda.tsx", "barra-busca-fixa", "Registro de perda: trocar produto por busca+microfone fixos"],
   ["src/index.css", "--altura-barra-busca-fixa: 82px", "Barra de busca e microfone maiores, alvo de toque destacado"],
   ["src/index.css", "width: 64px", "Microfone compacto com 64px (era 48px)"],
+  ["src/components/PainelFornoDeHoje.tsx", "acao-fixa-secundaria", "Imprimir selecionados: botao fixo perto do polegar (Anuncio de fornada)"],
+  ["src/index.css", ".painel-forno.com-acao-fixa .corpo-forno", "Espaco reservado para o botao fixo de Imprimir selecionados"],
 ];
 
 /**

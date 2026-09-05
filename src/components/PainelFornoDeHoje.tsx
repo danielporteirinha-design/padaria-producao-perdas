@@ -458,22 +458,6 @@ export function PainelFornoDeHoje({
                   {pedidosPendentesDeReposicao.length === 1 ? "pedido" : "pedidos"})
                 </button>
               )}
-            {/* LISTA PERSONALIZADA (set/2026, pedido do dono do negócio):
-                marca itens confirmados de reposição e/ou suprimentos, de
-                qualquer filial, e imprime tudo junto num comprovante só
-                — uma seção por filial. */}
-            {chave === "concluidos" && onImprimirSelecionados && selecionados.size > 0 && (
-              <button
-                type="button"
-                className="botao-fornada largura-cheia"
-                onClick={() => {
-                  onImprimirSelecionados(montarSessoesSelecionadas());
-                  setSelecionados(new Set());
-                }}
-              >
-                <IconeImpressora tamanho={15} /> Imprimir selecionados ({selecionados.size})
-              </button>
-            )}
             {lista.length === 0 ? (
               <p className="nota-rodape">Nada aqui hoje.</p>
             ) : chave === "concluidos" ? (
@@ -750,7 +734,7 @@ export function PainelFornoDeHoje({
   }
 
   return (
-    <div className="painel-forno">
+    <div className={`painel-forno ${selecionados.size > 0 ? "com-acao-fixa" : ""}`}>
       <div className="corpo-forno">
         {feedbackVoz && (
           <div
@@ -778,7 +762,10 @@ export function PainelFornoDeHoje({
             da busca (aqui) e a conferência de voz (entregue por portal
             pelo AssistenteDeVoz.tsx). A barra em si — busca + microfone
             compacto — é fixa, logo abaixo. */}
-        <div ref={setPainelExtraNode} className="painel-extra-fixo">
+        <div
+          ref={setPainelExtraNode}
+          className={`painel-extra-fixo ${selecionados.size > 0 ? "acima-da-acao-fixa" : ""}`}
+        >
           {buscando ? (
             <>
               {resultados.length === 0 ? (
@@ -923,6 +910,30 @@ export function PainelFornoDeHoje({
 
         {sanfona("semResposta", "Pedidos sem resposta", semResposta, { cobraResposta: true })}
         {sanfona("concluidos", "Pedidos concluídos", concluidos)}
+
+        {/* BOTAO FIXO, PERTO DO POLEGAR (set/2026, pedido do dono do
+            negocio: "o botao de imprimir deve aparecer... na parte
+            inferior da tela, na altura do polegar, e no mesmo estilo de
+            cor destacado do botao do microfone"). Mesmo padrao de
+            `.acao-fixa-secundaria` + `.primario` ja usado em Enviar
+            pedido, Confirmar producao e Incluir/cancelar — a mesma cor
+            de acento do microfone compacto. Independente da sanfona
+            estar aberta ou fechada: quem marcou itens e fechou a
+            sanfona por engano nao perde a selecao nem o botao. */}
+        {onImprimirSelecionados && selecionados.size > 0 && (
+          <div className="acao-fixa-secundaria">
+            <button
+              type="button"
+              className="primario"
+              onClick={() => {
+                onImprimirSelecionados(montarSessoesSelecionadas());
+                setSelecionados(new Set());
+              }}
+            >
+              <IconeImpressora tamanho={15} /> Imprimir selecionados ({selecionados.size})
+            </button>
+          </div>
+        )}
 
         <TesteDeAvisos destino="filial" />
       </div>
