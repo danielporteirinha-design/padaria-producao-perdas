@@ -11,7 +11,7 @@ rules_version = '2';
 // o cronograma, mantém o catálogo e produz para todos. Por isso:
 //
 //   produtos  -> todos leem (a filial precisa dos nomes para pedir),
-//                só a matriz escreve
+//                qualquer loja cadastra item NOVO, só a matriz corrige/exclui
 //   planos    -> todos leem (a filial vê o que foi produzido),
 //                só a matriz escreve
 //   perdas    -> todos leem (a matriz precisa da visão consolidada),
@@ -53,11 +53,23 @@ service cloud.firestore {
       return lojaConhecida() && lojaDoUsuario() == 'MATRIZ';
     }
 
-    // Catálogo compartilhado: a filial precisa ler para montar o pedido,
-    // mas quem cadastra, corrige e exclui produto é a matriz.
+    // Catálogo compartilhado: a filial precisa ler para montar o pedido.
+    // CADASTRAR ITEM NOVO agora é de qualquer loja (set/2026, pedido do
+    // dono do negócio: "as filiais passarão a ter permissão de
+    // cadastrar produtos ou suprimentos") — mesma ideia já usada em
+    // suprimentos, com validação de tipo no lugar de dono. CORRIGIR e
+    // EXCLUIR um produto já existente continuam só da matriz: quem
+    // garante essa fronteira é o próprio Firestore — "create" só vale
+    // enquanto o documento (codigoPdv) ainda não existe; a partir daí
+    // toda escrita no mesmo id cai em "update".
     match /produtos/{codigoPdv} {
       allow read: if lojaConhecida();
-      allow write: if ehMatriz();
+      allow create: if lojaConhecida()
+                    && request.resource.data.nome is string
+                    && request.resource.data.categoria is string
+                    && request.resource.data.unidadeProducao is string
+                    && request.resource.data.ativoNaProducao is bool;
+      allow update, delete: if ehMatriz();
     }
 
     // Cronograma de produção — só a matriz produz.

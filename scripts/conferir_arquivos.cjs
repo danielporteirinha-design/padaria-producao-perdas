@@ -347,6 +347,7 @@ const CONFERENCIAS = [
   ["src/components/TelaCronograma.tsx", "cadastroRelampagoBuscaMatriz", "Lista de Producao (matriz): cadastro relampago a partir da busca/voz"],
   ["src/components/TelaCronograma.tsx", "renderSobra={opcoesParaSobraBuscaMatriz}", "Lista de Producao (matriz): microfone sugere cadastro quando nao reconhece"],
   ["src/index.css", ".botao-assistente-compacto.sinal-certo {\n  width: auto", "Microfone compacto vira pastilha com texto quando a captacao da certo"],
+  ["firestore.rules", "CADASTRAR ITEM NOVO agora é de qualquer loja", "Regra: filial cadastra produto novo (COLAR NO CONSOLE!)"],
 ];
 
 /**
