@@ -1,44 +1,29 @@
 /**
  * src/components/AvisoDeAtualizacao.tsx
  * ---------------------------------------------------------------
- * Faixa de "versão nova disponível" (ago/2026).
+ * Registra a atualização do app — SEM faixa visível (set/2026, pedido
+ * do dono do negócio: "a mensagem de atualização avisando que vai ser
+ * atualizado sozinho ainda aparece, quero dispensá-la").
  *
- * FICA NO TOPO, E NÃO EMBAIXO
- * ----------------------------
- * A faixa de retorno de operação (AvisoGlobal) mora embaixo, perto do
- * polegar, porque responde ao que a pessoa acabou de fazer. Esta aqui é
- * outra coisa: é um anúncio sobre o APP, não sobre a ação em curso. No
- * mesmo canto, as duas se atropelariam — e a que sumiria por baixo seria
- * justamente a confirmação do que a pessoa estava fazendo.
+ * A faixa "Nova versão disponível / Atualizar agora" que existia aqui
+ * foi removida — não porque a atualização em si mudou, mas porque ela
+ * já acontece sozinha (ver `armarAplicacaoSozinha` em
+ * src/lib/atualizacao.ts) e um aviso permanente sobre algo que não
+ * exige mais nenhuma ação da pessoa tinha virado só ruído. Quem quer
+ * saber o que mudou é avisado pelo NovidadesDoApp — que aparece uma
+ * única vez por aparelho, assim que a versão nova entra em uso, e é a
+ * única faixa que continua na tela (ver src/components/NovidadesDoApp.tsx).
  *
- * NÃO SOME SOZINHA
- * -----------------
- * Diferente do aviso de sucesso, esta faixa fica até alguém tocar. É o
- * que garante que ninguém passe o expediente numa versão antiga achando
- * que está na nova — o problema que o modo automático anterior escondia.
- *
- * O BOTÃO REINICIA DE VERDADE
- * ----------------------------
- * "Reiniciar o aplicativo" num PWA instalado não é fechar a janela: o
- * service worker antigo continua no controle até TODAS as abas fecharem,
- * e no PC do caixa isso não acontece. O botão ativa o service worker novo
- * e recarrega — o operador não precisa saber de nada disso.
+ * Este componente segue existindo mesmo sem nada para renderizar,
+ * porque é ELE quem registra o service worker (`observarAtualizacao`)
+ * — e isso precisa valer também na tela de login e na de carregamento,
+ * o mesmo motivo que já o mantinha fora do App (ver src/main.tsx).
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { observarAtualizacao, type Recarregar } from "../lib/atualizacao";
-import { IconeConfere } from "./Icones";
 
-/**
- * Componente autossuficiente: registra o service worker, escuta a
- * chegada da versão nova e só então aparece. Vive fora do App (ver
- * src/main.tsx) para valer também na tela de login e na de carregamento
- * — uma versão nova publicada não pode depender de alguém já estar
- * logado para ser anunciada.
- */
 export function AvisoDeAtualizacao() {
-  const [temVersaoNova, setTemVersaoNova] = useState(false);
-  const [reiniciando, setReiniciando] = useState(false);
   const recarregar = useRef<Recarregar | null>(null);
 
   useEffect(() => {
@@ -46,38 +31,12 @@ export function AvisoDeAtualizacao() {
     // guard existe pelo StrictMode do desenvolvimento, que monta o
     // componente duas vezes de propósito.
     if (recarregar.current) return;
-    recarregar.current = observarAtualizacao(() => setTemVersaoNova(true));
+    // `armarAplicacaoSozinha`, disparada de dentro de `observarAtualizacao`
+    // assim que a versão nova chega, já cuida sozinha de aplicá-la
+    // quando a aba sair de vista — não sobrou nenhum botão manual que
+    // precise chamar a função de recarregar de volta.
+    recarregar.current = observarAtualizacao(() => {});
   }, []);
 
-  async function reiniciar() {
-    setReiniciando(true);
-    try {
-      await recarregar.current?.();
-    } catch (erro) {
-      // Se a ativação falhar, um recarregamento simples ainda costuma
-      // pegar a versão nova — e ficar preso num botão "Reiniciando..."
-      // seria pior que qualquer um dos dois.
-      console.warn("Falha ao ativar a versão nova; recarregando mesmo assim:", erro);
-      window.location.reload();
-    }
-  }
-
-  if (!temVersaoNova) return null;
-
-  return (
-    <div className="faixa-atualizacao" role="status">
-      <IconeConfere tamanho={20} />
-      <span className="texto-atualizacao">
-        <strong>Nova versão disponível</strong>
-        {/* NÃO EXIGE MAIS O TOQUE (set/2026, pedido do dono do negócio):
-            aplica sozinha assim que a tela sai de vista — ver
-            `armarAplicacaoSozinha` em src/lib/atualizacao.ts. O botão
-            continua aqui para quem quer forçar na hora. */}
-        <span>Aplicamos sozinhos assim que você sair desta tela, ou toque para já.</span>
-      </span>
-      <button type="button" className="primario" disabled={reiniciando} onClick={reiniciar}>
-        {reiniciando ? "Reiniciando..." : "Atualizar agora"}
-      </button>
-    </div>
-  );
+  return null;
 }
