@@ -313,6 +313,19 @@ button.link {
 .unidade-fixa { font-weight: 700; color: var(--cor-texto-suave); padding: 0 8px; }
 .preview-conversao { color: var(--cor-sucesso); font-size: 13.5px; margin: 0; }
 .erro-conversao { color: var(--cor-alerta); font-size: 13.5px; margin: 0; }
+/* O BALÃO DE ERRO DA VOZ GANHA UM "X" (set/2026, pedido do dono do
+   negócio: "quando um comando não é identificado, o balão... deve ter
+   um botão fechar"). Modificador à parte — `.erro-conversao` sozinho
+   continua sendo só um texto vermelho nos outros usos do app (login,
+   confirmar com senha, sugestão por IA etc.), que não têm botão nenhum
+   para alinhar. */
+.erro-conversao.com-fechar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.erro-conversao.com-fechar > span { flex: 1; }
 
 .barras { display: flex; flex-direction: column; gap: 8px; }
 .barra { background: var(--cor-acento); height: 100%; border-radius: 999px; }
@@ -1719,6 +1732,27 @@ button.perigo:hover { background: #822525; }
    baixo, uma pista visual errada. */
 .botao-assistente-compacto.ouvindo {
   box-shadow: 0 3px 12px rgba(155, 44, 44, 0.5), 0 0 0 4px rgba(155, 44, 44, 0.22);
+}
+/* ENQUANTO OUVE, O CÍRCULO VIRA PASTILHA COM TEXTO (set/2026, queixa do
+   dono do negócio: "ficou difícil perceber se eu poderia continuar
+   falando ou deveria clicar novamente" — a cor mais escura do anel
+   sozinha, num círculo de 64px, não bastava). Muda de FORMATO em vez de
+   piscar: a pulsação já tinha sido tirada de propósito (ago/2026,
+   "disputa a atenção justamente no momento em que ela precisa se
+   concentrar na frase") e continua fora daqui — isto é uma troca de
+   forma única, não uma repetição. O rótulo ("Ouvindo...") já existe no
+   componente para o modo não-compacto; aqui só volta a aparecer
+   enquanto o microfone está de fato ativo. */
+.botao-assistente-compacto.ouvindo {
+  width: auto;
+  min-width: 64px;
+  padding: 0 20px 0 18px;
+  border-radius: 999px;
+  gap: 10px;
+}
+.botao-assistente-compacto.ouvindo .rotulo-assistente {
+  display: inline;
+  white-space: nowrap;
 }
 .botao-assistente-compacto.sinal-certo {
   box-shadow: 0 3px 12px rgba(47, 122, 74, 0.5), 0 0 0 4px rgba(47, 122, 74, 0.22);

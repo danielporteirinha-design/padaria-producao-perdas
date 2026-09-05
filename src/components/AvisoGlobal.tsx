@@ -36,6 +36,22 @@ export function AvisoGlobal({ aviso, onFechar }: AvisoGlobalProps) {
     return () => clearTimeout(id);
   }, [aviso, onFechar]);
 
+  /**
+   * ERRO TAMBÉM FECHA AO TOCAR EM QUALQUER LUGAR DA TELA (set/2026,
+   * pedido do dono do negócio, estendido a "todas as abas de todas as
+   * lojas" — esta faixa é a mesma para o app inteiro, então um só ajuste
+   * aqui já cobre isso). O "×" já existia; isto cobre o toque fora dele.
+   * Sucesso não entra aqui: já some sozinho pelo efeito acima.
+   */
+  useEffect(() => {
+    if (!aviso || aviso.tipo !== "erro") return;
+    function fecharAoClicarNaTela() {
+      onFechar();
+    }
+    document.addEventListener("click", fecharAoClicarNaTela);
+    return () => document.removeEventListener("click", fecharAoClicarNaTela);
+  }, [aviso, onFechar]);
+
   if (!aviso) return null;
 
   return (

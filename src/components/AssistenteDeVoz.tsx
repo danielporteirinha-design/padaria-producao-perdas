@@ -211,6 +211,30 @@ export function AssistenteDeVoz({
     }, 2000);
   }
 
+  /**
+   * FECHA O BALÃO DE ERRO AO TOCAR EM QUALQUER LUGAR DA TELA (set/2026,
+   * pedido do dono do negócio: "quando um comando não é identificado, o
+   * balão... deve ter um botão fechar, quando o usuário clicar em
+   * qualquer parte da tela, inclusive num ícone 'x'"). O "x" está no
+   * JSX abaixo; isto cobre o "em qualquer parte da tela". Só liga o
+   * ouvinte enquanto HÁ erro — sem isso, todo toque no app pagaria o
+   * custo de um listener em document à toa.
+   *
+   * Seguro quanto a fechar sozinho assim que aparece: `erro` nasce de
+   * uma resposta assíncrona do microfone (nunca dentro de um clique), e
+   * o clique que abriu o microfone já terminou de se propagar bem antes
+   * deste efeito rodar — não há como o mesmo toque contar como "clicou
+   * fora" e apagar o aviso na hora.
+   */
+  useEffect(() => {
+    if (!erro) return;
+    function fecharAoClicarNaTela() {
+      setErro("");
+    }
+    document.addEventListener("click", fecharAoClicarNaTela);
+    return () => document.removeEventListener("click", fecharAoClicarNaTela);
+  }, [erro]);
+
   const cancelarEscuta = useRef<(() => void) | null>(null);
   const montado = useRef(true);
   useEffect(() => {
@@ -474,7 +498,19 @@ export function AssistenteDeVoz({
           Entendendo o que você disse...
         </p>
       )}
-      {erro && <p className="erro-conversao">{erro}</p>}
+      {erro && (
+        <p className="erro-conversao com-fechar" role="alert">
+          <span>{erro}</span>
+          <button
+            type="button"
+            className="fechar-aviso"
+            onClick={() => setErro("")}
+            aria-label="Fechar aviso de erro"
+          >
+            ×
+          </button>
+        </p>
+      )}
 
       {/* O BLOCO VERMELHO VEM ANTES DA CONFERÊNCIA, E FORA DELA
           (set/2026, pedido do dono do negócio).

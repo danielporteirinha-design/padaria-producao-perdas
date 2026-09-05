@@ -331,6 +331,11 @@ const CONFERENCIAS = [
   ["src/index.css", "width: 64px", "Microfone compacto com 64px (era 48px)"],
   ["src/components/PainelFornoDeHoje.tsx", "acao-fixa-secundaria", "Imprimir selecionados: botao fixo perto do polegar (Anuncio de fornada)"],
   ["src/index.css", ".painel-forno.com-acao-fixa .corpo-forno", "Espaco reservado para o botao fixo de Imprimir selecionados"],
+  ["src/components/TelaPedidoFilial.tsx", "emFocoAntes", "Lista de Producao (filial): sanfonas recolhem ao focar na montagem/busca"],
+  ["src/index.css", ".botao-assistente-compacto.ouvindo {\n  width: auto", "Microfone compacto vira pastilha com texto enquanto ouve"],
+  ["src/index.css", ".erro-conversao.com-fechar", "Balao de erro da voz ganha layout para o botao X"],
+  ["src/components/AssistenteDeVoz.tsx", "fecharAoClicarNaTela", "Erro de voz fecha ao tocar em qualquer lugar da tela"],
+  ["src/components/AvisoGlobal.tsx", "fecharAoClicarNaTela", "Aviso global de erro fecha ao tocar em qualquer lugar da tela"],
 ];
 
 /**

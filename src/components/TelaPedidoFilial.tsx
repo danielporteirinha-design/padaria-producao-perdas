@@ -19,7 +19,7 @@
  * pior que produzir sem ele.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { NovoProdutoInput, Produto } from "../types/produto";
 import type { ItemPlanoProducao } from "../types/producao";
 import type { PedidoFilial } from "../types/pedido";
@@ -132,6 +132,24 @@ export function TelaPedidoFilial({
     () => lerRascunhoPedido(loja.id, dataAlvo) ?? pedidoExistente?.itens ?? []
   );
   const [dataCarregada, setDataCarregada] = useState(dataAlvo);
+
+  /**
+   * O CARD DE MONTAGEM (OU A BUSCA) VIRA O FOCO DA TELA (set/2026,
+   * pedido do dono do negócio): assim que a pessoa começa a montar a
+   * lista (primeiro item incluído) ou começa a buscar um produto, as
+   * sanfonas por categoria recolhem sozinhas — competir por atenção com
+   * o cartão de montagem, que já mostra tudo que foi incluído, deixou de
+   * fazer sentido. Só na TRANSIÇÃO de "nada" para "em foco": depois
+   * disso a pessoa pode reabrir uma categoria à mão (para cadastrar um
+   * produto novo, por exemplo) sem que o próximo item ditado feche de
+   * volta.
+   */
+  const emFoco = itens.length > 0 || busca.trim().length > 0;
+  const emFocoAntes = useRef(false);
+  useEffect(() => {
+    if (emFoco && !emFocoAntes.current) setExpandido({});
+    emFocoAntes.current = emFoco;
+  }, [emFoco]);
 
   // Ao trocar de data, recarrega o rascunho daquele dia — ou, na falta
   // dele, o pedido gravado.
@@ -310,10 +328,6 @@ export function TelaPedidoFilial({
         const onde = novo.findIndex((i) => i.codigoPdv === produto.codigoPdv);
         if (onde >= 0) novo[onde] = { ...novo[onde], quantidadeUnidades: quantidade };
         else novo.push({ codigoPdv: produto.codigoPdv, quantidadeUnidades: quantidade });
-        // Abre a categoria do item ditado: sem isso ele entra na lista e
-        // fica invisível atrás de uma sanfona fechada, e a pessoa fica
-        // sem saber se o app entendeu.
-        setExpandido((a) => ({ ...a, [produto.categoria]: true }));
       }
       return novo;
     });
