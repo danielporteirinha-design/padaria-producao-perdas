@@ -51,7 +51,6 @@ import { ouvirAvisosEmPrimeiroPlano, registrarAparelhoSePermitido } from "./lib/
 import { AtivarAvisos } from "./components/AtivarAvisos";
 import { PainelFornoDeHoje } from "./components/PainelFornoDeHoje";
 import { PainelFornadasFilial } from "./components/PainelFornadasFilial";
-import { TelaSuprimentos } from "./components/TelaSuprimentos";
 import { ExportarFita } from "./components/ExportarFita";
 import type { BlocoSessaoImpressao } from "./lib/gerarImagemLista";
 import { fornadasNaoVistas, marcarFornadasComoVistas } from "./lib/fornadasVistas";
@@ -87,9 +86,14 @@ interface DefinicaoAba {
  */
 const ABAS_LIBERADAS: Aba[] = [
   "fornada",
-  // Suprimentos voltou em set/2026: a Reposição já rodou no balcão, e a
-  // lista de embalagens é a segunda coisa que a filial pede todo dia.
-  "suprimentos",
+  // SUPRIMENTOS DEIXOU DE SER UMA ABA PRÓPRIA (set/2026, pedido do dono
+  // do negócio: "simplificar o fluxo... em uma única aba"). O pedido de
+  // embalagens e limpeza foi incorporado à Reposição — busca,
+  // microfone e cadastro relâmpago combinados, ver
+  // PainelFornadasFilial.tsx. "suprimentos" continua existindo como
+  // tipo (compatibilidade com pedidos antigos e com src/lib/rota.ts),
+  // mas não é mais uma aba nesta lista.
+  //
   // Lista de Produção voltou em set/2026, pedido do dono do negócio —
   // para a matriz (cronograma) e para as filiais (pedido) juntas.
   "cronograma", // (matriz — Lista de Produção)
@@ -116,7 +120,6 @@ const TODAS_AS_ABAS: Record<"matriz" | "filial", DefinicaoAba[]> = {
   ],
   filial: [
     { chave: "fornada", rotulo: "Reposição" },
-    { chave: "suprimentos", rotulo: "Supri\u00ADmentos" },
     { chave: "perdas", rotulo: "Perdas" },
     { chave: "pedido", rotulo: "Lista de Produção" },
   ],
@@ -1236,22 +1239,12 @@ export default function App() {
               encerrados={codigosEncerrados(anunciosEncerrados, diaCorrente)}
               onSalvarPedido={handleSalvarPedido}
               onCadastrarProduto={handleCadastroRelampago}
+              onCadastrarSuprimento={handleCadastrarSuprimento}
+              onEnviarLista={handleEnviarSuprimentos}
               onImprimir={setReposicaoParaImprimir}
+              onImprimirSuprimentos={setSuprimentosParaImprimir}
             />
           ))}
-
-        {abaAtual === "suprimentos" && (
-          <TelaSuprimentos
-            loja={loja}
-            catalogo={suprimentos}
-            pedidos={pedidosSuprimentos}
-            operador={operador}
-            hoje={diaCorrente}
-            onCadastrarSuprimento={handleCadastrarSuprimento}
-            onEnviarLista={handleEnviarSuprimentos}
-            onImprimir={setSuprimentosParaImprimir}
-          />
-        )}
 
         {abaAtual === "pedido" && (
           <TelaPedidoFilial

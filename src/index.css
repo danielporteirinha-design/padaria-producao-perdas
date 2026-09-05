@@ -2245,6 +2245,16 @@ button.perigo:hover { background: #822525; }
   color: var(--cor-acento-texto);
   font-weight: 700;
 }
+/* O PALPITE DE SEGMENTO (set/2026, cadastro relâmpago combinado de
+   produto/suprimento): borda colorida, sem preencher — diferente do
+   ".ativo" (fill sólido, quando o toque já escolheu), esta pastilha
+   é só uma sugestão, e a pessoa continua livre para tocar em
+   qualquer outra. */
+.chip-setor.sugerido {
+  border-color: var(--cor-acento);
+  border-width: 2px;
+  font-weight: 700;
+}
 /* "+ nova sessão" — visualmente diferente das pastilhas de segmento
    existentes, porque cria uma sanfona nova em vez de escolher uma que
    já existe (set/2026, pedido do dono do negócio). */

@@ -219,7 +219,7 @@ const CONFERENCIAS = [
   ["src/components/PainelFornadasFilial.tsx", "linhaDeSuprimentos", "Status do pedido de suprimentos mora na Reposicao"],
 
   // --- Cadastro relampago de produto, matriz e filiais (set/2026)
-  ["src/components/PainelFornadasFilial.tsx", "cadastrarEIncluir", "Filial cadastra produto novo direto na Reposicao"],
+  ["src/components/PainelFornadasFilial.tsx", "cadastrarProdutoNovo", "Filial cadastra produto novo direto na Reposicao"],
   ["src/components/TelaCronograma.tsx", "cadastrarProduto", "Matriz cadastra produto novo direto na Lista de Producao"],
   ["src/components/TelaPedidoFilial.tsx", "cadastrarProduto", "Filial cadastra produto novo direto na Lista de Producao"],
   ["src/App.tsx", "onCadastrarProduto={handleCadastroRelampago}", "Cadastro relampago ligado nas tres telas novas"],
@@ -275,6 +275,15 @@ const CONFERENCIAS = [
   ["src/App.tsx", 'irParaAba("fornada");\n  }\n\n  async function handleAnularPerda', "Confirmar Lista de Producao (matriz) volta para a Reposicao"],
   ["src/App.tsx", "await avisarMatrizDoPedido(pedido);", "Enviar pedido (filial) volta para a Reposicao antes de avisar"],
   ["src/App.tsx", "a navegação não espera a rede", "Enviar suprimentos (filial) volta para a Reposicao"],
+  ["src/components/PainelFornadasFilial.tsx", "onCadastrarSuprimento", "Reposicao e Suprimentos numa aba so"],
+  ["src/components/PainelFornadasFilial.tsx", "OFFSET_SUPRIMENTO", "Microfone reconhece produto e suprimento juntos"],
+  ["src/components/PainelFornadasFilial.tsx", "enviarTudo", "Um Enviar manda os dois pedidos"],
+  ["src/components/PainelFornadasFilial.tsx", "cadastroRelampago", "Cadastro relampago decide produto ou suprimento"],
+  ["src/lib/adivinharSuprimento.ts", "adivinharSegmentoSuprimento", "Palpite de segmento por palavra-chave"],
+  ["src/components/AssistenteDeVoz.tsx", "remover: () => void", "Descartar so o trecho que a voz nao entendeu"],
+  ["src/App.tsx", "onCadastrarSuprimento={handleCadastrarSuprimento}", "Reposicao da filial ganha os handlers de suprimentos"],
+  ["src/lib/rota.ts", "ALIAS_DE_ABA", "Push antigo de suprimentos cai na Reposicao"],
+  ["src/index.css", "chip-setor.sugerido", "Pastilha do segmento sugerido"],
 ];
 
 /**

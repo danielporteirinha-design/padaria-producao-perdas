@@ -87,8 +87,15 @@ interface AssistenteDeVozProps {
    * cadastrado ainda, e repetir não resolve nada: a pessoa precisa de
    * um jeito de cadastrar o item ali mesmo. Sem esta função a tela
    * continua exatamente como antes.
+   *
+   * O SEGUNDO PARÂMETRO REMOVE SÓ ESTE TRECHO (set/2026, pedido do dono
+   * do negócio: "fique mais fácil e intuitivo cancelar"). Antes, quem
+   * desistia de cadastrar um item ouvido por engano só tinha a opção de
+   * limpar a fala inteira, levando junto os itens que TINHAM sido
+   * entendidos certo. Chamar `remover()` tira só o trecho da lista
+   * "não entrou" — o resto da fala continua de pé.
    */
-  renderSobra?: (trecho: string) => React.ReactNode;
+  renderSobra?: (trecho: string, remover: () => void) => React.ReactNode;
 }
 
 export function AssistenteDeVoz({
@@ -397,7 +404,9 @@ export function AssistenteDeVoz({
             ? sobras.map((sobra, indice) => (
                 <div key={`${sobra}-${indice}`} className="linha-fora-da-lista">
                   <span className="trecho-fora-da-lista">{sobra}</span>
-                  {renderSobra(sobra)}
+                  {renderSobra(sobra, () =>
+                    setSobras((atual) => atual.filter((_, i) => i !== indice))
+                  )}
                 </div>
               ))
             : sobras.map((sobra, indice) => (

@@ -23,8 +23,19 @@ const ABAS_ENDERECAVEIS = [
   "perdas",
   "pedido",
   "analises",
-  "suprimentos",
 ] as const;
+
+/**
+ * ALIAS DE ABAS QUE SAÍRAM DO AR (set/2026): a aba "Suprimentos" foi
+ * incorporada à Reposição (ver PainelFornadasFilial.tsx). Um aviso
+ * antigo ainda parado na bandeja de notificações do celular, ou uma
+ * URL salva de antes da mudança, continua abrindo em algum lugar que
+ * existe — onde o status de suprimentos passou a morar — em vez de
+ * cair numa tela em branco.
+ */
+const ALIAS_DE_ABA: Record<string, AbaEnderecavel> = {
+  suprimentos: "fornada",
+};
 
 export type AbaEnderecavel = (typeof ABAS_ENDERECAVEIS)[number];
 
@@ -41,6 +52,7 @@ export function abaDaUrl(url: string): AbaEnderecavel | null {
   if (!consulta) return null;
   const valor = new URLSearchParams(consulta).get("aba");
   if (!valor) return null;
+  if (valor in ALIAS_DE_ABA) return ALIAS_DE_ABA[valor];
   return (ABAS_ENDERECAVEIS as readonly string[]).includes(valor)
     ? (valor as AbaEnderecavel)
     : null;

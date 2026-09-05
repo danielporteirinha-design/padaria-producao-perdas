@@ -1,7 +1,21 @@
 /**
  * src/components/PainelFornadasFilial.tsx
  * ---------------------------------------------------------------
- * A aba REPOSIÇÃO da filial (reescrita em ago/2026, com suporte a suprimentos).
+ * A aba REPOSIÇÃO da filial (reescrita em ago/2026, com suporte a suprimentos;
+ * set/2026, Suprimentos deixou de ser uma aba própria e passou a morar aqui).
+ *
+ * REPOSIÇÃO E SUPRIMENTOS NUMA TELA SÓ (set/2026, pedido do dono do
+ * negócio: "simplificar o fluxo... em uma única aba").
+ *
+ * A Reposição já roda no balcão e os suprimentos são o segundo pedido do
+ * mesmo momento do dia — duas abas para uma única tarefa ("pedir o que
+ * falta") era troca de tela para fazer a mesma coisa duas vezes. Agora
+ * busca, microfone e "pedido em montagem" tratam produto de padaria e
+ * suprimento como a MESMA lista: um catálogo combinado na busca e no
+ * microfone, um cartão de montagem com os dois tipos de item, um único
+ * botão Enviar que manda os dois pedidos (cada um para o lugar certo no
+ * banco — são documentos diferentes por baixo, mas isso não é problema
+ * de quem está pedindo).
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -10,7 +24,14 @@ import type { ItemPlanoProducao } from "../types/producao";
 import type { FornadaPronta } from "../types/fornada";
 import type { PedidoFilial } from "../types/pedido";
 import { idDaReposicao } from "../types/pedido";
-import type { PedidoSuprimentos, Suprimento } from "../types/suprimento";
+import {
+  idDoPedidoSuprimentos,
+  idDoSuprimento,
+  segmentosExibidos,
+  type ItemPedidoSuprimento,
+  type PedidoSuprimentos,
+  type Suprimento,
+} from "../types/suprimento";
 import type { LinhaDoDia } from "../lib/reposicaoDoDia";
 import { estaPendente, montarLinhasDoDia } from "../lib/reposicaoDoDia";
 import { dispensarFornada, fornadasDispensadas } from "../lib/fornadasDispensadas";
@@ -24,6 +45,7 @@ import {
 } from "../lib/concluidosVistos";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { contemBusca } from "../lib/texto";
+import { adivinharSegmentoSuprimento } from "../lib/adivinharSuprimento";
 import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { IconeConfere, IconeLixeira, IconeSeta, IconeSino } from "./Icones";
 import { CampoDeBusca } from "./CampoDeBusca";
@@ -36,6 +58,60 @@ import {
 } from "../lib/rascunhoReposicao";
 
 const MAXIMO_RESULTADOS = 12;
+
+/**
+ * O CATÁLOGO DE VOZ É UM SÓ, PRODUTOS E SUPRIMENTOS JUNTOS (set/2026).
+ *
+ * O AssistenteDeVoz fala a língua de `Produto` — código de PDV, nome. Um
+ * suprimento não tem código de PDV; ganha um emprestado, alto o bastante
+ * para nunca colidir com um código real (o PDV usa números bem menores),
+ * e a tradução de volta (`ehCodigoDeSuprimento`/`indiceDoSuprimento`)
+ * mora só aqui, junto de quem inventou o número.
+ */
+const OFFSET_SUPRIMENTO = 1_000_000_000;
+function ehCodigoDeSuprimento(codigoPdv: number): boolean {
+  return codigoPdv >= OFFSET_SUPRIMENTO;
+}
+function indiceDoSuprimento(codigoPdv: number): number {
+  return codigoPdv - OFFSET_SUPRIMENTO;
+}
+
+/** "polpa de frutas" -> "Polpa De Frutas" — só para sugerir um nome
+ * legível a partir do que o microfone ouviu. */
+function capitalizarNome(bruto: string): string {
+  return bruto
+    .trim()
+    .split(/\s+/)
+    .map((parte) => (parte.length > 0 ? parte[0].toUpperCase() + parte.slice(1).toLowerCase() : parte))
+    .join(" ");
+}
+
+/**
+ * SÓ O QUE MEDE, PARA SUGERIR O NOME (herdado de Suprimentos, set/2026,
+ * para quando a voz não achou o item). Tira número e palavra de
+ * quantidade do que o microfone ouviu, mas MANTÉM "de/da/do": o texto
+ * vira o nome do item que vai para o catálogo, e sem a preposição "saco
+ * de papel" viraria o errado "saco papel".
+ */
+const PALAVRAS_DE_QUANTIDADE = [
+  "UNIDADES", "UNIDADE", "UN",
+  "PECAS", "PECA", "ITENS", "ITEM",
+  "DUZIA", "DUZIAS",
+];
+function nomeSugeridoDaSobra(trecho: string): string {
+  const palavras = trecho
+    .replace(/\d+/g, " ")
+    .split(/\s+/)
+    .filter((p) => p.length > 0 && !PALAVRAS_DE_QUANTIDADE.includes(p.toUpperCase()));
+  return capitalizarNome(palavras.join(" "));
+}
+
+/** A quantidade já foi dita — não pedir de novo (mesma regra de Suprimentos). */
+function quantidadeSugeridaDaSobra(trecho: string): number | null {
+  const encontrado = trecho.match(/\d+(?:[.,]\d+)?/);
+  if (!encontrado || !ehNumeroValidoPositivo(encontrado[0])) return null;
+  return paraNumero(encontrado[0]);
+}
 
 interface PainelFornadasFilialProps {
   loja: Loja;
@@ -54,12 +130,19 @@ interface PainelFornadasFilialProps {
    * item novo na Reposição.
    */
   onCadastrarProduto: (input: NovoProdutoInput) => Promise<Produto | undefined>;
+  /** Cadastro relâmpago de um suprimento novo — mesmo mecanismo que
+   * existia em TelaSuprimentos.tsx, agora incorporado aqui (set/2026). */
+  onCadastrarSuprimento: (suprimento: Suprimento) => Promise<void>;
+  /** Envia (soma ao que a loja já mandou hoje) a lista de suprimentos. */
+  onEnviarLista: (pedido: PedidoSuprimentos) => Promise<void>;
   /**
    * Manda a lista em montagem para a impressão (set/2026, pedido do dono
    * do negócio). Quem vai buscar a mercadoria na matriz anda com o papel
    * na mão — conferir pelo celular com as mãos ocupadas não funciona.
    */
   onImprimir?: (pedido: PedidoFilial) => void;
+  /** Mesma ideia, para a lista de suprimentos em montagem. */
+  onImprimirSuprimentos?: (pedido: PedidoSuprimentos) => void;
 }
 
 export function PainelFornadasFilial({
@@ -73,20 +156,44 @@ export function PainelFornadasFilial({
   encerrados,
   onSalvarPedido,
   onCadastrarProduto,
+  onCadastrarSuprimento,
+  onEnviarLista,
   onImprimir,
+  onImprimirSuprimentos,
 }: PainelFornadasFilialProps) {
   const hoje = dataDeHojeIso();
   const [busca, setBusca] = useState("");
   /** O microfone está aberto? Enquanto estiver, a busca some da tela. */
   const [ouvindoVoz, setOuvindoVoz] = useState(false);
   const [codigoPedindo, setCodigoPedindo] = useState<number | null>(null);
-  const [cadastrando, setCadastrando] = useState(false);
-  const [categoriaNova, setCategoriaNova] = useState("");
   const [salvandoNovo, setSalvandoNovo] = useState(false);
   const [quantidade, setQuantidade] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false);
   const [aberta, setAberta] = useState<Record<string, boolean>>({});
+
+  // --- SUPRIMENTOS, na mesma tela (set/2026) -----------------------------
+  /** Qual suprimento está com o editor de quantidade aberto — mesmo
+   * papel de `codigoPedindo`, mas para o outro catálogo (nunca os dois
+   * abertos ao mesmo tempo: abrir um fecha o outro). */
+  const [itemSuprimentoAtivo, setItemSuprimentoAtivo] = useState<string | null>(null);
+  const [itensSuprimentos, setItensSuprimentos] = useState<ItemPedidoSuprimento[]>([]);
+  /** Segmento em que o cadastro relâmpago está salvando (chip tocado). */
+  const [salvandoSuprimentoNovo, setSalvandoSuprimentoNovo] = useState("");
+  /**
+   * QUANDO A PESSOA DISCORDA DO PALPITE (set/2026): o app tenta adivinhar
+   * se o que não foi achado é produto de padaria ou suprimento (ver
+   * `adivinharSegmentoSuprimento`), mas o palpite pode errar — "leite
+   * condensado" não é embalagem nem limpeza, por exemplo, e é claramente
+   * um produto. Um link troca o tipo sugerido sem reiniciar a busca.
+   * `null` = confia no palpite; guarda o texto para não vazar de uma
+   * busca para a próxima.
+   */
+  const [tipoForcadoPara, setTipoForcadoPara] = useState<{
+    texto: string;
+    tipo: "produto" | "suprimento";
+  } | null>(null);
+
   /**
    * O SINO TAMBÉM VALE PARA OS CONCLUÍDOS (set/2026, pedido do dono do
    * negócio): a resposta que chegou e ainda não foi lida precisa chamar,
@@ -120,6 +227,14 @@ export function PainelFornadasFilial({
 
   const nomePorSuprimentoId = useMemo(
     () => new Map(catalogoSuprimentos.map((s) => [s.id, s.nome])),
+    [catalogoSuprimentos]
+  );
+  const suprimentosAtivos = useMemo(
+    () => catalogoSuprimentos.filter((s) => s.ativo),
+    [catalogoSuprimentos]
+  );
+  const segmentosCadastro = useMemo(
+    () => segmentosExibidos(catalogoSuprimentos),
     [catalogoSuprimentos]
   );
 
@@ -162,6 +277,13 @@ export function PainelFornadasFilial({
   const semResposta = useMemo(() => linhas.filter(estaPendente), [linhas]);
   const concluidos = useMemo(() => linhas.filter((l) => !estaPendente(l)), [linhas]);
 
+  /** A lista de suprimentos já enviada hoje — a base sobre a qual o
+   * próximo envio SOMA (ver `enviarTudo`, mais abaixo). */
+  const pedidoSuprimentosDeHoje = useMemo(
+    () => pedidosSuprimentos.find((p) => p.data === hoje && p.lojaId === loja.id),
+    [pedidosSuprimentos, hoje, loja.id]
+  );
+
   const resultados = useMemo(() => {
     const termo = busca.trim();
     if (termo.length === 0) return [];
@@ -171,35 +293,88 @@ export function PainelFornadasFilial({
       .slice(0, MAXIMO_RESULTADOS);
   }, [produtos, busca, encerrados]);
 
+  const resultadosSuprimentos = useMemo(() => {
+    const termo = busca.trim();
+    if (termo.length === 0) return [];
+    return suprimentosAtivos
+      .filter((s) => contemBusca(s.nome, termo))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+      .slice(0, MAXIMO_RESULTADOS);
+  }, [suprimentosAtivos, busca]);
+
   /**
-   * Cadastro relâmpago (set/2026, pedido do dono do negócio: a inserção
-   * de produto novo "pode ser feita pela matriz ou filiais"). A matriz
-   * já tinha isso em PainelFornoDeHoje — aqui é o mesmo botão, para o
-   * mesmo caso: a busca não achou nada no catálogo. Depois de salvar,
-   * abre direto o editor de quantidade do item recém-criado, porque o
-   * próximo passo natural é pedir a quantidade, não parar no meio.
+   * Cadastro relâmpago de PRODUTO (set/2026, pedido do dono do negócio: a
+   * inserção de produto novo "pode ser feita pela matriz ou filiais"). A
+   * matriz já tinha isso em PainelFornoDeHoje — aqui é o mesmo botão,
+   * para o mesmo caso: a busca não achou nada no catálogo. Depois de
+   * salvar, abre direto o editor de quantidade do item recém-criado (ou
+   * já entra na lista, se a quantidade veio da fala) — o próximo passo
+   * natural é pedir a quantidade, não parar no meio.
    */
-  async function cadastrarEIncluir() {
-    const nome = busca.trim();
-    if (!nome || !categoriaNova || salvandoNovo) return;
+  async function cadastrarProdutoNovo(
+    nome: string,
+    categoria: string,
+    quantidadeInicial?: number | null
+  ) {
+    const limpo = nome.trim();
+    if (!limpo || salvandoNovo) return;
     setSalvandoNovo(true);
     try {
       const novo = await onCadastrarProduto({
-        nome,
-        categoria: categoriaNova,
+        nome: limpo,
+        categoria,
         unidadeProducao: "un",
         ativoNaProducao: true,
-        prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[categoriaNova] ?? null,
+        prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[categoria] ?? null,
       });
       if (!novo) return;
-      setCadastrando(false);
-      setCategoriaNova("");
-      setCodigoPedindo(novo.codigoPdv);
-      setQuantidade("");
+      setBusca("");
+      setTipoForcadoPara(null);
+      if (quantidadeInicial && quantidadeInicial > 0) {
+        acrescentar([{ codigoPdv: novo.codigoPdv, quantidadeUnidades: quantidadeInicial }]);
+      } else {
+        setCodigoPedindo(novo.codigoPdv);
+        setQuantidade("");
+      }
     } catch {
       // Mensagem já vem do aviso global (ver App.tsx).
     } finally {
       setSalvandoNovo(false);
+    }
+  }
+
+  /** Cadastro relâmpago de SUPRIMENTO — mesma operação que existia em
+   * TelaSuprimentos.tsx, agora aqui (set/2026). */
+  async function cadastrarSuprimentoNovo(
+    nome: string,
+    segmento: string,
+    quantidadeInicial?: number | null
+  ) {
+    const limpo = nome.trim();
+    if (!limpo || salvandoSuprimentoNovo) return;
+    setSalvandoSuprimentoNovo(segmento);
+    try {
+      const novo: Suprimento = {
+        id: idDoSuprimento(limpo),
+        nome: limpo,
+        segmento,
+        ativo: true,
+        criadoPor: operador,
+        criadoEm: new Date().toISOString(),
+      };
+      await onCadastrarSuprimento(novo);
+      setBusca("");
+      setTipoForcadoPara(null);
+      if (quantidadeInicial && quantidadeInicial > 0) {
+        acrescentarSuprimentos([{ suprimentoId: novo.id, quantidade: quantidadeInicial }]);
+      } else {
+        setItemSuprimentoAtivo(novo.id);
+        setQuantidade("");
+      }
+    } catch {
+      /* o aviso global cuida da mensagem */
+    } finally {
+      setSalvandoSuprimentoNovo("");
     }
   }
 
@@ -223,6 +398,24 @@ export function PainelFornadasFilial({
     });
   }
 
+  /** Mesma lógica de `acrescentar`, para o carrinho de suprimentos. */
+  function acrescentarSuprimentos(novos: { suprimentoId: string; quantidade: number }[]) {
+    if (novos.length === 0) return;
+    setItensSuprimentos((atual) => {
+      const lista = [...atual];
+      for (const novo of novos) {
+        if (novo.quantidade <= 0) continue;
+        const onde = lista.findIndex((i) => i.suprimentoId === novo.suprimentoId);
+        if (onde >= 0) {
+          lista[onde] = { ...lista[onde], quantidade: lista[onde].quantidade + novo.quantidade };
+        } else {
+          lista.push({ suprimentoId: novo.suprimentoId, quantidade: novo.quantidade });
+        }
+      }
+      return lista;
+    });
+  }
+
   function mudarQuantidade(codigoPdv: number, bruto: string) {
     const limpo = sanitizarEntradaNumerica(bruto);
     setItens((atual) =>
@@ -234,26 +427,81 @@ export function PainelFornadasFilial({
     );
   }
 
-  async function enviarPedido() {
-    const validos = itens.filter((i) => i.quantidadeUnidades > 0);
-    if (validos.length === 0 || enviando) return;
+  function mudarQuantidadeSuprimento(suprimentoId: string, bruto: string) {
+    const limpo = sanitizarEntradaNumerica(bruto);
+    setItensSuprimentos((atual) =>
+      atual.map((i) =>
+        i.suprimentoId === suprimentoId
+          ? { ...i, quantidade: ehNumeroValidoPositivo(limpo) ? paraNumero(limpo) : 0 }
+          : i
+      )
+    );
+  }
+
+  /**
+   * SOMA AO QUE A LOJA JÁ MANDOU HOJE, NÃO SUBSTITUI (herdado de
+   * TelaSuprimentos.tsx, set/2026): gravar suprimentos é substituição
+   * inteira do documento do dia, não mescla — então cada envio precisa
+   * somar ao que já estava lá, ou o segundo pedido do dia apagaria o
+   * primeiro sem ninguém perceber.
+   */
+  function itensSuprimentosMesclados(): ItemPedidoSuprimento[] {
+    const mapa = new Map(pedidoSuprimentosDeHoje?.itens.map((i) => [i.suprimentoId, i.quantidade]) ?? []);
+    for (const item of itensSuprimentos) {
+      if (item.quantidade <= 0) continue;
+      mapa.set(item.suprimentoId, (mapa.get(item.suprimentoId) ?? 0) + item.quantidade);
+    }
+    return [...mapa].map(([suprimentoId, quantidade]) => ({ suprimentoId, quantidade }));
+  }
+
+  /**
+   * UM TOQUE, OS DOIS PEDIDOS (set/2026, pedido do dono do negócio: "um
+   * carrinho único, um só Enviar"). Produto e suprimento continuam sendo
+   * dois documentos diferentes no Firestore — urgências e telas de quem
+   * decide são diferentes —, mas quem está pedindo não precisa saber
+   * disso nem tocar em dois botões para mandar as duas listas.
+   */
+  async function enviarTudo() {
+    const validosProdutos = itens.filter((i) => i.quantidadeUnidades > 0);
+    const temSuprimentosNovos = itensSuprimentos.some((i) => i.quantidade > 0);
+    if ((validosProdutos.length === 0 && !temSuprimentosNovos) || enviando) return;
     setEnviando(true);
     const agora = new Date().toISOString();
     try {
-      await onSalvarPedido({
-        id: idDaReposicao(hoje, loja.id, agora),
-        lojaId: loja.id,
-        data: hoje,
-        itens: validos,
-        status: "enviado",
-        tipo: "reposicao",
-        criadoPor: operador,
-        criadoEm: agora,
-        enviadoEm: agora,
-      });
+      if (validosProdutos.length > 0) {
+        await onSalvarPedido({
+          id: idDaReposicao(hoje, loja.id, agora),
+          lojaId: loja.id,
+          data: hoje,
+          itens: validosProdutos,
+          status: "enviado",
+          tipo: "reposicao",
+          criadoPor: operador,
+          criadoEm: agora,
+          enviadoEm: agora,
+        });
+      }
+      if (temSuprimentosNovos) {
+        await onEnviarLista({
+          id: idDoPedidoSuprimentos(hoje, loja.id),
+          lojaId: loja.id,
+          data: hoje,
+          itens: itensSuprimentosMesclados(),
+          status: "enviado",
+          // `atendimento` fica de fora de propósito — ver o comentário
+          // equivalente que existia em TelaSuprimentos.tsx: a lista
+          // cresceu, e uma decisão antiga da matriz valia para a lista
+          // de antes.
+          criadoPor: pedidoSuprimentosDeHoje?.criadoPor ?? operador,
+          criadoEm: pedidoSuprimentosDeHoje?.criadoEm ?? agora,
+          enviadoEm: agora,
+        });
+      }
       setItens([]);
+      setItensSuprimentos([]);
       setBusca("");
       setCodigoPedindo(null);
+      setItemSuprimentoAtivo(null);
       setAberta({ semResposta: true });
     } finally {
       setEnviando(false);
@@ -261,7 +509,141 @@ export function PainelFornadasFilial({
   }
 
   const totalUnidades = itens.reduce((soma, i) => soma + i.quantidadeUnidades, 0);
-  const faltaQuantidade = itens.some((i) => i.quantidadeUnidades <= 0);
+  const faltaQuantidade =
+    itens.some((i) => i.quantidadeUnidades <= 0) || itensSuprimentos.some((i) => i.quantidade <= 0);
+  const totalDeItens = itens.length + itensSuprimentos.length;
+
+  /**
+   * O CATÁLOGO DE VOZ, PRODUTOS E SUPRIMENTOS JUNTOS (set/2026, pedido do
+   * dono do negócio: "um microfone, os dois catálogos"). O suprimento
+   * empresta a forma de `Produto` só para o AssistenteDeVoz conseguir
+   * comparar a fala com o nome — a tradução de volta usa o índice
+   * guardado no código de PDV emprestado (ver `OFFSET_SUPRIMENTO`).
+   */
+  const catalogoDeVoz = useMemo<Produto[]>(() => {
+    const emprestados = suprimentosAtivos.map(
+      (s, indice) =>
+        ({
+          codigoPdv: OFFSET_SUPRIMENTO + indice,
+          nome: s.nome,
+          ativoNaProducao: true,
+        }) as unknown as Produto
+    );
+    return [...produtos, ...emprestados];
+  }, [produtos, suprimentosAtivos]);
+
+  /**
+   * OS BOTÕES DE "ONDE ESTE ITEM MORA" (set/2026, herdado de
+   * TelaSuprimentos.tsx e agora estendido para decidir também PRODUTO vs
+   * SUPRIMENTO).
+   *
+   * `adivinharSegmentoSuprimento` chuta pela palavra ("saco", "detergente"
+   * ...) se o nome parece suprimento; sem palpite, o chute é produto de
+   * padaria, que é o uso principal desta tela. O palpite pode estar
+   * errado — por isso o link "na verdade é..." troca de lado num toque,
+   * em vez de a pessoa ter que digitar tudo de novo.
+   *
+   * CANCELAR É UM BOTÃO SÓ, SEMPRE NO MESMO LUGAR (set/2026, pedido do
+   * dono do negócio: "fique mais fácil e intuitivo cancelar"). Antes,
+   * desistir de cadastrar um produto era só fechar a busca; aqui vira um
+   * botão explícito — e, vindo do microfone (`remover` presente), ele
+   * também tira o trecho da lista "não entrou", em vez de deixá-lo preso
+   * ali até a pessoa falar nome por nome de novo.
+   */
+  function cadastroRelampago(
+    nomeBruto: string,
+    quantidadeInicialSugerida?: number | null,
+    remover?: () => void
+  ) {
+    const nome = nomeBruto.trim();
+    if (!nome) return null;
+
+    const sugestao = adivinharSegmentoSuprimento(nome);
+    const substituindo = tipoForcadoPara?.texto === nome ? tipoForcadoPara.tipo : null;
+    const tipo = substituindo ?? (sugestao ? "suprimento" : "produto");
+
+    function cancelar() {
+      if (remover) remover();
+      else setBusca("");
+      setTipoForcadoPara(null);
+    }
+
+    return (
+      <div className="cadastro-relampago">
+        <p className="nota-rodape">
+          {quantidadeInicialSugerida ? `${quantidadeInicialSugerida} ` : ""}
+          <strong>{nome}</strong> não está no catálogo.
+        </p>
+
+        {tipo === "produto" ? (
+          <>
+            <p className="nota-rodape">Em qual categoria (produto de padaria)?</p>
+            <div className="setores-do-novo">
+              {CATEGORIAS_PRODUCAO.map((categoria) => (
+                <button
+                  key={categoria.chave}
+                  type="button"
+                  className="chip-setor"
+                  disabled={salvandoNovo}
+                  onClick={() =>
+                    void cadastrarProdutoNovo(nome, categoria.chave, quantidadeInicialSugerida)
+                  }
+                >
+                  {categoria.rotulo}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="nota-rodape">
+              {sugestao ? "Parece suprimento — incluir em:" : "Suprimento — incluir em:"}
+            </p>
+            <div className="setores-do-novo">
+              {segmentosCadastro.map((segmento) => {
+                const valorGravado = segmento.personalizado ? segmento.rotulo : segmento.chave;
+                return (
+                  <button
+                    key={segmento.chave}
+                    type="button"
+                    className={`chip-setor ${sugestao === segmento.chave ? "sugerido" : ""}`}
+                    disabled={salvandoSuprimentoNovo !== ""}
+                    onClick={() =>
+                      void cadastrarSuprimentoNovo(nome, valorGravado, quantidadeInicialSugerida)
+                    }
+                  >
+                    {salvandoSuprimentoNovo === valorGravado ? "Salvando..." : segmento.rotulo}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <div className="acoes">
+          <button type="button" className="link" onClick={cancelar}>
+            {remover ? "descartar" : "cancelar"}
+          </button>
+          <button
+            type="button"
+            className="link"
+            onClick={() =>
+              setTipoForcadoPara({ texto: nome, tipo: tipo === "produto" ? "suprimento" : "produto" })
+            }
+          >
+            {tipo === "produto" ? "na verdade é suprimento" : "na verdade é produto de padaria"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /** O que oferecer para um trecho que o microfone não reconheceu. */
+  function opcoesParaSobra(trecho: string, remover: () => void) {
+    const nome = nomeSugeridoDaSobra(trecho) || trecho.trim();
+    if (!nome) return null;
+    return cadastroRelampago(nome, quantidadeSugeridaDaSobra(trecho), remover);
+  }
 
   /**
    * O SINO É SÓ DA LISTA QUE ESPERA RESPOSTA (set/2026, decisão do dono
@@ -447,6 +829,7 @@ export function PainelFornadasFilial({
                 className="botao-fornada pedir"
                 onClick={() => {
                   setCodigoPedindo(linha.codigoPdv);
+                  setItemSuprimentoAtivo(null);
                   setQuantidade("");
                 }}
               >
@@ -508,6 +891,77 @@ export function PainelFornadasFilial({
     );
   }
 
+  /** A linha de um suprimento encontrado na busca — mesma forma da linha
+   * de produto (`linha-fornada`), com uma etiqueta indicando o tipo, já
+   * que agora os dois catálogos aparecem juntos. */
+  function linhaSuprimentoDaBusca(suprimento: Suprimento) {
+    const ativo = itemSuprimentoAtivo === suprimento.id;
+    return (
+      <div key={suprimento.id} className="linha-fornada">
+        <div className="info-fornada">
+          <strong>{suprimento.nome}</strong>
+          <em className="etiqueta-origem suprimentos">Suprimento</em>
+        </div>
+        {ativo ? (
+          <div className="editor-quantidade">
+            <input
+              type="text"
+              inputMode="decimal"
+              pattern="[0-9]*[.,]?[0-9]*"
+              autoFocus
+              placeholder="Quantas unidades?"
+              value={quantidade}
+              onChange={(e) => setQuantidade(sanitizarEntradaNumerica(e.target.value))}
+            />
+            <span className="unidade-fixa">un</span>
+            <button
+              type="button"
+              className="primario"
+              disabled={!ehNumeroValidoPositivo(quantidade)}
+              onClick={() => {
+                acrescentarSuprimentos([
+                  { suprimentoId: suprimento.id, quantidade: paraNumero(quantidade) },
+                ]);
+                setItemSuprimentoAtivo(null);
+                setQuantidade("");
+                setBusca("");
+              }}
+            >
+              Incluir
+            </button>
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                setItemSuprimentoAtivo(null);
+                setQuantidade("");
+              }}
+            >
+              cancelar
+            </button>
+          </div>
+        ) : (
+          <div className="acoes-fornada">
+            <button
+              type="button"
+              className="botao-fornada pedir"
+              onClick={() => {
+                setItemSuprimentoAtivo(suprimento.id);
+                setCodigoPedindo(null);
+                setQuantidade("");
+              }}
+            >
+              Incluir
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const nadaEncontrado =
+    busca.trim().length > 0 && resultados.length === 0 && resultadosSuprimentos.length === 0;
+
   return (
     <div className="painel-fornadas">
       <div className="corpo-fornadas">
@@ -523,20 +977,31 @@ export function PainelFornadasFilial({
             uma linha das sanfonas, como qualquer outra coisa que espera
             resposta. */}
         <AssistenteDeVoz
-          produtos={produtos}
+          produtos={catalogoDeVoz}
           modo="pedir"
           acao="adicionar"
           onOuvindoMudou={setOuvindoVoz}
-          onConfirmar={async (ditados) =>
-            acrescentar(
-              ditados
-                .filter((i) => i.quantidade && i.quantidade > 0)
-                .map((i) => ({
-                  codigoPdv: i.produto.codigoPdv,
-                  quantidadeUnidades: i.quantidade!,
-                }))
-            )
-          }
+          onConfirmar={async (ditados) => {
+            const deProdutos: { codigoPdv: number; quantidadeUnidades: number }[] = [];
+            const deSuprimentos: { suprimentoId: string; quantidade: number }[] = [];
+            for (const ditado of ditados) {
+              if (!ditado.quantidade || ditado.quantidade <= 0) continue;
+              if (ehCodigoDeSuprimento(ditado.produto.codigoPdv)) {
+                const suprimento = suprimentosAtivos[indiceDoSuprimento(ditado.produto.codigoPdv)];
+                if (suprimento) {
+                  deSuprimentos.push({ suprimentoId: suprimento.id, quantidade: ditado.quantidade });
+                }
+              } else {
+                deProdutos.push({
+                  codigoPdv: ditado.produto.codigoPdv,
+                  quantidadeUnidades: ditado.quantidade,
+                });
+              }
+            }
+            acrescentar(deProdutos);
+            acrescentarSuprimentos(deSuprimentos);
+          }}
+          renderSobra={opcoesParaSobra}
         />
 
         {/* A BUSCA SOME ENQUANTO O MICROFONE ESTÁ ABERTO (set/2026,
@@ -551,130 +1016,89 @@ export function PainelFornadasFilial({
             onMudar={(v) => {
               setBusca(v);
               setCodigoPedindo(null);
+              setItemSuprimentoAtivo(null);
+              setTipoForcadoPara(null);
             }}
-            placeholder="Buscar produto para pedir..."
-            rotulo="Buscar produto pelo nome"
+            placeholder="Buscar produto ou suprimento para pedir..."
+            rotulo="Buscar produto ou suprimento pelo nome"
           />
         )}
 
         {busca.trim().length > 0 &&
-          (resultados.length === 0 ? (
-            <div className="cadastro-relampago">
-              {!cadastrando ? (
-                <>
-                  <p className="nota-rodape">Não está no catálogo.</p>
-                  <button
-                    type="button"
-                    className="secundario"
-                    onClick={() => {
-                      setCadastrando(true);
-                      setCategoriaNova("");
-                    }}
-                  >
-                    Cadastrar "{busca.trim()}"
-                  </button>
-                </>
-              ) : (
-                <>
-                  <strong className="nome-do-novo">{busca.trim()}</strong>
-                  <p className="nota-rodape">Em qual categoria?</p>
-                  <div className="setores-do-novo">
-                    {CATEGORIAS_PRODUCAO.map((categoria) => (
-                      <button
-                        key={categoria.chave}
-                        type="button"
-                        className={`chip-setor ${categoriaNova === categoria.chave ? "ativo" : ""}`}
-                        aria-pressed={categoriaNova === categoria.chave}
-                        onClick={() => setCategoriaNova(categoria.chave)}
-                      >
-                        {categoria.rotulo}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="acoes">
-                    <button type="button" className="link" onClick={() => setCadastrando(false)}>
-                      cancelar
-                    </button>
-                    <button
-                      type="button"
-                      className="primario"
-                      disabled={!categoriaNova || salvandoNovo}
-                      onClick={() => void cadastrarEIncluir()}
-                    >
-                      {salvandoNovo ? "Salvando..." : "Cadastrar e incluir"}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+          (nadaEncontrado ? (
+            cadastroRelampago(busca.trim())
           ) : (
-            resultados.map((produto) => (
-              <div key={produto.codigoPdv} className="linha-fornada">
-                <div className="info-fornada">
-                  <strong>{produto.nome}</strong>
+            <>
+              {resultados.map((produto) => (
+                <div key={produto.codigoPdv} className="linha-fornada">
+                  <div className="info-fornada">
+                    <strong>{produto.nome}</strong>
+                  </div>
+                  {codigoPedindo === produto.codigoPdv ? (
+                    <div className="editor-quantidade">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        pattern="[0-9]*[.,]?[0-9]*"
+                        autoFocus
+                        placeholder="Quantas unidades?"
+                        value={quantidade}
+                        onChange={(e) => setQuantidade(sanitizarEntradaNumerica(e.target.value))}
+                      />
+                      <span className="unidade-fixa">un</span>
+                      <button
+                        type="button"
+                        className="primario"
+                        disabled={!ehNumeroValidoPositivo(quantidade)}
+                        onClick={() => {
+                          acrescentar([
+                            {
+                              codigoPdv: produto.codigoPdv,
+                              quantidadeUnidades: paraNumero(quantidade),
+                            },
+                          ]);
+                          setCodigoPedindo(null);
+                          setQuantidade("");
+                          setBusca("");
+                        }}
+                      >
+                        Incluir
+                      </button>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => {
+                          setCodigoPedindo(null);
+                          setQuantidade("");
+                        }}
+                      >
+                        cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="acoes-fornada">
+                      <button
+                        type="button"
+                        className="botao-fornada pedir"
+                        onClick={() => {
+                          setCodigoPedindo(produto.codigoPdv);
+                          setItemSuprimentoAtivo(null);
+                          setQuantidade("");
+                        }}
+                      >
+                        Incluir
+                      </button>
+                    </div>
+                  )}
                 </div>
-                {codigoPedindo === produto.codigoPdv ? (
-                  <div className="editor-quantidade">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      pattern="[0-9]*[.,]?[0-9]*"
-                      autoFocus
-                      placeholder="Quantas unidades?"
-                      value={quantidade}
-                      onChange={(e) => setQuantidade(sanitizarEntradaNumerica(e.target.value))}
-                    />
-                    <span className="unidade-fixa">un</span>
-                    <button
-                      type="button"
-                      className="primario"
-                      disabled={!ehNumeroValidoPositivo(quantidade)}
-                      onClick={() => {
-                        acrescentar([
-                          {
-                            codigoPdv: produto.codigoPdv,
-                            quantidadeUnidades: paraNumero(quantidade),
-                          },
-                        ]);
-                        setCodigoPedindo(null);
-                        setQuantidade("");
-                        setBusca("");
-                      }}
-                    >
-                      Incluir
-                    </button>
-                    <button
-                      type="button"
-                      className="link"
-                      onClick={() => {
-                        setCodigoPedindo(null);
-                        setQuantidade("");
-                      }}
-                    >
-                      cancelar
-                    </button>
-                  </div>
-                ) : (
-                  <div className="acoes-fornada">
-                    <button
-                      type="button"
-                      className="botao-fornada pedir"
-                      onClick={() => {
-                        setCodigoPedindo(produto.codigoPdv);
-                        setQuantidade("");
-                      }}
-                    >
-                      Incluir
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))
+              ))}
+              {resultadosSuprimentos.map((suprimento) => linhaSuprimentoDaBusca(suprimento))}
+            </>
           ))}
 
-        {itens.length > 0 && (
+        {totalDeItens > 0 && (
           <div className="pedido-em-montagem">
-            <strong className="titulo-montagem">Pedido de reposição</strong>
+            <strong className="titulo-montagem">Pedido em montagem</strong>
 
             {itens.map((item) => (
               <div key={item.codigoPdv} className="linha-montagem">
@@ -702,8 +1126,40 @@ export function PainelFornadasFilial({
               </div>
             ))}
 
+            {itensSuprimentos.map((item) => (
+              <div key={item.suprimentoId} className="linha-montagem">
+                <span className="nome-montagem">
+                  {nomePorSuprimentoId.get(item.suprimentoId) ?? item.suprimentoId}
+                  <em className="etiqueta-origem suprimentos">Suprimento</em>
+                </span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  pattern="[0-9]*"
+                  className="qtd-conferencia"
+                  aria-label={`Quantidade de ${nomePorSuprimentoId.get(item.suprimentoId) ?? item.suprimentoId}`}
+                  placeholder="qtd"
+                  value={item.quantidade > 0 ? String(item.quantidade) : ""}
+                  onChange={(e) => mudarQuantidadeSuprimento(item.suprimentoId, e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="tirar-da-lista"
+                  aria-label={`Tirar ${nomePorSuprimentoId.get(item.suprimentoId) ?? item.suprimentoId} da lista`}
+                  onClick={() =>
+                    setItensSuprimentos((atual) =>
+                      atual.filter((i) => i.suprimentoId !== item.suprimentoId)
+                    )
+                  }
+                >
+                  <IconeLixeira tamanho={16} />
+                </button>
+              </div>
+            ))}
+
             <p className="nota-rodape">
-              {itens.length} {itens.length === 1 ? "item" : "itens"} · {totalUnidades} unidades
+              {totalDeItens} {totalDeItens === 1 ? "item" : "itens"}
+              {itens.length > 0 ? ` · ${totalUnidades} unidades de produto` : ""}
             </p>
             {faltaQuantidade && (
               <p className="nota-rodape">Informe a quantidade dos itens em branco.</p>
@@ -717,10 +1173,11 @@ export function PainelFornadasFilial({
                     className="perigo"
                     onClick={() => {
                       setItens([]);
+                      setItensSuprimentos([]);
                       setConfirmandoLimpeza(false);
                     }}
                   >
-                    Apagar os {itens.length}?
+                    Apagar os {totalDeItens}?
                   </button>
                   <button
                     type="button"
@@ -742,8 +1199,10 @@ export function PainelFornadasFilial({
 
               {/* IMPRIMIR O QUE ESTÁ MONTADO, enviado ou não: quem vai
                   buscar a mercadoria precisa do papel antes de a matriz
-                  responder. */}
-              {onImprimir && (
+                  responder. Produto e suprimento imprimem separado
+                  porque viram comprovantes diferentes — cada botão só
+                  aparece quando há o que imprimir daquele tipo. */}
+              {onImprimir && itens.length > 0 && (
                 <button
                   type="button"
                   className="secundario"
@@ -760,16 +1219,35 @@ export function PainelFornadasFilial({
                     })
                   }
                 >
-                  Imprimir
+                  Imprimir pedido
+                </button>
+              )}
+              {onImprimirSuprimentos && itensSuprimentos.some((i) => i.quantidade > 0) && (
+                <button
+                  type="button"
+                  className="secundario"
+                  onClick={() =>
+                    onImprimirSuprimentos({
+                      id: idDoPedidoSuprimentos(hoje, loja.id),
+                      lojaId: loja.id,
+                      data: hoje,
+                      itens: itensSuprimentos.filter((i) => i.quantidade > 0),
+                      status: "rascunho",
+                      criadoPor: operador,
+                      criadoEm: new Date().toISOString(),
+                    })
+                  }
+                >
+                  Imprimir suprimentos
                 </button>
               )}
               <button
                 type="button"
                 className="primario"
                 disabled={enviando || faltaQuantidade}
-                onClick={() => void enviarPedido()}
+                onClick={() => void enviarTudo()}
               >
-                {enviando ? "Enviando..." : `Enviar pedido (${itens.length})`}
+                {enviando ? "Enviando..." : `Enviar (${totalDeItens})`}
               </button>
             </div>
           </div>

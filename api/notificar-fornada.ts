@@ -393,7 +393,9 @@ export default async function handler(req: any, res: any) {
           ? "A matriz confirmou e separou a sua lista de suprimentos."
           : motivo || "A matriz não pôde enviar os suprimentos.";
       etiqueta = "suprimentos-resposta";
-      destinoNoApp = "/?aba=suprimentos";
+      // set/2026: o status de suprimentos mora na Reposicao agora (a aba
+      // "Suprimentos" saiu do ar) — ver PainelFornadasFilial.tsx.
+      destinoNoApp = "/?aba=fornada";
     } else if (desfecho && destinoDirigido) {
       // Resposta à reposição. O motivo vai no corpo do aviso, não numa
       // tela que a filial teria que abrir: quem está sem o produto no

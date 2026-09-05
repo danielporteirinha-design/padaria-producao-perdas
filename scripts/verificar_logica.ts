@@ -2988,7 +2988,7 @@ const perdas: RegistroPerda[] = [
     "a contagem ignora item zerado"
   );
 
-  afirmar(abaDaUrl("/?aba=suprimentos") === "suprimentos", "push de suprimentos abre a aba certa");
+  afirmar(abaDaUrl("/?aba=suprimentos") === "fornada", "push antigo de suprimentos cai na Reposicao, onde o status mora agora");
 
   /**
    * SEGMENTOS EXIBIDOS: os três fixos, mais qualquer sessão criada na
