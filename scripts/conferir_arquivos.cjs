@@ -336,6 +336,17 @@ const CONFERENCIAS = [
   ["src/index.css", ".erro-conversao.com-fechar", "Balao de erro da voz ganha layout para o botao X"],
   ["src/components/AssistenteDeVoz.tsx", "fecharAoClicarNaTela", "Erro de voz fecha ao tocar em qualquer lugar da tela"],
   ["src/components/AvisoGlobal.tsx", "fecharAoClicarNaTela", "Aviso global de erro fecha ao tocar em qualquer lugar da tela"],
+
+  // --- Cadastro relampago de produto a partir da busca/voz na Lista de
+  // Producao (filial e matriz) + pastilha "Entendi" na captacao com
+  // sucesso (set/2026, pedido do dono do negocio)
+  ["src/lib/sobraDeVoz.ts", "export function nomeSugeridoDaSobra", "Sugestao de nome/quantidade a partir de sobra de voz (lib compartilhado)"],
+  ["src/components/PainelFornadasFilial.tsx", 'from "../lib/sobraDeVoz"', "Reposicao: sugestao de nome/quantidade vem do lib compartilhado"],
+  ["src/components/TelaPedidoFilial.tsx", "cadastroRelampagoBusca", "Lista de Producao (filial): cadastro relampago a partir da busca/voz"],
+  ["src/components/TelaPedidoFilial.tsx", "renderSobra={opcoesParaSobraBusca}", "Lista de Producao (filial): microfone sugere cadastro quando nao reconhece"],
+  ["src/components/TelaCronograma.tsx", "cadastroRelampagoBuscaMatriz", "Lista de Producao (matriz): cadastro relampago a partir da busca/voz"],
+  ["src/components/TelaCronograma.tsx", "renderSobra={opcoesParaSobraBuscaMatriz}", "Lista de Producao (matriz): microfone sugere cadastro quando nao reconhece"],
+  ["src/index.css", ".botao-assistente-compacto.sinal-certo {\n  width: auto", "Microfone compacto vira pastilha com texto quando a captacao da certo"],
 ];
 
 /**

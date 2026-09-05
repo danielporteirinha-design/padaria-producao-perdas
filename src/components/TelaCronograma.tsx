@@ -50,6 +50,7 @@ import {
 } from "../lib/rascunhoCronograma";
 import { gerarId } from "../lib/id";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
+import { nomeSugeridoDaSobra, quantidadeSugeridaDaSobra } from "../lib/sobraDeVoz";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { buscarSugestaoProducao, montarHistoricoPorCategoria, ErroSugestaoProducao } from "../lib/sugestaoProducao";
 import { ExportarFita } from "./ExportarFita";
@@ -543,6 +544,115 @@ export function TelaCronograma({
       ...atual,
       [chaveGrupo]: (atual[chaveGrupo] ?? []).filter((i) => i.codigoPdv !== codigoPdv),
     }));
+  }
+
+  /**
+   * CADASTRO RELÂMPAGO A PARTIR DA BUSCA OU DA VOZ, PARA A MATRIZ
+   * (set/2026, pedido do dono do negócio: "as filiais passarão a ter
+   * permissão de cadastrar produtos" — vale também para a matriz, mesma
+   * tela). Um toque na categoria certa já cadastra e inclui — sem abrir
+   * formulário, sem sair da busca. Mesma ideia de `cadastrarProdutoDaBusca`
+   * em TelaPedidoFilial.tsx, só que guardando o item em `itensPorGrupo`
+   * (a matriz organiza por categoria, não numa lista única).
+   */
+  async function cadastrarProdutoDaBuscaMatriz(
+    nome: string,
+    categoria: string,
+    quantidadeInicial?: number | null
+  ) {
+    const limpo = nome.trim();
+    if (!limpo || salvandoNovoProduto) return;
+    setSalvandoNovoProduto(true);
+    try {
+      const novo = await onCadastrarProduto({
+        nome: limpo,
+        categoria,
+        unidadeProducao: "un",
+        ativoNaProducao: true,
+        prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[categoria] ?? null,
+      });
+      if (!novo) return;
+      setBuscaMatriz("");
+      if (quantidadeInicial && quantidadeInicial > 0) {
+        setItensPorGrupo((atual) => {
+          const itensAtuais = atual[categoria] ?? [];
+          const existe = itensAtuais.some((i) => i.codigoPdv === novo.codigoPdv);
+          const novosItens = existe
+            ? itensAtuais.map((i) =>
+                i.codigoPdv === novo.codigoPdv ? { ...i, quantidadeUnidades: quantidadeInicial } : i
+              )
+            : [...itensAtuais, { codigoPdv: novo.codigoPdv, quantidadeUnidades: quantidadeInicial }];
+          return { ...atual, [categoria]: novosItens };
+        });
+      } else {
+        setProdutoAtivo(novo.codigoPdv);
+        setValorEditando("");
+      }
+    } catch {
+      // Mensagem já vem do aviso global (ver App.tsx).
+    } finally {
+      setSalvandoNovoProduto(false);
+    }
+  }
+
+  /**
+   * O CARTÃO EM SI — pastilhas de categoria, um toque cadastra (set/2026,
+   * "o card de cadastro tb deve ser intuitivo e com toques utilizando
+   * apenas o polegar de uma das mãos"). Aparece tanto quando a busca
+   * digitada não acha nada quanto quando a voz não reconheceu um trecho
+   * (`opcoesParaSobraBuscaMatriz` abaixo) — por isso recebe `remover`: só
+   * existe quando veio de uma sobra de voz, para descartar só aquele
+   * trecho sem apagar a busca inteira.
+   */
+  function cadastroRelampagoBuscaMatriz(
+    nomeBruto: string,
+    quantidadeInicialSugerida?: number | null,
+    remover?: () => void
+  ) {
+    const nome = nomeBruto.trim();
+    if (!nome) return null;
+
+    function cancelar() {
+      if (remover) remover();
+      else setBuscaMatriz("");
+    }
+
+    return (
+      <div className="cadastro-relampago">
+        <p className="nota-rodape">
+          {quantidadeInicialSugerida ? `${quantidadeInicialSugerida} ` : ""}
+          <strong>{nome}</strong> não está no catálogo.
+        </p>
+        <p className="nota-rodape">Em qual categoria?</p>
+        <div className="setores-do-novo">
+          {CATEGORIAS_PRODUCAO.map((categoria) => (
+            <button
+              key={categoria.chave}
+              type="button"
+              className="chip-setor"
+              disabled={salvandoNovoProduto}
+              onClick={() => void cadastrarProdutoDaBuscaMatriz(nome, categoria.chave, quantidadeInicialSugerida)}
+            >
+              {categoria.rotulo}
+            </button>
+          ))}
+        </div>
+        <div className="acoes">
+          <button type="button" className="link" onClick={cancelar}>
+            {remover ? "descartar" : "cancelar"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /** O que oferecer para um trecho que o microfone não reconheceu, no
+   * lançamento da matriz — mesma ideia de `opcoesParaSobraBusca` em
+   * TelaPedidoFilial.tsx. */
+  function opcoesParaSobraBuscaMatriz(trecho: string, remover: () => void) {
+    const nome = nomeSugeridoDaSobra(trecho) || trecho.trim();
+    if (!nome) return null;
+    return cadastroRelampagoBuscaMatriz(nome, quantidadeSugeridaDaSobra(trecho), remover);
   }
 
   /**
@@ -1157,7 +1267,7 @@ export function TelaCronograma({
         >
           {buscaMatriz.trim().length > 0 &&
             (resultadosBuscaMatriz.length === 0 ? (
-              <p className="nota-rodape">Nenhum produto encontrado para "{buscaMatriz.trim()}".</p>
+              cadastroRelampagoBuscaMatriz(buscaMatriz.trim())
             ) : (
               resultadosBuscaMatriz.map((produto) => {
                 const itemSalvo = (itensPorGrupo[produto.categoria] ?? []).find(
@@ -1230,6 +1340,7 @@ export function TelaCronograma({
               rotuloFalar="Monte a lista falando"
               autoIncluirQuandoCompleto
               onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
+              renderSobra={opcoesParaSobraBuscaMatriz}
             />
           </CampoDeBusca>
         </div>

@@ -28,6 +28,7 @@ import { ehPedidoDiario, idDoPedido } from "../types/pedido";
 import { AtivarAvisos } from "./AtivarAvisos";
 import type { Loja } from "../lib/lojas";
 import { CATEGORIAS_PRODUCAO, rotuloDaCategoria, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
+import { nomeSugeridoDaSobra, quantidadeSugeridaDaSobra } from "../lib/sobraDeVoz";
 import { dataDeAmanhaIso, diaDaSemanaDeData, formatarDataBr, rotuloDoDia } from "../lib/data";
 import { proximaDataAlvo } from "../lib/dataAlvoDoDia";
 import { proximoDiaUtilFilial } from "../lib/feriados";
@@ -337,6 +338,109 @@ export function TelaPedidoFilial({
     setItens((atual) => atual.filter((i) => i.codigoPdv !== codigoPdv));
   }
 
+  /**
+   * CADASTRO RELÂMPAGO A PARTIR DA BUSCA OU DA VOZ (set/2026, pedido do
+   * dono do negócio: "as filiais passarão a ter permissão de cadastrar
+   * produtos"). Um toque na categoria certa já cadastra e inclui — sem
+   * abrir formulário, sem sair da busca.
+   */
+  async function cadastrarProdutoDaBusca(
+    nome: string,
+    categoria: string,
+    quantidadeInicial?: number | null
+  ) {
+    const limpo = nome.trim();
+    if (!limpo || salvandoNovoProduto) return;
+    setSalvandoNovoProduto(true);
+    try {
+      const novo = await onCadastrarProduto({
+        nome: limpo,
+        categoria,
+        unidadeProducao: "un",
+        ativoNaProducao: true,
+        prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[categoria] ?? null,
+      });
+      if (!novo) return;
+      setBusca("");
+      if (quantidadeInicial && quantidadeInicial > 0) {
+        setItens((atual) =>
+          atual.some((i) => i.codigoPdv === novo.codigoPdv)
+            ? atual.map((i) =>
+                i.codigoPdv === novo.codigoPdv ? { ...i, quantidadeUnidades: quantidadeInicial } : i
+              )
+            : [...atual, { codigoPdv: novo.codigoPdv, quantidadeUnidades: quantidadeInicial }]
+        );
+      } else {
+        setProdutoAtivo(novo.codigoPdv);
+        setValorEditando("");
+      }
+    } catch {
+      // Mensagem já vem do aviso global (ver App.tsx).
+    } finally {
+      setSalvandoNovoProduto(false);
+    }
+  }
+
+  /**
+   * O CARTÃO EM SI — pastilhas de categoria, um toque cadastra (set/2026,
+   * "o card de cadastro tb deve ser intuitivo e com toques utilizando
+   * apenas o polegar de uma das mãos"). Aparece tanto quando a busca
+   * digitada não acha nada quanto quando a voz não reconheceu um trecho
+   * (`opcoesParaSobraBusca` abaixo) — por isso recebe `remover`: só
+   * existe quando veio de uma sobra de voz, para descartar só aquele
+   * trecho sem apagar a busca inteira.
+   */
+  function cadastroRelampagoBusca(
+    nomeBruto: string,
+    quantidadeInicialSugerida?: number | null,
+    remover?: () => void
+  ) {
+    const nome = nomeBruto.trim();
+    if (!nome) return null;
+
+    function cancelar() {
+      if (remover) remover();
+      else setBusca("");
+    }
+
+    return (
+      <div className="cadastro-relampago">
+        <p className="nota-rodape">
+          {quantidadeInicialSugerida ? `${quantidadeInicialSugerida} ` : ""}
+          <strong>{nome}</strong> não está no catálogo.
+        </p>
+        <p className="nota-rodape">Em qual categoria?</p>
+        <div className="setores-do-novo">
+          {CATEGORIAS_PRODUCAO.map((categoria) => (
+            <button
+              key={categoria.chave}
+              type="button"
+              className="chip-setor"
+              disabled={salvandoNovoProduto}
+              onClick={() => void cadastrarProdutoDaBusca(nome, categoria.chave, quantidadeInicialSugerida)}
+            >
+              {categoria.rotulo}
+            </button>
+          ))}
+        </div>
+        <div className="acoes">
+          <button type="button" className="link" onClick={cancelar}>
+            {remover ? "descartar" : "cancelar"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /** O que oferecer para um trecho que o microfone não reconheceu —
+   * mesma ideia de `opcoesParaSobra` em PainelFornadasFilial.tsx, sem a
+   * bifurcação produto/suprimento (aqui só existe produto de padaria). */
+  function opcoesParaSobraBusca(trecho: string, remover: () => void) {
+    const nome = nomeSugeridoDaSobra(trecho) || trecho.trim();
+    if (!nome) return null;
+    return cadastroRelampagoBusca(nome, quantidadeSugeridaDaSobra(trecho), remover);
+  }
+
   /** Edita a quantidade de um item que já está na lista em montagem —
    * mesma lógica de `mudarQuantidade` em PainelFornadasFilial.tsx. */
   function mudarQuantidadeItem(codigoPdv: number, bruto: string) {
@@ -485,7 +589,7 @@ export function TelaPedidoFilial({
       >
         {busca.trim().length > 0 &&
           (resultadosBusca.length === 0 ? (
-            <p className="nota-rodape">Nenhum produto encontrado para "{busca.trim()}".</p>
+            cadastroRelampagoBusca(busca.trim())
           ) : (
             resultadosBusca.map((produto) => {
               const itemSalvo = itens.find((i) => i.codigoPdv === produto.codigoPdv);
@@ -562,6 +666,7 @@ export function TelaPedidoFilial({
             rotuloFalar="Monte a lista falando"
             autoIncluirQuandoCompleto
             onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
+            renderSobra={opcoesParaSobraBusca}
           />
         </CampoDeBusca>
       </div>

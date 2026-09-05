@@ -1757,6 +1757,25 @@ button.perigo:hover { background: #822525; }
 .botao-assistente-compacto.sinal-certo {
   box-shadow: 0 3px 12px rgba(47, 122, 74, 0.5), 0 0 0 4px rgba(47, 122, 74, 0.22);
 }
+/* A CAPTAÇÃO BEM-SUCEDIDA TAMBÉM VIRA PASTILHA COM TEXTO (set/2026,
+   pedido do dono do negócio: "quando a captação for bem sucedida a
+   informação será notificada tb em formato de pastilha na barra de
+   busca") — mesma troca de FORMATO do `.ouvindo` acima, não uma
+   animação nova: o "Entendi" confirma o que o microfone captou. Fica de
+   fora de propósito o `.sinal-errado`: o erro já tem seu próprio balão
+   com botão fechar (ver AssistenteDeVoz.tsx) — a pastilha aqui é só
+   para a confirmação positiva. */
+.botao-assistente-compacto.sinal-certo {
+  width: auto;
+  min-width: 64px;
+  padding: 0 20px 0 18px;
+  border-radius: 999px;
+  gap: 10px;
+}
+.botao-assistente-compacto.sinal-certo .rotulo-assistente {
+  display: inline;
+  white-space: nowrap;
+}
 .botao-assistente-compacto.sinal-errado {
   box-shadow: 0 3px 12px rgba(155, 44, 44, 0.5), 0 0 0 4px rgba(155, 44, 44, 0.22);
 }

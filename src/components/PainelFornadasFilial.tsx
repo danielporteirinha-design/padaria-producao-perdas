@@ -45,6 +45,7 @@ import {
 } from "../lib/concluidosVistos";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
 import { contemBusca } from "../lib/texto";
+import { nomeSugeridoDaSobra, quantidadeSugeridaDaSobra } from "../lib/sobraDeVoz";
 import { adivinharSegmentoSuprimento } from "../lib/adivinharSuprimento";
 import { CATEGORIAS_PRODUCAO, VALIDADE_SUGERIDA_DIAS } from "../lib/categorias";
 import { IconeConfere, IconeLixeira, IconeSeta, IconeSino } from "./Icones";
@@ -74,43 +75,6 @@ function ehCodigoDeSuprimento(codigoPdv: number): boolean {
 }
 function indiceDoSuprimento(codigoPdv: number): number {
   return codigoPdv - OFFSET_SUPRIMENTO;
-}
-
-/** "polpa de frutas" -> "Polpa De Frutas" — só para sugerir um nome
- * legível a partir do que o microfone ouviu. */
-function capitalizarNome(bruto: string): string {
-  return bruto
-    .trim()
-    .split(/\s+/)
-    .map((parte) => (parte.length > 0 ? parte[0].toUpperCase() + parte.slice(1).toLowerCase() : parte))
-    .join(" ");
-}
-
-/**
- * SÓ O QUE MEDE, PARA SUGERIR O NOME (herdado de Suprimentos, set/2026,
- * para quando a voz não achou o item). Tira número e palavra de
- * quantidade do que o microfone ouviu, mas MANTÉM "de/da/do": o texto
- * vira o nome do item que vai para o catálogo, e sem a preposição "saco
- * de papel" viraria o errado "saco papel".
- */
-const PALAVRAS_DE_QUANTIDADE = [
-  "UNIDADES", "UNIDADE", "UN",
-  "PECAS", "PECA", "ITENS", "ITEM",
-  "DUZIA", "DUZIAS",
-];
-function nomeSugeridoDaSobra(trecho: string): string {
-  const palavras = trecho
-    .replace(/\d+/g, " ")
-    .split(/\s+/)
-    .filter((p) => p.length > 0 && !PALAVRAS_DE_QUANTIDADE.includes(p.toUpperCase()));
-  return capitalizarNome(palavras.join(" "));
-}
-
-/** A quantidade já foi dita — não pedir de novo (mesma regra de Suprimentos). */
-function quantidadeSugeridaDaSobra(trecho: string): number | null {
-  const encontrado = trecho.match(/\d+(?:[.,]\d+)?/);
-  if (!encontrado || !ehNumeroValidoPositivo(encontrado[0])) return null;
-  return paraNumero(encontrado[0]);
 }
 
 interface PainelFornadasFilialProps {
