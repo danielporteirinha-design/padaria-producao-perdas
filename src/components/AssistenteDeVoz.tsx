@@ -120,6 +120,23 @@ interface AssistenteDeVozProps {
    * pena, e não é o que este pedido do dono do negócio mirava.
    */
   autoIncluirQuandoCompleto?: boolean;
+  /**
+   * O MICROFONE DENTRO DA BARRA DE BUSCA (set/2026, pedido do dono do
+   * negócio: "o mesmo esquema utilizado pelo Google" — caixa de texto
+   * com o ícone de voz na ponta, em vez de um botão grande solto). Troca
+   * só a CASCA do botão (ícone pequeno e redondo, sem rótulo escrito,
+   * sem posição fixa na tela — quem posiciona é quem chama, encaixando
+   * como filho de CampoDeBusca) — a mecânica de ouvir/entender/conferir
+   * é exatamente a mesma de sempre, e continua aparecendo embaixo da
+   * barra quando há algo para mostrar.
+   *
+   * Existe como opção, não como padrão, porque o dono do negócio já
+   * tinha decidido antes (ago/2026, comentário em CampoDeBusca.tsx) que
+   * DOIS microfones na mesma tela — o da busca e o do assistente —
+   * confundem. Aqui não existem dois: o ícone dentro da barra É o
+   * assistente, só que pequeno.
+   */
+  compacto?: boolean;
 }
 
 export function AssistenteDeVoz({
@@ -131,6 +148,7 @@ export function AssistenteDeVoz({
   renderSobra,
   rotuloFalar,
   autoIncluirQuandoCompleto = false,
+  compacto = false,
 }: AssistenteDeVozProps) {
   const [ouvindo, setOuvindo] = useState(false);
   useEffect(() => {
@@ -382,15 +400,14 @@ export function AssistenteDeVoz({
         ? "Confere antes de incluir na lista:"
         : "Confere o pedido antes de enviar:";
 
-  return (
-    <div className="assistente-voz">
-      <button
-        type="button"
-        className={`botao-assistente ${ouvindo ? "ouvindo" : ""} ${sinal ? `sinal-${sinal}` : ""}`}
-        aria-label={ouvindo ? "Ouvindo" : "Falar"}
-        disabled={pensando || enviando || sinal !== ""}
-        onClick={() => void ditar()}
-      >
+  const botao = (
+    <button
+      type="button"
+      className={`botao-assistente ${compacto ? "botao-assistente-compacto" : ""} ${ouvindo ? "ouvindo" : ""} ${sinal ? `sinal-${sinal}` : ""}`}
+      aria-label={ouvindo ? "Ouvindo" : "Falar"}
+      disabled={pensando || enviando || sinal !== ""}
+      onClick={() => void ditar()}
+    >
         {sinal === "certo" ? (
           <IconeConfere tamanho={26} />
         ) : sinal === "errado" ? (
@@ -403,15 +420,20 @@ export function AssistenteDeVoz({
             reconhecedor trabalha com `continuous = false` e FECHA
             SOZINHO quando a pessoa para de falar — o convite a tocar
             pedia um passo que o navegador já dá. */}
-        {sinal === "certo"
-          ? "Entendi"
-          : sinal === "errado"
-            ? "Não entendi"
-            : ouvindo
-              ? "Ouvindo..."
-              : (rotuloFalar ?? (pedindo ? "Pedir falando" : "Anunciar falando"))}
-      </button>
+        <span className="rotulo-assistente">
+          {sinal === "certo"
+            ? "Entendi"
+            : sinal === "errado"
+              ? "Não entendi"
+              : ouvindo
+                ? "Ouvindo..."
+                : (rotuloFalar ?? (pedindo ? "Pedir falando" : "Anunciar falando"))}
+        </span>
+    </button>
+  );
 
+  const conteudoExtra = (
+    <>
       {/* A instrução escrita e o exemplo saíram (ago/2026, decisão do
           dono do negócio). O rótulo do botão já diz o que ele faz, e a
           conferência logo abaixo mostra o que foi entendido — as duas
@@ -564,6 +586,22 @@ export function AssistenteDeVoz({
           </div>
         </div>
       )}
+    </>
+  );
+
+  if (compacto) {
+    return (
+      <>
+        {botao}
+        {conteudoExtra}
+      </>
+    );
+  }
+
+  return (
+    <div className="assistente-voz">
+      {botao}
+      {conteudoExtra}
     </div>
   );
 }

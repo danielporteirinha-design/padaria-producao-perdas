@@ -73,7 +73,9 @@ import {
   type ItemConsolidado,
 } from "../lib/consolidacao";
 import { agruparPorCategoria } from "../lib/blocosDeImpressao";
+import { contemBusca } from "../lib/texto";
 import { AssistenteDeVoz } from "./AssistenteDeVoz";
+import { CampoDeBusca } from "./CampoDeBusca";
 import { IconeCalendario, IconeImpressora, IconeLixeira, IconeSeta } from "./Icones";
 
 interface TelaCronogramaProps {
@@ -121,6 +123,10 @@ type StatusSugestao = "" | "carregando" | "erro";
  * tenha gravado — nunca é oferecida como sessão nova.
  */
 const GRUPOS = CATEGORIAS_PRODUCAO.map((c) => c.chave);
+
+/** Teto de resultados na busca — mesmo número usado na Lista de Produção
+ * da filial e em Reposição. */
+const MAXIMO_RESULTADOS = 12;
 
 export function TelaCronograma({
   produtos,
@@ -189,6 +195,9 @@ export function TelaCronograma({
   const [documentoAtivo, setDocumentoAtivo] = useState<string>("producao");
   const [statusSugestao, setStatusSugestao] = useState<Record<string, StatusSugestao>>({});
   const [mensagemSugestao, setMensagemSugestao] = useState<Record<string, string>>({});
+  /** A busca estilo Google do lançamento da matriz — ver o comentário
+   * equivalente em TelaPedidoFilial.tsx. */
+  const [buscaMatriz, setBuscaMatriz] = useState("");
 
   /**
    * REVISÃO DA LISTA DE CADA FILIAL (ago/2026, pedido do dono do negócio:
@@ -398,6 +407,23 @@ export function TelaCronograma({
 
   const totalItens = Object.values(itensPorGrupo).reduce((soma, itens) => soma + itens.length, 0);
 
+  const resultadosBuscaMatriz = useMemo(() => {
+    const termo = buscaMatriz.trim();
+    if (termo.length === 0) return [];
+    return produtos
+      .filter((p) => p.ativoNaProducao && contemBusca(p.nome, termo))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+      .slice(0, MAXIMO_RESULTADOS);
+  }, [produtos, buscaMatriz]);
+
+  /** Todos os itens lançados pela matriz, de todas as categorias juntas —
+   * a mesma lista que as sanfonas mostram separada, só que numa peça só,
+   * para o cartão "o que já está lançado" (ver comentário mais abaixo). */
+  const todosOsItensDaMatriz = useMemo(
+    () => GRUPOS.flatMap((chave) => itensPorGrupo[chave] ?? []),
+    [itensPorGrupo]
+  );
+
   /**
    * Vira a data-alvo quando o dia vira com o app aberto — mas só quando
    * não há trabalho na tela para perder. A regra inteira, com o porquê de
@@ -533,6 +559,37 @@ export function TelaCronograma({
 
   function nomeDoProduto(codigoPdv: number): string {
     return produtos.find((p) => p.codigoPdv === codigoPdv)?.nome ?? `#${codigoPdv}`;
+  }
+
+  /** Edita a quantidade de um item já lançado, a partir do cartão "o que
+   * já está lançado" — que mostra os itens achatados, sem a categoria à
+   * vista. Descobre a categoria pelo catálogo para saber em qual grupo
+   * de `itensPorGrupo` mexer (mesma ideia de `mudarQuantidadeItem` em
+   * TelaPedidoFilial.tsx). */
+  function mudarQuantidadeItemMatriz(codigoPdv: number, bruto: string) {
+    const produto = produtos.find((p) => p.codigoPdv === codigoPdv);
+    if (!produto) return;
+    const limpo = sanitizarEntradaNumerica(bruto);
+    setItensPorGrupo((atual) => {
+      const grupo = produto.categoria;
+      const itensAtuais = atual[grupo] ?? [];
+      return {
+        ...atual,
+        [grupo]: itensAtuais.map((i) =>
+          i.codigoPdv === codigoPdv
+            ? { ...i, quantidadeUnidades: ehNumeroValidoPositivo(limpo) ? paraNumero(limpo) : 0 }
+            : i
+        ),
+      };
+    });
+  }
+
+  /** Remove um item já lançado a partir do cartão achatado — mesma ideia
+   * acima, para o botão de lixeira. */
+  function removerItemMatriz(codigoPdv: number) {
+    const produto = produtos.find((p) => p.codigoPdv === codigoPdv);
+    if (!produto) return;
+    removerItem(produto.categoria, codigoPdv);
   }
 
   /**
@@ -1081,19 +1138,125 @@ export function TelaCronograma({
         aberto={!!cardsAbertos[LOJA_MATRIZ.id]}
         onAlternar={() => alternarCard(LOJA_MATRIZ.id)}
       >
-        {/* MONTAR FALANDO (set/2026, pedido do dono do negócio: matriz e
-            filiais montam a lista de produção pelo comando de voz — a
-            filial já tinha isso, ver TelaPedidoFilial.tsx). Mesmo lugar
-            da sanfona onde a matriz lança o cronograma dela; as sanfonas
-            continuam abaixo para ajustar item a item. */}
-        <AssistenteDeVoz
-          produtos={produtos}
-          modo="pedir"
-          acao="adicionar"
-          rotuloFalar="Monte a lista falando"
-          autoIncluirQuandoCompleto
-          onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
-        />
+        {/* BUSCAR OU FALAR, NA MESMA BARRA (set/2026, pedido do dono do
+            negócio: "o mesmo esquema utilizado pelo Google em sua barra
+            de buscas" — mesma barra da Lista de Produção da filial, ver
+            TelaPedidoFilial.tsx). Mesmo lugar da sanfona onde a matriz
+            lança o cronograma dela; as sanfonas continuam abaixo para
+            ajustar item a item. */}
+        <CampoDeBusca
+          className="busca-lista-producao"
+          valor={buscaMatriz}
+          onMudar={(v) => {
+            setBuscaMatriz(v);
+            setProdutoAtivo(null);
+          }}
+          placeholder="Buscar produto ou categoria..."
+          rotulo="Buscar produto para lançar na produção"
+        >
+          <AssistenteDeVoz
+            compacto
+            produtos={produtos}
+            modo="pedir"
+            acao="adicionar"
+            rotuloFalar="Monte a lista falando"
+            autoIncluirQuandoCompleto
+            onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
+          />
+        </CampoDeBusca>
+
+        {buscaMatriz.trim().length > 0 &&
+          (resultadosBuscaMatriz.length === 0 ? (
+            <p className="nota-rodape">Nenhum produto encontrado para "{buscaMatriz.trim()}".</p>
+          ) : (
+            resultadosBuscaMatriz.map((produto) => {
+              const itemSalvo = (itensPorGrupo[produto.categoria] ?? []).find(
+                (i) => i.codigoPdv === produto.codigoPdv
+              );
+              const editando = produtoAtivo === produto.codigoPdv;
+              return (
+                <div key={produto.codigoPdv} className="linha-fornada">
+                  <div className="info-fornada">
+                    <strong>{produto.nome}</strong>
+                    {itemSalvo && (
+                      <span className="valor-confirmado">{itemSalvo.quantidadeUnidades} un ✓</span>
+                    )}
+                  </div>
+                  {editando ? (
+                    <div className="editor-quantidade">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        pattern="[0-9]*[.,]?[0-9]*"
+                        autoFocus
+                        placeholder="Quantidade em unidades"
+                        value={valorEditando}
+                        onChange={(e) => setValorEditando(sanitizarEntradaNumerica(e.target.value))}
+                      />
+                      <span className="unidade-fixa">un</span>
+                      <button
+                        type="button"
+                        className="primario"
+                        disabled={!ehNumeroValidoPositivo(valorEditando)}
+                        onClick={() => confirmarQuantidade(produto.categoria, produto.codigoPdv)}
+                      >
+                        Confirmar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="acoes-fornada">
+                      <button
+                        type="button"
+                        className="botao-fornada pedir"
+                        onClick={() => abrirEdicao(produto.codigoPdv, produto.categoria)}
+                      >
+                        {itemSalvo ? "Editar" : "Incluir"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          ))}
+
+        {/* O CARTÃO DO QUE JÁ FOI LANÇADO, SEMPRE VISÍVEL E EDITÁVEL
+            (set/2026, pedido do dono do negócio: "um card deve mostrar
+            os itens que já foram acrescentados... bem como a
+            possibilidade de editar as quantidades" — mesmo cartão de
+            TelaPedidoFilial.tsx, aqui achatando as 5 categorias numa
+            lista só, já que a pergunta é a mesma: "o que já está
+            lançado para amanhã?"). */}
+        {todosOsItensDaMatriz.length > 0 && (
+          <div className="pedido-em-montagem">
+            <strong className="titulo-montagem">Já lançado</strong>
+            {todosOsItensDaMatriz.map((item) => (
+              <div key={item.codigoPdv} className="linha-montagem">
+                <span className="nome-montagem">{nomeDoProduto(item.codigoPdv)}</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  pattern="[0-9]*"
+                  className="qtd-conferencia"
+                  aria-label={`Quantidade de ${nomeDoProduto(item.codigoPdv)}`}
+                  placeholder="qtd"
+                  value={item.quantidadeUnidades > 0 ? String(item.quantidadeUnidades) : ""}
+                  onChange={(e) => mudarQuantidadeItemMatriz(item.codigoPdv, e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="tirar-da-lista"
+                  aria-label={`Tirar ${nomeDoProduto(item.codigoPdv)} da lista`}
+                  onClick={() => removerItemMatriz(item.codigoPdv)}
+                >
+                  <IconeLixeira tamanho={16} />
+                </button>
+              </div>
+            ))}
+            <p className="total-linha">
+              <strong>{totalItens}</strong> {totalItens === 1 ? "item" : "itens"}
+            </p>
+          </div>
+        )}
 
         {GRUPOS.map((chave) => {
           const rotulo = rotuloDaCategoria(chave);

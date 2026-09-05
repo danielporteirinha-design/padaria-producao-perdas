@@ -303,7 +303,20 @@ const CONFERENCIAS = [
   ["src/components/TelaCronograma.tsx", "proximoDiaUtilMatriz(dataDeAmanhaIso())", "Producao (matriz) mira o proximo dia util, nao so amanha"],
   ["src/components/TelaPedidoFilial.tsx", "itensIguais(itens, pedidoExistente.itens)", "Atualizar so habilita quando a lista mudou de fato"],
   ["src/lib/dataAlvoDoDia.ts", "proximoDiaAlvo", "proximaDataAlvo recebe o proximo dia util de fora"],
-  ["src/components/TelaPedidoFilial.tsx", 'jaEnviado && (\n                <span className="estado-pedido">', "Mensagem 'nao enviado' removida do titulo (ruido)"],
+
+  // --- Busca estilo Google com microfone compacto, e cartao editavel
+  // sempre visivel na Lista de Producao (set/2026)
+  ["src/components/AssistenteDeVoz.tsx", "compacto?: boolean", "Assistente de voz ganha modo compacto (icone na barra de busca)"],
+  ["src/components/AssistenteDeVoz.tsx", "const conteudoExtra = (", "Botao e conferencia viram pecas separadas para o modo compacto"],
+  ["src/index.css", ".botao-assistente-compacto {", "Microfone compacto: circulo pequeno e com destaque visual"],
+  ["src/components/TelaPedidoFilial.tsx", "<CampoDeBusca\n        className=\"busca-lista-producao\"", "Lista de Producao (filial): busca com microfone na ponta"],
+  ["src/components/TelaPedidoFilial.tsx", "AssistenteDeVoz\n          compacto", "Lista de Producao (filial): microfone compacto dentro da busca"],
+  ["src/components/TelaPedidoFilial.tsx", "mudarQuantidadeItem", "Cartao de itens ja incluidos e editavel (nao so leitura)"],
+  ["src/components/TelaPedidoFilial.tsx", '<div className="destaque-data titulo-do-dia">', "Card da data (filial) sem nada alem da data"],
+  ["src/components/TelaCronograma.tsx", "resultadosBuscaMatriz", "Lista de Producao (matriz): busca com microfone na ponta"],
+  ["src/components/TelaCronograma.tsx", "AssistenteDeVoz\n            compacto", "Lista de Producao (matriz): microfone compacto dentro da busca"],
+  ["src/components/TelaCronograma.tsx", "todosOsItensDaMatriz", "Cartao do que ja foi lancado (matriz), achatando as categorias"],
+  ["src/components/TelaCronograma.tsx", "mudarQuantidadeItemMatriz", "Cartao 'ja lancado' e editavel (matriz)"],
 ];
 
 /**

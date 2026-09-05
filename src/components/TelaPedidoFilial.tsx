@@ -39,13 +39,20 @@ import {
   limparRascunhosDePedidoAntigos,
 } from "../lib/rascunhoPedido";
 import { ehNumeroValidoPositivo, paraNumero, sanitizarEntradaNumerica } from "../lib/numeros";
+import { contemBusca } from "../lib/texto";
 import {
   buscarSugestaoProducao,
   ErroSugestaoProducao,
   montarHistoricoDaFilial,
 } from "../lib/sugestaoProducao";
 import { AssistenteDeVoz } from "./AssistenteDeVoz";
-import { IconeCalendario, IconeConfere, IconeLixeira, IconeSeta } from "./Icones";
+import { CampoDeBusca } from "./CampoDeBusca";
+import { IconeCalendario, IconeLixeira, IconeSeta } from "./Icones";
+
+/** Teto de resultados na busca — mesmo número usado em Reposição
+ * (PainelFornadasFilial.tsx): o suficiente para achar o produto sem
+ * rolar uma lista enorme. */
+const MAXIMO_RESULTADOS = 12;
 
 interface TelaPedidoFilialProps {
   loja: Loja;
@@ -92,6 +99,14 @@ export function TelaPedidoFilial({
   const [enviando, setEnviando] = useState(false);
   const [statusSugestao, setStatusSugestao] = useState<Record<string, "" | "carregando" | "erro">>({});
   const [mensagemSugestao, setMensagemSugestao] = useState<Record<string, string>>({});
+  /**
+   * A BUSCA ESTILO GOOGLE (set/2026, pedido do dono do negócio: "o mesmo
+   * esquema utilizado pelo Google" — caixa de texto com o microfone na
+   * ponta). Filtra o catálogo por nome enquanto a pessoa digita; o
+   * microfone continua sendo o `AssistenteDeVoz` de sempre, só que
+   * pequeno e dentro da barra (`compacto`, ver o componente).
+   */
+  const [busca, setBusca] = useState("");
 
   const pedidoExistente = useMemo(
     // Só o pedido DIÁRIO: a reposição é outra lista, com outra urgência,
@@ -176,6 +191,15 @@ export function TelaPedidoFilial({
         : [],
     [pedidoExistente]
   );
+
+  const resultadosBusca = useMemo(() => {
+    const termo = busca.trim();
+    if (termo.length === 0) return [];
+    return produtos
+      .filter((p) => p.ativoNaProducao && contemBusca(p.nome, termo))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+      .slice(0, MAXIMO_RESULTADOS);
+  }, [produtos, busca]);
 
   const diaDaSemana = diaDaSemanaDeData(dataAlvo);
   const totalUnidades = itens.reduce((soma, i) => soma + i.quantidadeUnidades, 0);
@@ -294,6 +318,19 @@ export function TelaPedidoFilial({
     setItens((atual) => atual.filter((i) => i.codigoPdv !== codigoPdv));
   }
 
+  /** Edita a quantidade de um item que já está na lista em montagem —
+   * mesma lógica de `mudarQuantidade` em PainelFornadasFilial.tsx. */
+  function mudarQuantidadeItem(codigoPdv: number, bruto: string) {
+    const limpo = sanitizarEntradaNumerica(bruto);
+    setItens((atual) =>
+      atual.map((i) =>
+        i.codigoPdv === codigoPdv
+          ? { ...i, quantidadeUnidades: ehNumeroValidoPositivo(limpo) ? paraNumero(limpo) : 0 }
+          : i
+      )
+    );
+  }
+
   function limparCategoria(chave: string) {
     const codigos = new Set(produtosDaCategoria(chave).map((p) => p.codigoPdv));
     setItens((atual) => atual.filter((i) => !codigos.has(i.codigoPdv)));
@@ -384,61 +421,159 @@ export function TelaPedidoFilial({
     <div className={`tela ${itens.length > 0 ? "com-acao-fixa" : ""}`}>
       <AtivarAvisos loja={loja} operador={operador} />
 
-      {/*
-        O estado do pedido mora DENTRO do bloco do título, e não num cartão
-        próprio embaixo (ago/2026). Solto, ele virava um segundo balão
-        competindo com a data por atenção e empurrando a lista para baixo;
-        colado ao título, "Pedido para quinta, 27/08" e "enviado" se leem
-        como uma frase só — que é como a informação existe na cabeça de
-        quem opera.
-      */}
-      {/* A DATA DEIXOU DE SER EDITÁVEL (set/2026, pedido do dono do
-          negócio): o "próximo dia" já é calculado sozinho — pula domingo
-          e feriado nacional (ver src/lib/feriados.ts) — e não fazia
-          sentido deixar a pessoa escolher outro dia à mão para uma lista
-          que é, por definição, a de suprimento/produção da PRÓXIMA
-          abertura da loja. O calendário e o toque para abrir saíram
-          junto; sobrou só a informação, sem convite a mexer nela. */}
-      <div
-        className={`destaque-data titulo-do-dia bloco-pedido ${jaEnviado ? "enviado" : ""}`}
-      >
+      {/* O CARD DA DATA NÃO TEM NADA ALÉM DA DATA (set/2026, pedido do
+          dono do negócio: "tire tudo que for extra desse card, inclusive
+          ele nem deve ser clicável"). Chegou a ter um seletor de data
+          (retirado antes, quando o "próximo dia útil" passou a ser
+          calculado sozinho — ver src/lib/feriados.ts) e depois um aviso
+          de "enviado · N produtos" (retirado agora): os dois eram
+          informação a mais competindo com o único dado que este card
+          existe para mostrar. Quem quer saber se já enviou olha o botão
+          fixo embaixo ("Atualizar" só aparece quando já enviou) ou o
+          cartão de itens já incluídos, logo abaixo da busca. */}
+      <div className="destaque-data titulo-do-dia">
         <div className="linha-titulo-do-dia">
           <span className="marca-titulo-do-dia">
             <IconeCalendario tamanho={20} />
-            <span className="texto-bloco-pedido">
-              <span className="titulo-planejamento">
-                Pedido para {rotuloDoDia(diaDaSemana)}, {formatarDataBr(dataAlvo)}
-              </span>
-              {/* SÓ AVISA QUANDO JÁ ENVIOU (set/2026, pedido do dono do
-                  negócio: "essa mensagem gera ruído"). "Não enviado" era
-                  o estado inicial de toda lista nova — a frase aparecia
-                  sempre que a pessoa abria a tela para montar o pedido
-                  do zero, avisando de algo que ainda nem tinha começado
-                  a acontecer. O que vale avisar é o oposto: que já foi
-                  enviado, e quantos produtos foram. */}
-              {jaEnviado && (
-                <span className="estado-pedido">
-                  <IconeConfere tamanho={14} /> enviado ·{" "}
-                  {pedidoExistente?.itens.length ?? 0} produtos
-                </span>
-              )}
+            <span className="titulo-planejamento">
+              Pedido para {rotuloDoDia(diaDaSemana)}, {formatarDataBr(dataAlvo)}
             </span>
           </span>
         </div>
       </div>
 
-      {/* MONTAR FALANDO (ago/2026, pedido do dono do negócio). Vem antes
-          das sanfonas porque é o caminho mais curto para montar a lista
-          inteira: uma frase com todos os itens e quantidades. As
-          sanfonas continuam abaixo para ajustar item a item. */}
-      <AssistenteDeVoz
-        produtos={produtos}
-        modo="pedir"
-        acao="adicionar"
-        rotuloFalar="Monte a lista falando"
-        autoIncluirQuandoCompleto
-        onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
-      />
+      {/* BUSCAR OU FALAR, NA MESMA BARRA (set/2026, pedido do dono do
+          negócio: "vamos utilizar o esquema idêntico utilizado pelo
+          Google em sua barra de buscas... uma caixa de texto... e um
+          ícone de microfone na extremidade da barra"). Quem já procura
+          produto pelo teclado do celular reconhece o gesto na hora; quem
+          prefere falar continua com o mesmo assistente de sempre — ele
+          só ficou pequeno e mora dentro da barra (`compacto`, ver
+          AssistenteDeVoz.tsx) em vez de solto, ocupando a tela sozinho.
+          Vem antes das sanfonas por ser o caminho mais curto até a
+          lista: procurar OU falar, sem precisar abrir categoria nenhuma. */}
+      <CampoDeBusca
+        className="busca-lista-producao"
+        valor={busca}
+        onMudar={(v) => {
+          setBusca(v);
+          setProdutoAtivo(null);
+        }}
+        placeholder="Buscar produto ou categoria..."
+        rotulo="Buscar produto para incluir no pedido"
+      >
+        <AssistenteDeVoz
+          compacto
+          produtos={produtos}
+          modo="pedir"
+          acao="adicionar"
+          rotuloFalar="Monte a lista falando"
+          autoIncluirQuandoCompleto
+          onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
+        />
+      </CampoDeBusca>
+
+      {busca.trim().length > 0 &&
+        (resultadosBusca.length === 0 ? (
+          <p className="nota-rodape">Nenhum produto encontrado para "{busca.trim()}".</p>
+        ) : (
+          resultadosBusca.map((produto) => {
+            const itemSalvo = itens.find((i) => i.codigoPdv === produto.codigoPdv);
+            const editando = produtoAtivo === produto.codigoPdv;
+            return (
+              <div key={produto.codigoPdv} className="linha-fornada">
+                <div className="info-fornada">
+                  <strong>{produto.nome}</strong>
+                  {itemSalvo && (
+                    <span className="valor-confirmado">{itemSalvo.quantidadeUnidades} un ✓</span>
+                  )}
+                </div>
+                {editando ? (
+                  <div className="editor-quantidade">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      pattern="[0-9]*[.,]?[0-9]*"
+                      autoFocus
+                      placeholder="Quantidade em unidades"
+                      value={valorEditando}
+                      onChange={(e) => setValorEditando(sanitizarEntradaNumerica(e.target.value))}
+                    />
+                    <span className="unidade-fixa">un</span>
+                    <button
+                      type="button"
+                      className="primario"
+                      disabled={!ehNumeroValidoPositivo(valorEditando)}
+                      onClick={() => confirmarQuantidade(produto.codigoPdv)}
+                    >
+                      Confirmar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="acoes-fornada">
+                    <button
+                      type="button"
+                      className="botao-fornada pedir"
+                      onClick={() => abrirEdicao(produto.codigoPdv)}
+                    >
+                      {itemSalvo ? "Editar" : "Incluir"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        ))}
+
+      {/* O CARTÃO DE ITENS JÁ INCLUÍDOS, SEMPRE VISÍVEL E EDITÁVEL
+          (set/2026, pedido do dono do negócio: "o cartão de conferência
+          deve aparecer sempre que for iniciada a lista ou acrescentar
+          mais um item, pois essa lista pode ser incrementada durante um
+          dia inteiro... um card deve mostrar os itens que já foram
+          acrescentados para o próximo dia, bem como a possibilidade de
+          editar as quantidades").
+          O caso que motivou isto: um cliente pergunta por um produto que
+          não tem hoje, e o funcionário vem até aqui, no meio do
+          expediente, só para acrescentar aquele item à lista de amanhã —
+          precisa ver na hora o que já está montado, não rolar a tela até
+          o resumo do fim. Por isso o cartão mora logo depois da busca, e
+          não mais escondido depois das sanfonas. Reaproveita a mesma
+          forma de Reposição (`pedido-em-montagem`/`linha-montagem`) —
+          mesma mecânica de "o que já entrou na lista", mesmo lugar da
+          tela onde a pessoa já espera encontrar isso. */}
+      {itens.length > 0 && (
+        <div className="pedido-em-montagem">
+          <strong className="titulo-montagem">
+            {jaEnviado ? "Já no pedido enviado" : "Pedido em montagem"}
+          </strong>
+          {itens.map((item) => (
+            <div key={item.codigoPdv} className="linha-montagem">
+              <span className="nome-montagem">{nomeDoProduto(item.codigoPdv)}</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                pattern="[0-9]*"
+                className="qtd-conferencia"
+                aria-label={`Quantidade de ${nomeDoProduto(item.codigoPdv)}`}
+                placeholder="qtd"
+                value={item.quantidadeUnidades > 0 ? String(item.quantidadeUnidades) : ""}
+                onChange={(e) => mudarQuantidadeItem(item.codigoPdv, e.target.value)}
+              />
+              <button
+                type="button"
+                className="tirar-da-lista"
+                aria-label={`Tirar ${nomeDoProduto(item.codigoPdv)} da lista`}
+                onClick={() => removerItem(item.codigoPdv)}
+              >
+                <IconeLixeira tamanho={16} />
+              </button>
+            </div>
+          ))}
+          <p className="total-linha">
+            <strong>{itens.length}</strong> itens · <strong>{totalUnidades}</strong> unidades
+          </p>
+        </div>
+      )}
 
       {/* O QUE NÃO VEM (ago/2026). Item cortado pela matriz sai de
           `itens` e, sem este bloco, sumiria da tela sem deixar rastro —
@@ -640,33 +775,6 @@ export function TelaPedidoFilial({
           </div>
         );
       })}
-
-      {itens.length > 0 && (
-        <div className="resumo-pedido">
-          <h3>Resumo do pedido</h3>
-          <div className="tabela-scroll">
-            <table className="tabela-simples">
-              <thead>
-                <tr>
-                  <th>Produto</th>
-                  <th>Quantidade</th>
-                </tr>
-              </thead>
-              <tbody>
-                {itens.map((i) => (
-                  <tr key={i.codigoPdv}>
-                    <td>{nomeDoProduto(i.codigoPdv)}</td>
-                    <td>{i.quantidadeUnidades} un</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="total-linha">
-            <strong>{itens.length}</strong> itens · <strong>{totalUnidades}</strong> unidades
-          </p>
-        </div>
-      )}
 
       {/* A frase sobre a impressora saiu (ago/2026): a lista não vai mais
           sozinha para o caixa da matriz — quem imprime é a matriz, depois

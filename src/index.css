@@ -246,7 +246,7 @@ button.link {
    ele viraria mais um botão na linha, disputando com o "limpar" e
    roubando largura do que a pessoa está digitando.
    --------------------------------------------------------------- */
-.campo-com-voz { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.campo-com-voz { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
 /* 16px é o piso: abaixo disso o Safari do iPhone dá zoom sozinho ao
    focar o campo, e a tela inteira sai do lugar no meio do atendimento. */
 .campo-com-voz input {
@@ -1734,6 +1734,55 @@ button.perigo:hover { background: #822525; }
 }
 .botao-assistente:disabled { opacity: 0.6; cursor: not-allowed; }
 
+/* O MICROFONE DENTRO DA BARRA DE BUSCA (set/2026, "o mesmo esquema
+   utilizado pelo Google" — ver o comentário `compacto` em
+   AssistenteDeVoz.tsx). Sai do `position: fixed` (aqui ele é filho do
+   `.campo-com-voz`, na posição em que a tela o colocou) e vira um
+   círculo pequeno — mas continua sendo o único microfone da tela, então
+   precisa ser achado na hora: cor de destaque sólida, sombra própria e
+   um anel de contorno se distinguem do campo de texto ao lado, mesmo
+   pequeno. O texto ("Pedir falando" etc.) some — não cabe num círculo —
+   e quem precisa dele continua tendo o `aria-label`. */
+.botao-assistente-compacto {
+  position: static;
+  flex-shrink: 0;
+  width: 48px;
+  min-height: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  gap: 0;
+  box-shadow: 0 2px 10px rgba(168, 100, 42, 0.45), 0 0 0 3px rgba(168, 100, 42, 0.16);
+}
+.botao-assistente-compacto .rotulo-assistente { display: none; }
+
+/* Enquanto ouve ou sinaliza, o anel acompanha a cor do botão — do
+   contrário o círculo vermelho/verde ficaria com uma sombra laranja por
+   baixo, uma pista visual errada. */
+.botao-assistente-compacto.ouvindo {
+  box-shadow: 0 2px 10px rgba(155, 44, 44, 0.45), 0 0 0 3px rgba(155, 44, 44, 0.18);
+}
+.botao-assistente-compacto.sinal-certo {
+  box-shadow: 0 2px 10px rgba(47, 122, 74, 0.45), 0 0 0 3px rgba(47, 122, 74, 0.18);
+}
+.botao-assistente-compacto.sinal-errado {
+  box-shadow: 0 2px 10px rgba(155, 44, 44, 0.45), 0 0 0 3px rgba(155, 44, 44, 0.18);
+}
+
+/* O CARTÃO DE CONFERÊNCIA, O ERRO E O "NÃO ENTROU" SAEM DA LINHA DA
+   BUSCA (set/2026). `.campo-com-voz` é `display: flex` para caber
+   input + microfone lado a lado; o conteúdo que o `AssistenteDeVoz`
+   compacto pendura depois dele (mesmo Fragment, mesmo pai flex) tem que
+   ocupar a largura inteira, numa linha própria abaixo — não espremer ao
+   lado do círculo. */
+.campo-com-voz .processando-voz,
+.campo-com-voz .erro-conversao,
+.campo-com-voz .fora-da-lista,
+.campo-com-voz .conferencia-voz {
+  flex-basis: 100%;
+  width: 100%;
+}
+
 /* BARRA FIXA SECUNDARIA - PERTO DO POLEGAR, ACIMA DO MICROFONE (set/2026,
    pedido do dono do negocio: os botoes de confirmar/enviar "devem ficar
    na mesma localizacao proxima ao polegar", sem precisar rolar a tela
@@ -2326,29 +2375,10 @@ button.perigo:hover { background: #822525; }
   color: var(--cor-texto-suave);
 }
 
-/* ---------------------------------------------------------------
-   Cabeçalho do pedido da filial: data e estado numa coisa só
-   --------------------------------------------------------------- */
-/* Um corpo abaixo do resto dos destaques: aqui a linha carrega dia da
-   semana E data completa, e a 19px do padrão ela quebrava em duas,
-   ocupando mais espaço vertical que a lista que vem em seguida. */
-.bloco-pedido { align-items: flex-start; font-size: 16px; }
-/* Duas linhas dentro do botão do título (data + estado): o alinhamento
-   volta para o topo, senão o calendário e a seta ficam centralizados na
-   altura das duas e parecem soltos no meio do bloco. */
-.bloco-pedido .marca-titulo-do-dia { align-items: flex-start; }
-.bloco-pedido .titulo-planejamento { font-size: 16px; }
-.bloco-pedido .seta-sessao { margin-top: 3px; }
-.texto-bloco-pedido { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.estado-pedido {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--cor-alerta);
-}
-.bloco-pedido.enviado .estado-pedido { color: var(--cor-sucesso); }
+/* O CABEÇALHO "DATA + ESTADO" SAIU (set/2026, pedido do dono do
+   negócio: "o card da data não deve ter nada além da data"). O card do
+   Pedido da Filial usa só `.destaque-data.titulo-do-dia`, igual ao do
+   Cronograma — ver TelaPedidoFilial.tsx. */
 
 /* Logomarca nas telas de abertura.
    180px, e não 320: a marca cumprimenta e sai do caminho. Quem abre o
@@ -2420,6 +2450,12 @@ button.perigo:hover { background: #822525; }
    Quebra em duas linhas quando a seta não couber ao lado da data, em vez
    de espremer o título — "Produção de Quinta-feira, 28/08/2026" em quatro
    linhas de duas palavras é pior. O min-width da marca é o gatilho. */
+/* NÃO É MAIS UM BOTÃO (set/2026): o título do dia deixou de abrir um
+   seletor de data — ver o comentário em TelaCronograma.tsx e
+   TelaPedidoFilial.tsx. Os resets de botão (`border`, `background`,
+   `font`) ficaram porque `.linha-titulo-do-dia` ainda pode envolver um
+   elemento de texto qualquer; o `cursor: pointer` saiu — nada aqui
+   responde a toque, e um cursor de mão convidava a tocar mesmo assim. */
 .linha-titulo-do-dia {
   display: flex;
   flex-wrap: wrap;
@@ -2432,7 +2468,6 @@ button.perigo:hover { background: #822525; }
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
 }
 /* A base é 60%, não `auto` (ago/2026). Com `auto`, o flex quebra a linha
    comparando o tamanho MÁXIMO do texto (a data inteira numa linha só) —
