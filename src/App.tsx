@@ -430,6 +430,14 @@ export default function App() {
   async function handleSalvarPlano(plano: PlanoDeProducaoDiario) {
     await comRetorno(() => repositorio!.salvarPlano(plano), "Cronograma salvo.");
     setPlanos((atual) => [...atual.filter((p) => p.id !== plano.id), plano]);
+    /**
+     * VOLTA SOZINHO PARA A REPOSIÇÃO (set/2026, pedido do dono do
+     * negócio: fluxo mais rápido possível — confirmar a Lista de
+     * Produção já devolve a matriz para a tela inicial, em vez de
+     * deixá-la parada no Cronograma). A tela do Cronograma não perde os
+     * dados: eles já foram salvos na linha acima: só a NAVEGAÇÃO muda.
+     */
+    irParaAba("fornada");
   }
 
   async function handleAnularPerda(perdaId: string, motivo: string) {
@@ -599,6 +607,16 @@ export default function App() {
       "Pedido enviado para a matriz."
     );
     setPedidos((atual) => [...atual.filter((p) => p.id !== pedido.id), pedido]);
+    /**
+     * VOLTA SOZINHO PARA A REPOSIÇÃO (set/2026, pedido do dono do
+     * negócio) — serve tanto para quem pediu reposição direto na aba
+     * Reposição (onde já é a tela inicial: virar para ela mesma não
+     * muda nada) quanto para quem montou a Lista de Produção na aba
+     * própria e precisa ser devolvido à tela inicial depois de enviar.
+     * Antes de avisar a matriz: o aviso é rede, a navegação não precisa
+     * esperar por ele.
+     */
+    irParaAba("fornada");
     await avisarMatrizDoPedido(pedido);
   }
 
@@ -649,6 +667,12 @@ export default function App() {
       "Lista de suprimentos enviada para a matriz."
     );
     setPedidosSuprimentos((atual) => [...atual.filter((p) => p.id !== pedido.id), pedido]);
+    /**
+     * VOLTA SOZINHO PARA A REPOSIÇÃO (set/2026, pedido do dono do
+     * negócio) — antes de avisar a matriz, pelo mesmo motivo de
+     * `handleSalvarPedido`: a navegação não espera a rede.
+     */
+    irParaAba("fornada");
 
     try {
       // COM OS ITENS: o aviso na mão da matriz precisa dizer o que

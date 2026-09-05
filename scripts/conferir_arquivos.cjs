@@ -268,6 +268,13 @@ const CONFERENCIAS = [
 
   // --- Matriz volta a cadastrar produtos (set/2026)
   ["src/App.tsx", '"cadastro", // (matriz — Produtos)', "Aba Produtos liberada de novo para a matriz"],
+
+  // --- Microfone fixo no rodape e retorno automatico a Reposicao (set/2026)
+  ["src/index.css", ".botao-assistente {\n  position: fixed;", "Botao de voz fixo, ao alcance do polegar"],
+  ["src/index.css", "padding-bottom: calc(104px", "Tela reserva espaco para o botao flutuante do microfone"],
+  ["src/App.tsx", 'irParaAba("fornada");\n  }\n\n  async function handleAnularPerda', "Confirmar Lista de Producao (matriz) volta para a Reposicao"],
+  ["src/App.tsx", "await avisarMatrizDoPedido(pedido);", "Enviar pedido (filial) volta para a Reposicao antes de avisar"],
+  ["src/App.tsx", "a navegação não espera a rede", "Enviar suprimentos (filial) volta para a Reposicao"],
 ];
 
 /**

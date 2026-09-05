@@ -118,11 +118,19 @@ button, input, select, textarea { font: inherit; }
    de uma tela que precisa de alvo grande e linha larga — num celular de
    390px são 40px de largura útil perdidos, o suficiente para o nome de
    um produto quebrar em duas linhas. */
-.conteudo-app { padding: 12px; }
+.conteudo-app {
+  padding: 12px;
+  /* Espaço reservado para o botão flutuante do microfone (set/2026, ver
+     `.botao-assistente` abaixo) — sem isto, o botão fixo tampa a última
+     linha da lista em telas com o assistente de voz. Sobra em branco
+     nas telas sem microfone (Perdas, Análises, Produtos) é um preço bem
+     menor que esconder conteúdo atrás do botão. */
+  padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+}
 @media (min-width: 560px) {
   /* No computador o padding maior volta: a linha larga demais cansa de
      ler, e ali sobra espaço. */
-  .conteudo-app { padding: 20px; }
+  .conteudo-app { padding: 20px; padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
 }
 
 .tela { display: flex; flex-direction: column; gap: 16px; }
@@ -1672,12 +1680,44 @@ button.perigo:hover { background: #822525; }
    os textos que se leem de relance subiram de tamanho.
    --------------------------------------------------------------- */
 .assistente-voz { margin-bottom: 12px; }
+/*
+ * FIXO NO RODAPÉ, AO ALCANCE DO POLEGAR (set/2026, pedido do dono do
+ * negócio: "que o usuário não precise usar as duas mãos").
+ *
+ * Antes o botão rolava junto com o resto da tela — abrir uma sanfona ou
+ * descer numa lista comprida jogava o microfone para cima, fora do
+ * alcance do polegar de quem segura o celular com uma mão só. A outra
+ * mão então precisava entrar só para tocar em "falar", o oposto do que
+ * o modo por voz existe para resolver.
+ *
+ * Fixo, ele fica sempre na mesma altura da tela, dentro da zona que o
+ * polegar cobre sem mudar a pega (pesquisa de UX de "thumb zone": a
+ * maioria segura o aparelho com uma mão e opera com o polegar, e ações
+ * frequentes devem morar no terço inferior da tela).
+ *
+ * `.assistente-voz` (o `<div>` pai) CONTINUA no fluxo normal da página —
+ * só o BOTÃO sai dele. O cartão de conferência que aparece depois de
+ * falar (lista reconhecida, quantidades editáveis) pode crescer bastante
+ * linha por linha; fixá-lo junto cortaria os itens de baixo da tela. Ler
+ * e ajustar a lista continua rolando normalmente — só o gatilho para
+ * começar a falar é que fica sempre à mão.
+ *
+ * z-index 40: abaixo do aviso de salvamento (`.aviso-global`, 60) e do
+ * fundo de confirmação (`.fundo-modal`, 50) — de propósito. Um "Pedido
+ * enviado" ou uma senha de confirmação cobrindo o microfone por alguns
+ * segundos é correto: a atenção tem que ir para eles primeiro.
+ */
 .botao-assistente {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  width: 100%;
+  width: auto;
   /* O maior alvo da tela, e de longe: é o caminho principal. */
   min-height: 72px;
   padding: 16px;
@@ -1688,6 +1728,9 @@ button.perigo:hover { background: #822525; }
   font-size: 19px;
   font-weight: 700;
   cursor: pointer;
+  /* Sem isto, o botão fixo (fora do fluxo) fica sem sombra própria e se
+     mistura visualmente com o conteúdo rolando por baixo dele. */
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
 }
 .botao-assistente:disabled { opacity: 0.6; cursor: not-allowed; }
 
