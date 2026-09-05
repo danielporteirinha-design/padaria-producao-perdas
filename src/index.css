@@ -2383,6 +2383,7 @@ button.perigo:hover { background: #822525; }
 }
 .cadastro-relampago .nota-rodape { margin: 0; }
 .cadastro-relampago .acoes { align-items: center; }
+.campo-revisao-nome input { width: 100%; box-sizing: border-box; }
 
 /* ---------------------------------------------------------------
    Pergunta "imprimir o comprovante?" após aceitar o último item

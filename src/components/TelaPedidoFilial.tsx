@@ -96,6 +96,19 @@ export function TelaPedidoFilial({
   const [cadastrandoEm, setCadastrandoEm] = useState<string | null>(null);
   const [nomeNovoProduto, setNomeNovoProduto] = useState("");
   const [salvandoNovoProduto, setSalvandoNovoProduto] = useState(false);
+  /**
+   * A REVISÃO ENTRE ESCOLHER A CATEGORIA E CADASTRAR DE VERDADE
+   * (set/2026). `nome` é comparado com o texto atual da busca/sobra: se
+   * a pessoa já buscou outra coisa, esta revisão fica velha e o cartão
+   * volta ao passo 1 sozinho — sem isso, uma revisão pendente de "pão
+   * francês" poderia acabar confirmando com o nome de uma busca nova.
+   */
+  const [revisaoCadastro, setRevisaoCadastro] = useState<{
+    nome: string;
+    categoria: string;
+    quantidadeInicial?: number | null;
+    remover?: () => void;
+  } | null>(null);
   const [sessaoAConfirmarLimpeza, setSessaoAConfirmarLimpeza] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [statusSugestao, setStatusSugestao] = useState<Record<string, "" | "carregando" | "erro">>({});
@@ -347,7 +360,8 @@ export function TelaPedidoFilial({
   async function cadastrarProdutoDaBusca(
     nome: string,
     categoria: string,
-    quantidadeInicial?: number | null
+    quantidadeInicial?: number | null,
+    remover?: () => void
   ) {
     const limpo = nome.trim();
     if (!limpo || salvandoNovoProduto) return;
@@ -361,7 +375,9 @@ export function TelaPedidoFilial({
         prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[categoria] ?? null,
       });
       if (!novo) return;
-      setBusca("");
+      setRevisaoCadastro(null);
+      if (remover) remover();
+      else setBusca("");
       if (quantidadeInicial && quantidadeInicial > 0) {
         setItens((atual) =>
           atual.some((i) => i.codigoPdv === novo.codigoPdv)
@@ -374,6 +390,8 @@ export function TelaPedidoFilial({
         setProdutoAtivo(novo.codigoPdv);
         setValorEditando("");
       }
+      // O balão de sucesso já vem do aviso global (App.tsx chama
+      // comRetorno em onCadastrarProduto) — não precisa de outro aqui.
     } catch {
       // Mensagem já vem do aviso global (ver App.tsx).
     } finally {
@@ -399,8 +417,65 @@ export function TelaPedidoFilial({
     if (!nome) return null;
 
     function cancelar() {
+      setRevisaoCadastro(null);
       if (remover) remover();
       else setBusca("");
+    }
+
+    // Revisão em andamento PARA ESTE MESMO NOME — se a busca/sobra
+    // mudou, a revisão anterior fica para trás (ver comentário do
+    // estado `revisaoCadastro`).
+    const emRevisao = revisaoCadastro && revisaoCadastro.nome === nome ? revisaoCadastro : null;
+
+    if (emRevisao) {
+      const salvando = salvandoNovoProduto;
+      return (
+        <div className="cadastro-relampago">
+          <p className="nota-rodape">Confira antes de cadastrar:</p>
+          <label className="campo-revisao-nome">
+            Nome
+            <input
+              type="text"
+              value={emRevisao.nome}
+              onChange={(e) => setRevisaoCadastro({ ...emRevisao, nome: e.target.value })}
+            />
+          </label>
+          <p className="nota-rodape">Categoria</p>
+          <div className="setores-do-novo">
+            {CATEGORIAS_PRODUCAO.map((categoria) => (
+              <button
+                key={categoria.chave}
+                type="button"
+                className={`chip-setor ${emRevisao.categoria === categoria.chave ? "ativo" : ""}`}
+                aria-pressed={emRevisao.categoria === categoria.chave}
+                onClick={() => setRevisaoCadastro({ ...emRevisao, categoria: categoria.chave })}
+              >
+                {categoria.rotulo}
+              </button>
+            ))}
+          </div>
+          <div className="acoes">
+            <button type="button" className="link" onClick={cancelar}>
+              {remover ? "descartar" : "cancelar"}
+            </button>
+            <button
+              type="button"
+              className="primario"
+              disabled={!emRevisao.nome.trim() || salvando}
+              onClick={() =>
+                void cadastrarProdutoDaBusca(
+                  emRevisao.nome,
+                  emRevisao.categoria,
+                  emRevisao.quantidadeInicial,
+                  emRevisao.remover
+                )
+              }
+            >
+              {salvando ? "Salvando..." : "Confirmar cadastro"}
+            </button>
+          </div>
+        </div>
+      );
     }
 
     return (
@@ -416,8 +491,14 @@ export function TelaPedidoFilial({
               key={categoria.chave}
               type="button"
               className="chip-setor"
-              disabled={salvandoNovoProduto}
-              onClick={() => void cadastrarProdutoDaBusca(nome, categoria.chave, quantidadeInicialSugerida)}
+              onClick={() =>
+                setRevisaoCadastro({
+                  nome,
+                  categoria: categoria.chave,
+                  quantidadeInicial: quantidadeInicialSugerida,
+                  remover,
+                })
+              }
             >
               {categoria.rotulo}
             </button>

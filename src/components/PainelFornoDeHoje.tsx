@@ -12,7 +12,6 @@ import type { PedidoFilial } from "../types/pedido";
 import { desfechoDoItem } from "../types/pedido";
 import type { PedidoSuprimentos, Suprimento } from "../types/suprimento";
 import { idDoSuprimento, segmentosExibidos } from "../types/suprimento";
-import { adivinharSegmentoSuprimento } from "../lib/adivinharSuprimento";
 import { nomeSugeridoDaSobra, quantidadeSugeridaDaSobra } from "../lib/sobraDeVoz";
 import type { LinhaDaMatriz } from "../lib/reposicaoDoDia";
 import type { BlocoSessaoImpressao } from "../lib/gerarImagemLista";
@@ -143,14 +142,20 @@ export function PainelFornoDeHoje({
   const [salvandoNovo, setSalvandoNovo] = useState(false);
   const [salvandoSuprimentoNovo, setSalvandoSuprimentoNovo] = useState("");
   /**
-   * QUANDO A PESSOA DISCORDA DO PALPITE (set/2026, mesma ideia de
-   * PainelFornadasFilial.tsx): o app tenta adivinhar se o que não foi
-   * achado é produto de padaria ou suprimento; um link troca o tipo
-   * sugerido sem reiniciar a busca. `null` = confia no palpite.
+   * O CADASTRO RELÂMPAGO EM ANDAMENTO (set/2026, pedido do dono do
+   * negócio: "o mais adequado é perguntar se o item é um produto ou um
+   * suprimento" — em vez de adivinhar pelo nome — "e uma revisão deve
+   * ser sugerida... só após a revisão um balão informa que o cadastro
+   * foi realizado com sucesso"). Mesmo estado de PainelFornadasFilial.tsx:
+   * sem `tipo` pergunta produto-ou-suprimento; com `tipo` sem
+   * `categoria` mostra os chips certos; com os dois é a revisão.
    */
-  const [tipoForcadoPara, setTipoForcadoPara] = useState<{
-    texto: string;
-    tipo: "produto" | "suprimento";
+  const [cadastroEmAndamento, setCadastroEmAndamento] = useState<{
+    nome: string;
+    tipo?: "produto" | "suprimento";
+    categoria?: string;
+    quantidadeInicial?: number | null;
+    remover?: () => void;
   } | null>(null);
   const segmentosCadastro = useMemo(
     () => segmentosExibidos(catalogoSuprimentos),
@@ -373,7 +378,8 @@ export function PainelFornoDeHoje({
   async function cadastrarProdutoNovo(
     nome: string,
     categoria: string,
-    quantidadeInicial?: number | null
+    quantidadeInicial?: number | null,
+    remover?: () => void
   ) {
     const limpo = nome.trim();
     if (!limpo || salvandoNovo) return;
@@ -388,8 +394,9 @@ export function PainelFornoDeHoje({
       });
       if (!novo) return;
       await onMarcarFornada(novo.codigoPdv, novo.nome, quantidadeInicial ?? undefined);
-      setBusca("");
-      setTipoForcadoPara(null);
+      setCadastroEmAndamento(null);
+      if (remover) remover();
+      else setBusca("");
     } catch {
       // Mensagem já vem do aviso global (ver App.tsx).
     } finally {
@@ -400,7 +407,16 @@ export function PainelFornoDeHoje({
   /** Cadastro relâmpago de SUPRIMENTO na Reposição da matriz (set/2026)
    * — mesma operação de PainelFornadasFilial.tsx. Sem "anunciar" e sem
    * lista de pedido: a matriz só está incluindo o item no catálogo. */
-  async function cadastrarSuprimentoNovo(nome: string, segmento: string) {
+  // `quantidadeInicial` não é usado aqui — não existe lista de pedido
+  // de suprimentos da matriz para si mesma — mas a assinatura casa com
+  // cadastrarProdutoNovo para as duas chamadas ficarem simétricas no
+  // botão "Confirmar cadastro" (ver cadastroRelampago abaixo).
+  async function cadastrarSuprimentoNovo(
+    nome: string,
+    segmento: string,
+    _quantidadeInicial?: number | null,
+    remover?: () => void
+  ) {
     const limpo = nome.trim();
     if (!limpo || salvandoSuprimentoNovo) return;
     setSalvandoSuprimentoNovo(segmento);
@@ -414,8 +430,9 @@ export function PainelFornoDeHoje({
         criadoEm: new Date().toISOString(),
       };
       await onCadastrarSuprimento(novo);
-      setBusca("");
-      setTipoForcadoPara(null);
+      setCadastroEmAndamento(null);
+      if (remover) remover();
+      else setBusca("");
     } catch {
       // Mensagem já vem do aviso global (ver App.tsx).
     } finally {
@@ -424,10 +441,10 @@ export function PainelFornoDeHoje({
   }
 
   /**
-   * O CARTÃO EM SI — produto ou suprimento, um toque cadastra (set/2026).
-   * `adivinharSegmentoSuprimento` chuta pelo nome; um link deixa trocar o
-   * palpite sem reiniciar a busca. Aparece tanto na busca digitada
-   * quanto na sobra de voz — por isso recebe `remover`.
+   * O CARTÃO EM SI — pergunta o tipo, depois a categoria/segmento,
+   * depois revisa nome e categoria antes de cadastrar de verdade
+   * (set/2026, pedido do dono do negócio). Aparece tanto na busca
+   * digitada quanto na sobra de voz — por isso recebe `remover`.
    */
   function cadastroRelampago(
     nomeBruto: string,
@@ -437,78 +454,170 @@ export function PainelFornoDeHoje({
     const nome = nomeBruto.trim();
     if (!nome) return null;
 
-    const sugestao = adivinharSegmentoSuprimento(nome);
-    const substituindo = tipoForcadoPara?.texto === nome ? tipoForcadoPara.tipo : null;
-    const tipo = substituindo ?? (sugestao ? "suprimento" : "produto");
+    const emAndamento =
+      cadastroEmAndamento && cadastroEmAndamento.nome === nome ? cadastroEmAndamento : null;
 
     function cancelar() {
+      setCadastroEmAndamento(null);
       if (remover) remover();
       else setBusca("");
-      setTipoForcadoPara(null);
     }
 
+    // PASSO 1 — pergunta o tipo, em vez de adivinhar.
+    if (!emAndamento?.tipo) {
+      return (
+        <div className="cadastro-relampago">
+          <p className="nota-rodape">
+            {quantidadeInicialSugerida ? `${quantidadeInicialSugerida} ` : ""}
+            <strong>{nome}</strong> não está no catálogo.
+          </p>
+          <p className="nota-rodape">É produto de padaria ou suprimento?</p>
+          <div className="setores-do-novo">
+            <button
+              type="button"
+              className="chip-setor"
+              onClick={() =>
+                setCadastroEmAndamento({
+                  nome,
+                  tipo: "produto",
+                  quantidadeInicial: quantidadeInicialSugerida,
+                  remover,
+                })
+              }
+            >
+              Produto de padaria
+            </button>
+            <button
+              type="button"
+              className="chip-setor"
+              onClick={() =>
+                setCadastroEmAndamento({
+                  nome,
+                  tipo: "suprimento",
+                  quantidadeInicial: quantidadeInicialSugerida,
+                  remover,
+                })
+              }
+            >
+              Suprimento
+            </button>
+          </div>
+          <div className="acoes">
+            <button type="button" className="link" onClick={cancelar}>
+              {remover ? "descartar" : "cancelar"}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const opcoes = emAndamento.tipo === "produto" ? CATEGORIAS_PRODUCAO : segmentosCadastro;
+    function valorDaOpcao(opcao: { chave: string; rotulo: string; personalizado?: boolean }) {
+      return emAndamento!.tipo === "produto" ? opcao.chave : opcao.personalizado ? opcao.rotulo : opcao.chave;
+    }
+
+    // PASSO 2 — categoria (produto) ou segmento (suprimento).
+    if (!emAndamento.categoria) {
+      return (
+        <div className="cadastro-relampago">
+          <p className="nota-rodape">
+            <strong>{nome}</strong> — {emAndamento.tipo === "produto" ? "produto de padaria" : "suprimento"}
+          </p>
+          <p className="nota-rodape">
+            {emAndamento.tipo === "produto" ? "Em qual categoria?" : "Incluir em:"}
+          </p>
+          <div className="setores-do-novo">
+            {opcoes.map((opcao) => (
+              <button
+                key={opcao.chave}
+                type="button"
+                className="chip-setor"
+                onClick={() => setCadastroEmAndamento({ ...emAndamento, categoria: valorDaOpcao(opcao) })}
+              >
+                {opcao.rotulo}
+              </button>
+            ))}
+          </div>
+          <div className="acoes">
+            <button
+              type="button"
+              className="link"
+              onClick={() => setCadastroEmAndamento({ ...emAndamento, tipo: undefined })}
+            >
+              voltar
+            </button>
+            <button type="button" className="link" onClick={cancelar}>
+              {remover ? "descartar" : "cancelar"}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // PASSO 3 — revisão: nome e categoria/segmento editáveis, só
+    // cadastra (e, para produto, só anuncia a fornada) quando a pessoa
+    // confirma.
+    const salvando = emAndamento.tipo === "produto" ? salvandoNovo : salvandoSuprimentoNovo !== "";
     return (
       <div className="cadastro-relampago">
-        <p className="nota-rodape">
-          {quantidadeInicialSugerida ? `${quantidadeInicialSugerida} ` : ""}
-          <strong>{nome}</strong> não está no catálogo.
-        </p>
-
-        {tipo === "produto" ? (
-          <>
-            <p className="nota-rodape">Em qual categoria (produto de padaria)?</p>
-            <div className="setores-do-novo">
-              {CATEGORIAS_PRODUCAO.map((categoria) => (
-                <button
-                  key={categoria.chave}
-                  type="button"
-                  className="chip-setor"
-                  disabled={salvandoNovo}
-                  onClick={() =>
-                    void cadastrarProdutoNovo(nome, categoria.chave, quantidadeInicialSugerida)
-                  }
-                >
-                  {categoria.rotulo}
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="nota-rodape">
-              {sugestao ? "Parece suprimento — incluir em:" : "Suprimento — incluir em:"}
-            </p>
-            <div className="setores-do-novo">
-              {segmentosCadastro.map((segmento) => {
-                const valorGravado = segmento.personalizado ? segmento.rotulo : segmento.chave;
-                return (
-                  <button
-                    key={segmento.chave}
-                    type="button"
-                    className={`chip-setor ${sugestao === segmento.chave ? "sugerido" : ""}`}
-                    disabled={salvandoSuprimentoNovo !== ""}
-                    onClick={() => void cadastrarSuprimentoNovo(nome, valorGravado)}
-                  >
-                    {salvandoSuprimentoNovo === valorGravado ? "Salvando..." : segmento.rotulo}
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        )}
-
+        <p className="nota-rodape">Confira antes de cadastrar:</p>
+        <label className="campo-revisao-nome">
+          Nome
+          <input
+            type="text"
+            value={emAndamento.nome}
+            onChange={(e) => setCadastroEmAndamento({ ...emAndamento, nome: e.target.value })}
+          />
+        </label>
+        <p className="nota-rodape">{emAndamento.tipo === "produto" ? "Categoria" : "Segmento"}</p>
+        <div className="setores-do-novo">
+          {opcoes.map((opcao) => {
+            const valor = valorDaOpcao(opcao);
+            return (
+              <button
+                key={opcao.chave}
+                type="button"
+                className={`chip-setor ${emAndamento.categoria === valor ? "ativo" : ""}`}
+                aria-pressed={emAndamento.categoria === valor}
+                onClick={() => setCadastroEmAndamento({ ...emAndamento, categoria: valor })}
+              >
+                {opcao.rotulo}
+              </button>
+            );
+          })}
+        </div>
         <div className="acoes">
+          <button
+            type="button"
+            className="link"
+            onClick={() => setCadastroEmAndamento({ ...emAndamento, categoria: undefined })}
+          >
+            voltar
+          </button>
           <button type="button" className="link" onClick={cancelar}>
             {remover ? "descartar" : "cancelar"}
           </button>
           <button
             type="button"
-            className="link"
+            className="primario"
+            disabled={!emAndamento.nome.trim() || salvando}
             onClick={() =>
-              setTipoForcadoPara({ texto: nome, tipo: tipo === "produto" ? "suprimento" : "produto" })
+              emAndamento.tipo === "produto"
+                ? void cadastrarProdutoNovo(
+                    emAndamento.nome,
+                    emAndamento.categoria!,
+                    emAndamento.quantidadeInicial,
+                    emAndamento.remover
+                  )
+                : void cadastrarSuprimentoNovo(
+                    emAndamento.nome,
+                    emAndamento.categoria!,
+                    emAndamento.quantidadeInicial,
+                    emAndamento.remover
+                  )
             }
           >
-            {tipo === "produto" ? "na verdade é suprimento" : "na verdade é produto de padaria"}
+            {salvando ? "Salvando..." : "Confirmar cadastro"}
           </button>
         </div>
       </div>

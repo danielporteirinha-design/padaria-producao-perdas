@@ -186,6 +186,20 @@ export function TelaCronograma({
   const [cadastrandoEm, setCadastrandoEm] = useState<string | null>(null);
   const [nomeNovoProduto, setNomeNovoProduto] = useState("");
   const [salvandoNovoProduto, setSalvandoNovoProduto] = useState(false);
+  /**
+   * A REVISÃO ENTRE ESCOLHER A CATEGORIA E CADASTRAR DE VERDADE
+   * (set/2026, pedido do dono do negócio: "quando confirmada a
+   * categoria e o nome do item, uma revisão deve ser sugerida... só
+   * após a revisão um balão informa que o cadastro foi realizado com
+   * sucesso"). `nome` comparado com a busca atual: se mudou, a revisão
+   * fica velha e o cartão volta ao passo 1 sozinho.
+   */
+  const [revisaoCadastro, setRevisaoCadastro] = useState<{
+    nome: string;
+    categoria: string;
+    quantidadeInicial?: number | null;
+    remover?: () => void;
+  } | null>(null);
   const [fase, setFase] = useState<Fase>("montar");
   const [salvando, setSalvando] = useState(false);
   /** Confirmação da produção da matriz, pendente do segundo toque. */
@@ -558,7 +572,8 @@ export function TelaCronograma({
   async function cadastrarProdutoDaBuscaMatriz(
     nome: string,
     categoria: string,
-    quantidadeInicial?: number | null
+    quantidadeInicial?: number | null,
+    remover?: () => void
   ) {
     const limpo = nome.trim();
     if (!limpo || salvandoNovoProduto) return;
@@ -572,7 +587,9 @@ export function TelaCronograma({
         prazoValidadeDias: VALIDADE_SUGERIDA_DIAS[categoria] ?? null,
       });
       if (!novo) return;
-      setBuscaMatriz("");
+      setRevisaoCadastro(null);
+      if (remover) remover();
+      else setBuscaMatriz("");
       if (quantidadeInicial && quantidadeInicial > 0) {
         setItensPorGrupo((atual) => {
           const itensAtuais = atual[categoria] ?? [];
@@ -613,8 +630,62 @@ export function TelaCronograma({
     if (!nome) return null;
 
     function cancelar() {
+      setRevisaoCadastro(null);
       if (remover) remover();
       else setBuscaMatriz("");
+    }
+
+    const emRevisao = revisaoCadastro && revisaoCadastro.nome === nome ? revisaoCadastro : null;
+
+    if (emRevisao) {
+      const salvando = salvandoNovoProduto;
+      return (
+        <div className="cadastro-relampago">
+          <p className="nota-rodape">Confira antes de cadastrar:</p>
+          <label className="campo-revisao-nome">
+            Nome
+            <input
+              type="text"
+              value={emRevisao.nome}
+              onChange={(e) => setRevisaoCadastro({ ...emRevisao, nome: e.target.value })}
+            />
+          </label>
+          <p className="nota-rodape">Categoria</p>
+          <div className="setores-do-novo">
+            {CATEGORIAS_PRODUCAO.map((categoria) => (
+              <button
+                key={categoria.chave}
+                type="button"
+                className={`chip-setor ${emRevisao.categoria === categoria.chave ? "ativo" : ""}`}
+                aria-pressed={emRevisao.categoria === categoria.chave}
+                onClick={() => setRevisaoCadastro({ ...emRevisao, categoria: categoria.chave })}
+              >
+                {categoria.rotulo}
+              </button>
+            ))}
+          </div>
+          <div className="acoes">
+            <button type="button" className="link" onClick={cancelar}>
+              {remover ? "descartar" : "cancelar"}
+            </button>
+            <button
+              type="button"
+              className="primario"
+              disabled={!emRevisao.nome.trim() || salvando}
+              onClick={() =>
+                void cadastrarProdutoDaBuscaMatriz(
+                  emRevisao.nome,
+                  emRevisao.categoria,
+                  emRevisao.quantidadeInicial,
+                  emRevisao.remover
+                )
+              }
+            >
+              {salvando ? "Salvando..." : "Confirmar cadastro"}
+            </button>
+          </div>
+        </div>
+      );
     }
 
     return (
@@ -630,8 +701,14 @@ export function TelaCronograma({
               key={categoria.chave}
               type="button"
               className="chip-setor"
-              disabled={salvandoNovoProduto}
-              onClick={() => void cadastrarProdutoDaBuscaMatriz(nome, categoria.chave, quantidadeInicialSugerida)}
+              onClick={() =>
+                setRevisaoCadastro({
+                  nome,
+                  categoria: categoria.chave,
+                  quantidadeInicial: quantidadeInicialSugerida,
+                  remover,
+                })
+              }
             >
               {categoria.rotulo}
             </button>

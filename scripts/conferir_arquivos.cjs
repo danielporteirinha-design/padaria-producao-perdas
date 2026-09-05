@@ -278,8 +278,7 @@ const CONFERENCIAS = [
   ["src/components/PainelFornadasFilial.tsx", "onCadastrarSuprimento", "Reposicao e Suprimentos numa aba so"],
   ["src/components/PainelFornadasFilial.tsx", "OFFSET_SUPRIMENTO", "Microfone reconhece produto e suprimento juntos"],
   ["src/components/PainelFornadasFilial.tsx", "enviarTudo", "Um Enviar manda os dois pedidos"],
-  ["src/components/PainelFornadasFilial.tsx", "cadastroRelampago", "Cadastro relampago decide produto ou suprimento"],
-  ["src/lib/adivinharSuprimento.ts", "adivinharSegmentoSuprimento", "Palpite de segmento por palavra-chave"],
+  ["src/components/PainelFornadasFilial.tsx", "cadastroRelampago", "Cadastro relampago pergunta produto ou suprimento (nao adivinha mais)"],
   ["src/components/AssistenteDeVoz.tsx", "remover: () => void", "Descartar so o trecho que a voz nao entendeu"],
   ["src/App.tsx", "onCadastrarSuprimento={handleCadastrarSuprimento}", "Reposicao da filial ganha os handlers de suprimentos"],
   ["src/lib/rota.ts", "ALIAS_DE_ABA", "Push antigo de suprimentos cai na Reposicao"],
@@ -357,6 +356,15 @@ const CONFERENCIAS = [
   ["src/components/PainelFornoDeHoje.tsx", "renderSobra={opcoesParaSobra}", "Reposicao (matriz): microfone sugere cadastro quando nao reconhece"],
   ["src/App.tsx", "onCadastrarSuprimento={handleCadastrarSuprimento}\n                onDecidirReposicao", "App: Reposicao da matriz recebe onCadastrarSuprimento"],
   ["src/components/AssistenteDeVoz.tsx", "if (sobrando.length === 0) {", "Balao de erro generico so aparece quando nao ha sobra para oferecer cadastro"],
+
+  // --- Cadastro relampago pergunta o tipo (nao adivinha) e revisa nome
+  // e categoria antes de salvar de verdade (set/2026, pedido do dono do
+  // negocio)
+  ["src/components/TelaPedidoFilial.tsx", "revisaoCadastro", "Lista de Producao (filial): revisao de nome/categoria antes de cadastrar"],
+  ["src/components/TelaCronograma.tsx", "revisaoCadastro", "Lista de Producao (matriz): revisao de nome/categoria antes de cadastrar"],
+  ["src/components/PainelFornadasFilial.tsx", "É produto de padaria ou suprimento?", "Reposicao (filial): pergunta o tipo em vez de adivinhar"],
+  ["src/components/PainelFornoDeHoje.tsx", "É produto de padaria ou suprimento?", "Reposicao (matriz): pergunta o tipo em vez de adivinhar"],
+  ["src/index.css", ".campo-revisao-nome input", "Campo de nome editavel na revisao do cadastro relampago"],
 ];
 
 /**
@@ -388,6 +396,7 @@ const DEVEM_TER_SIDO_APAGADOS = [
   ["src/components/ConfirmarProducao.tsx", "card 'Confirmar o que foi produzido' retirado — pedido do dono do negocio (set/2026), nao precisa mais dele"],
   ["src/components/AvisoPerdaPendente.tsx", "lembrete de lancamento de perdas retirado — pedido do dono do negocio (set/2026), nao precisa mais dele"],
   ["src/components/TesteDeAvisos.tsx", "botao de teste retirado da Reposicao — pedido do dono do negocio (set/2026)"],
+  ["src/lib/adivinharSuprimento.ts", "palpite de tipo substituido pela pergunta direta — pedido do dono do negocio (set/2026)"],
 ];
 
 /**
