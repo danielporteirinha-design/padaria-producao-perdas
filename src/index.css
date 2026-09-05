@@ -1783,20 +1783,22 @@ button.perigo:hover { background: #822525; }
   width: 100%;
 }
 
-/* BARRA FIXA SECUNDARIA - PERTO DO POLEGAR, ACIMA DO MICROFONE (set/2026,
-   pedido do dono do negocio: os botoes de confirmar/enviar "devem ficar
-   na mesma localizacao proxima ao polegar", sem precisar rolar a tela
-   ate o fim). Empilhada ACIMA de `.botao-assistente` (que fica em
-   `bottom: 12px`, com 72px de altura) - nunca dentro dela, para nao
-   arriscar o comportamento das outras telas que reaproveitam aquele
-   botao. Reaproveitada por Reposicao, Lista de Producao (filial) e
-   Lista de Producao (matriz) - telas diferentes, mesmo gesto de fechar
-   uma tarefa com o polegar sem precisar rolar. */
+/* BARRA FIXA SECUNDARIA - PERTO DO POLEGAR, ACIMA DA BARRA DE BUSCA
+   (set/2026, pedido do dono do negocio: os botoes de confirmar/enviar
+   "devem ficar na mesma localizacao proxima ao polegar", sem precisar
+   rolar a tela ate o fim). Empilhada ACIMA de `.barra-busca-fixa` (que
+   fica em `bottom: 12px`, com cerca de 60px de altura - o antigo botao
+   solto de voz tinha 72px; a barra de busca+microfone que o substituiu
+   e mais baixa) - nunca dentro dela, para nao arriscar o comportamento
+   das outras telas que reaproveitam aquela barra. Reaproveitada por
+   Reposicao, Lista de Producao (filial) e Lista de Producao (matriz) -
+   telas diferentes, mesmo gesto de fechar uma tarefa com o polegar sem
+   precisar rolar. */
 .acao-fixa-secundaria {
   position: fixed;
   left: 12px;
   right: 12px;
-  bottom: calc(12px + 72px + 10px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(12px + 60px + 10px + env(safe-area-inset-bottom, 0px));
   z-index: 40;
   display: flex;
   align-items: center;
@@ -1822,6 +1824,57 @@ button.perigo:hover { background: #822525; }
    folego que as demais, que so reservam espaco para o microfone. */
 .tela.com-acao-fixa { padding-bottom: 76px; }
 .painel-fornadas.com-acao-fixa .corpo-fornadas { padding-bottom: 76px; }
+
+/* A BARRA DE BUSCA COM MICROFONE, FIXA NO RODAPÉ, EM TODA TELA (set/2026,
+   pedido do dono do negócio: "o novo botão de busca deve substituir
+   todos os botões de voz do app... na parte inferior da tela, ao
+   alcance do polegar, em todas as abas"). Substitui `.botao-assistente`
+   solto como o lugar-comum do microfone: agora é sempre este par —
+   busca + microfone compacto, juntos, fixos.
+   `.painel-extra-fixo` é o segundo elemento fixo, empilhado ACIMA desta
+   barra: é para onde a conferência de voz (ver `portalConteudoExtra` em
+   AssistenteDeVoz.tsx) e os resultados da busca de cada tela são
+   entregues. Rolável e com teto de altura — sem isso, uma lista longa
+   de resultados ou uma conferência com muitos itens cobriria a tela
+   inteira em vez de conviver com o que está sendo montado acima dela.
+   `:empty` o esconde quando não há nada para mostrar, para não deixar
+   uma faixa vazia flutuando sobre o conteúdo. */
+.barra-busca-fixa {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+}
+.barra-busca-fixa .campo-com-voz {
+  margin: 0;
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 6px 6px 6px 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+}
+.barra-busca-fixa .campo-com-voz input { min-height: 48px; }
+
+.painel-extra-fixo {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + 60px + 8px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  max-height: min(50vh, 420px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.painel-extra-fixo:empty { display: none; }
+/* Quando a tela também tem `.acao-fixa-secundaria` (Enviar/Confirmar,
+   Incluir/cancelar) empilhada acima da barra de busca, o painel de
+   extras precisa subir mais um andar para não ficar por baixo dela. */
+.painel-extra-fixo.acima-da-acao-fixa {
+  bottom: calc(12px + 60px + 8px + 56px + 10px + env(safe-area-inset-bottom, 0px));
+}
 
 /* O BOTÃO COMO SINALIZADOR (set/2026). Dois segundos de resposta no
    lugar para onde o olho já está olhando — ver AssistenteDeVoz.tsx.

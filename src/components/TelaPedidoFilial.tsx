@@ -107,6 +107,11 @@ export function TelaPedidoFilial({
    * pequeno e dentro da barra (`compacto`, ver o componente).
    */
   const [busca, setBusca] = useState("");
+  /** O container para onde a busca por texto e a conferência de voz são
+   * entregues, agora que a barra de busca+microfone é fixa no rodapé
+   * (set/2026, pedido do dono do negócio) — ver `.painel-extra-fixo` em
+   * index.css e `portalConteudoExtra` em AssistenteDeVoz.tsx. */
+  const [painelExtraNode, setPainelExtraNode] = useState<HTMLDivElement | null>(null);
 
   const pedidoExistente = useMemo(
     // Só o pedido DIÁRIO: a reposição é outra lista, com outra urgência,
@@ -442,88 +447,110 @@ export function TelaPedidoFilial({
         </div>
       </div>
 
-      {/* BUSCAR OU FALAR, NA MESMA BARRA (set/2026, pedido do dono do
-          negócio: "vamos utilizar o esquema idêntico utilizado pelo
-          Google em sua barra de buscas... uma caixa de texto... e um
-          ícone de microfone na extremidade da barra"). Quem já procura
-          produto pelo teclado do celular reconhece o gesto na hora; quem
-          prefere falar continua com o mesmo assistente de sempre — ele
-          só ficou pequeno e mora dentro da barra (`compacto`, ver
-          AssistenteDeVoz.tsx) em vez de solto, ocupando a tela sozinho.
-          Vem antes das sanfonas por ser o caminho mais curto até a
-          lista: procurar OU falar, sem precisar abrir categoria nenhuma. */}
-      <CampoDeBusca
-        className="busca-lista-producao"
-        valor={busca}
-        onMudar={(v) => {
-          setBusca(v);
-          setProdutoAtivo(null);
-        }}
-        placeholder="Buscar produto ou categoria..."
-        rotulo="Buscar produto para incluir no pedido"
+      {/* BUSCAR OU FALAR, NUMA BARRA SÓ (set/2026, pedido do dono do
+          negócio: "o mesmo esquema utilizado pelo Google em sua barra
+          de buscas... uma caixa de texto... e um ícone de microfone na
+          extremidade da barra" — e, no pedido seguinte, "a localização
+          deve ser na parte inferior da tela, ao alcance do polegar, em
+          todas as abas"). Quem já procura produto pelo teclado do
+          celular reconhece o gesto na hora; quem prefere falar continua
+          com o mesmo assistente de sempre — ele só ficou pequeno e mora
+          dentro da barra (`compacto`, ver AssistenteDeVoz.tsx). A barra
+          em si é fixa, lá embaixo (ver `.barra-busca-fixa`, mais abaixo
+          nesta função) — o que vem aqui é só o painel para onde os
+          resultados e a conferência de voz sobem, flutuando por cima
+          dela. */}
+      {/* O PAINEL FLUTUANTE ACIMA DA BARRA FIXA (set/2026): recebe os
+          resultados da busca por texto (aqui) e a conferência de voz
+          (entregue por portal pelo AssistenteDeVoz.tsx, ver
+          `portalConteudoExtra` abaixo). Some sozinho quando não há nada
+          a mostrar (`:empty` em index.css). */}
+      <div
+        ref={setPainelExtraNode}
+        className={`painel-extra-fixo ${itens.length > 0 ? "acima-da-acao-fixa" : ""}`}
       >
-        <AssistenteDeVoz
-          compacto
-          produtos={produtos}
-          modo="pedir"
-          acao="adicionar"
-          rotuloFalar="Monte a lista falando"
-          autoIncluirQuandoCompleto
-          onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
-        />
-      </CampoDeBusca>
-
-      {busca.trim().length > 0 &&
-        (resultadosBusca.length === 0 ? (
-          <p className="nota-rodape">Nenhum produto encontrado para "{busca.trim()}".</p>
-        ) : (
-          resultadosBusca.map((produto) => {
-            const itemSalvo = itens.find((i) => i.codigoPdv === produto.codigoPdv);
-            const editando = produtoAtivo === produto.codigoPdv;
-            return (
-              <div key={produto.codigoPdv} className="linha-fornada">
-                <div className="info-fornada">
-                  <strong>{produto.nome}</strong>
-                  {itemSalvo && (
-                    <span className="valor-confirmado">{itemSalvo.quantidadeUnidades} un ✓</span>
+        {busca.trim().length > 0 &&
+          (resultadosBusca.length === 0 ? (
+            <p className="nota-rodape">Nenhum produto encontrado para "{busca.trim()}".</p>
+          ) : (
+            resultadosBusca.map((produto) => {
+              const itemSalvo = itens.find((i) => i.codigoPdv === produto.codigoPdv);
+              const editando = produtoAtivo === produto.codigoPdv;
+              return (
+                <div key={produto.codigoPdv} className="linha-fornada">
+                  <div className="info-fornada">
+                    <strong>{produto.nome}</strong>
+                    {itemSalvo && (
+                      <span className="valor-confirmado">{itemSalvo.quantidadeUnidades} un ✓</span>
+                    )}
+                  </div>
+                  {editando ? (
+                    <div className="editor-quantidade">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        pattern="[0-9]*[.,]?[0-9]*"
+                        autoFocus
+                        placeholder="Quantidade em unidades"
+                        value={valorEditando}
+                        onChange={(e) => setValorEditando(sanitizarEntradaNumerica(e.target.value))}
+                      />
+                      <span className="unidade-fixa">un</span>
+                      <button
+                        type="button"
+                        className="primario"
+                        disabled={!ehNumeroValidoPositivo(valorEditando)}
+                        onClick={() => confirmarQuantidade(produto.codigoPdv)}
+                      >
+                        Confirmar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="acoes-fornada">
+                      <button
+                        type="button"
+                        className="botao-fornada pedir"
+                        onClick={() => abrirEdicao(produto.codigoPdv)}
+                      >
+                        {itemSalvo ? "Editar" : "Incluir"}
+                      </button>
+                    </div>
                   )}
                 </div>
-                {editando ? (
-                  <div className="editor-quantidade">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      pattern="[0-9]*[.,]?[0-9]*"
-                      autoFocus
-                      placeholder="Quantidade em unidades"
-                      value={valorEditando}
-                      onChange={(e) => setValorEditando(sanitizarEntradaNumerica(e.target.value))}
-                    />
-                    <span className="unidade-fixa">un</span>
-                    <button
-                      type="button"
-                      className="primario"
-                      disabled={!ehNumeroValidoPositivo(valorEditando)}
-                      onClick={() => confirmarQuantidade(produto.codigoPdv)}
-                    >
-                      Confirmar
-                    </button>
-                  </div>
-                ) : (
-                  <div className="acoes-fornada">
-                    <button
-                      type="button"
-                      className="botao-fornada pedir"
-                      onClick={() => abrirEdicao(produto.codigoPdv)}
-                    >
-                      {itemSalvo ? "Editar" : "Incluir"}
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        ))}
+              );
+            })
+          ))}
+      </div>
+
+      {/* A BARRA DE BUSCA + MICROFONE, FIXA NO RODAPÉ, AO ALCANCE DO
+          POLEGAR (set/2026, pedido do dono do negócio: "o novo botão de
+          busca deve substituir todos os botões de voz do app... na
+          parte inferior da tela, em todas as abas"). Antes ficava no
+          topo da página, junto do resto do conteúdo rolando por baixo
+          dela — agora é fixa, como o botão de voz que ela substituiu. */}
+      <div className="barra-busca-fixa">
+        <CampoDeBusca
+          className="busca-lista-producao"
+          valor={busca}
+          onMudar={(v) => {
+            setBusca(v);
+            setProdutoAtivo(null);
+          }}
+          placeholder="Buscar produto ou categoria..."
+          rotulo="Buscar produto para incluir no pedido"
+        >
+          <AssistenteDeVoz
+            compacto
+            portalConteudoExtra={painelExtraNode}
+            produtos={produtos}
+            modo="pedir"
+            acao="adicionar"
+            rotuloFalar="Monte a lista falando"
+            autoIncluirQuandoCompleto
+            onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
+          />
+        </CampoDeBusca>
+      </div>
 
       {/* O CARTÃO DE ITENS JÁ INCLUÍDOS, SEMPRE VISÍVEL E EDITÁVEL
           (set/2026, pedido do dono do negócio: "o cartão de conferência

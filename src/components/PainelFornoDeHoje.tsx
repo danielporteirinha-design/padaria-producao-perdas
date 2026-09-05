@@ -125,8 +125,11 @@ export function PainelFornoDeHoje({
 }: PainelFornoDeHojeProps) {
   const [marcando, setMarcando] = useState<number | null>(null);
   const [busca, setBusca] = useState("");
+  /** Para onde a busca por texto e a conferência de voz são entregues,
+   * com a barra de busca+microfone fixa no rodapé (set/2026, pedido do
+   * dono do negócio) — mesma ideia de TelaPedidoFilial.tsx. */
+  const [painelExtraNode, setPainelExtraNode] = useState<HTMLDivElement | null>(null);
   /** O microfone está aberto? Enquanto estiver, a busca some da tela. */
-  const [ouvindoVoz, setOuvindoVoz] = useState(false);
   const [cadastrando, setCadastrando] = useState(false);
   const [categoriaNova, setCategoriaNova] = useState("");
   const [salvandoNovo, setSalvandoNovo] = useState(false);
@@ -749,46 +752,6 @@ export function PainelFornoDeHoje({
   return (
     <div className="painel-forno">
       <div className="corpo-forno">
-        <AssistenteDeVoz
-          produtos={produtos}
-          modo="anunciar"
-          onOuvindoMudou={setOuvindoVoz}
-          onConfirmar={async (itens) => {
-            if (!itens || itens.length === 0) {
-              setFeedbackVoz({
-                tipo: "alerta",
-                texto: "Nenhum produto cadastrado foi reconhecido pela voz.",
-              });
-              setTimeout(() => setFeedbackVoz(null), 4000);
-              return;
-            }
-
-            try {
-              for (const item of itens) {
-                await onMarcarFornada(
-                  item.produto.codigoPdv,
-                  item.produto.nome,
-                  item.quantidade ?? undefined
-                );
-              }
-              setFeedbackVoz({
-                tipo: "sucesso",
-                texto:
-                  itens.length === 1
-                    ? "Produto inserido na lista."
-                    : "Produtos inseridos na lista.",
-              });
-            } catch {
-              setFeedbackVoz({
-                tipo: "alerta",
-                texto: "Ocorreu um erro ao anunciar a fornada.",
-              });
-            }
-
-            setTimeout(() => setFeedbackVoz(null), 4000);
-          }}
-        />
-
         {feedbackVoz && (
           <div
             style={{
@@ -808,12 +771,77 @@ export function PainelFornoDeHoje({
           </div>
         )}
 
-        {/* A BUSCA SOME ENQUANTO O MICROFONE ESTÁ ABERTO (set/2026,
-            pedido do dono do negócio). Quem está falando não vai digitar
-            ao mesmo tempo, e o campo logo abaixo do botão disputa espaço
-            e atenção justamente no momento em que a pessoa precisa se
-            concentrar na frase. */}
-        {!ouvindoVoz && (
+        {/* O PAINEL FLUTUANTE ACIMA DA BARRA FIXA (set/2026, pedido do
+            dono do negócio: "o novo botão de busca deve substituir todos
+            os botões de voz do app... na parte inferior da tela, ao
+            alcance do polegar, em todas as abas"). Recebe os resultados
+            da busca (aqui) e a conferência de voz (entregue por portal
+            pelo AssistenteDeVoz.tsx). A barra em si — busca + microfone
+            compacto — é fixa, logo abaixo. */}
+        <div ref={setPainelExtraNode} className="painel-extra-fixo">
+          {buscando ? (
+            <>
+              {resultados.length === 0 ? (
+                <div className="cadastro-relampago">
+                  {!cadastrando ? (
+                    <>
+                      <p className="nota-rodape">Não está no catálogo.</p>
+                      <button
+                        type="button"
+                        className="secundario"
+                        onClick={() => {
+                          setCadastrando(true);
+                          setCategoriaNova("");
+                        }}
+                      >
+                        Cadastrar "{busca.trim()}"
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <strong className="nome-do-novo">{busca.trim()}</strong>
+                      <p className="nota-rodape">Em qual setor?</p>
+                      <div className="setores-do-novo">
+                        {CATEGORIAS_PRODUCAO.map((categoria) => (
+                          <button
+                            key={categoria.chave}
+                            type="button"
+                            className={`chip-setor ${categoriaNova === categoria.chave ? "ativo" : ""}`}
+                            aria-pressed={categoriaNova === categoria.chave}
+                            onClick={() => setCategoriaNova(categoria.chave)}
+                          >
+                            {categoria.rotulo}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="acoes">
+                        <button
+                          type="button"
+                          className="link"
+                          onClick={() => setCadastrando(false)}
+                        >
+                          cancelar
+                        </button>
+                        <button
+                          type="button"
+                          className="primario"
+                          disabled={!categoriaNova || salvandoNovo}
+                          onClick={() => void cadastrarEAnunciar()}
+                        >
+                          {salvandoNovo ? "Salvando..." : "Cadastrar e anunciar"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="grupo-forno">{resultados.map((p) => linhaDoProduto(p.codigoPdv))}</div>
+              )}
+            </>
+          ) : null}
+        </div>
+
+        <div className="barra-busca-fixa">
           <CampoDeBusca
             className="busca-forno"
             valor={busca}
@@ -826,69 +854,48 @@ export function PainelFornoDeHoje({
                 limpar
               </button>
             )}
-          </CampoDeBusca>
-        )}
+            <AssistenteDeVoz
+              compacto
+              portalConteudoExtra={painelExtraNode}
+              produtos={produtos}
+              modo="anunciar"
+              onConfirmar={async (itens) => {
+                if (!itens || itens.length === 0) {
+                  setFeedbackVoz({
+                    tipo: "alerta",
+                    texto: "Nenhum produto cadastrado foi reconhecido pela voz.",
+                  });
+                  setTimeout(() => setFeedbackVoz(null), 4000);
+                  return;
+                }
 
-        {buscando ? (
-          <>
-            {resultados.length === 0 ? (
-              <div className="cadastro-relampago">
-                {!cadastrando ? (
-                  <>
-                    <p className="nota-rodape">Não está no catálogo.</p>
-                    <button
-                      type="button"
-                      className="secundario"
-                      onClick={() => {
-                        setCadastrando(true);
-                        setCategoriaNova("");
-                      }}
-                    >
-                      Cadastrar "{busca.trim()}"
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <strong className="nome-do-novo">{busca.trim()}</strong>
-                    <p className="nota-rodape">Em qual setor?</p>
-                    <div className="setores-do-novo">
-                      {CATEGORIAS_PRODUCAO.map((categoria) => (
-                        <button
-                          key={categoria.chave}
-                          type="button"
-                          className={`chip-setor ${categoriaNova === categoria.chave ? "ativo" : ""}`}
-                          aria-pressed={categoriaNova === categoria.chave}
-                          onClick={() => setCategoriaNova(categoria.chave)}
-                        >
-                          {categoria.rotulo}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="acoes">
-                      <button
-                        type="button"
-                        className="link"
-                        onClick={() => setCadastrando(false)}
-                      >
-                        cancelar
-                      </button>
-                      <button
-                        type="button"
-                        className="primario"
-                        disabled={!categoriaNova || salvandoNovo}
-                        onClick={() => void cadastrarEAnunciar()}
-                      >
-                        {salvandoNovo ? "Salvando..." : "Cadastrar e anunciar"}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="grupo-forno">{resultados.map((p) => linhaDoProduto(p.codigoPdv))}</div>
-            )}
-          </>
-        ) : null}
+                try {
+                  for (const item of itens) {
+                    await onMarcarFornada(
+                      item.produto.codigoPdv,
+                      item.produto.nome,
+                      item.quantidade ?? undefined
+                    );
+                  }
+                  setFeedbackVoz({
+                    tipo: "sucesso",
+                    texto:
+                      itens.length === 1
+                        ? "Produto inserido na lista."
+                        : "Produtos inseridos na lista.",
+                  });
+                } catch {
+                  setFeedbackVoz({
+                    tipo: "alerta",
+                    texto: "Ocorreu um erro ao anunciar a fornada.",
+                  });
+                }
+
+                setTimeout(() => setFeedbackVoz(null), 4000);
+              }}
+            />
+          </CampoDeBusca>
+        </div>
 
         {perguntaImprimir && onImprimirReposicao && (
           <div className="pergunta-imprimir" role="status">

@@ -309,14 +309,23 @@ const CONFERENCIAS = [
   ["src/components/AssistenteDeVoz.tsx", "compacto?: boolean", "Assistente de voz ganha modo compacto (icone na barra de busca)"],
   ["src/components/AssistenteDeVoz.tsx", "const conteudoExtra = (", "Botao e conferencia viram pecas separadas para o modo compacto"],
   ["src/index.css", ".botao-assistente-compacto {", "Microfone compacto: circulo pequeno e com destaque visual"],
-  ["src/components/TelaPedidoFilial.tsx", "<CampoDeBusca\n        className=\"busca-lista-producao\"", "Lista de Producao (filial): busca com microfone na ponta"],
-  ["src/components/TelaPedidoFilial.tsx", "AssistenteDeVoz\n          compacto", "Lista de Producao (filial): microfone compacto dentro da busca"],
+  ["src/components/TelaPedidoFilial.tsx", "className=\"busca-lista-producao\"", "Lista de Producao (filial): busca com microfone na ponta"],
   ["src/components/TelaPedidoFilial.tsx", "mudarQuantidadeItem", "Cartao de itens ja incluidos e editavel (nao so leitura)"],
   ["src/components/TelaPedidoFilial.tsx", '<div className="destaque-data titulo-do-dia">', "Card da data (filial) sem nada alem da data"],
   ["src/components/TelaCronograma.tsx", "resultadosBuscaMatriz", "Lista de Producao (matriz): busca com microfone na ponta"],
-  ["src/components/TelaCronograma.tsx", "AssistenteDeVoz\n            compacto", "Lista de Producao (matriz): microfone compacto dentro da busca"],
   ["src/components/TelaCronograma.tsx", "todosOsItensDaMatriz", "Cartao do que ja foi lancado (matriz), achatando as categorias"],
   ["src/components/TelaCronograma.tsx", "mudarQuantidadeItemMatriz", "Cartao 'ja lancado' e editavel (matriz)"],
+
+  // --- Busca+microfone fixa no rodape em TODA A TELA, substituindo os
+  // botoes de voz soltos (set/2026, pedido do dono do negocio)
+  ["src/components/AssistenteDeVoz.tsx", "portalConteudoExtra", "Conferencia de voz pode ser entregue por portal (barra fixa)"],
+  ["src/index.css", ".barra-busca-fixa {", "Barra de busca+microfone fixa no rodape, ao alcance do polegar"],
+  ["src/index.css", ".painel-extra-fixo {", "Painel flutuante para resultados/conferencia, acima da barra fixa"],
+  ["src/components/TelaPedidoFilial.tsx", "painelExtraNode", "Lista de Producao (filial): busca fixa no rodape"],
+  ["src/components/TelaCronograma.tsx", "painelExtraNodeMatriz", "Lista de Producao (matriz): busca fixa no rodape"],
+  ["src/components/PainelFornadasFilial.tsx", "barra-busca-fixa", "Reposicao/Suprimentos: busca+microfone unificados, fixos no rodape"],
+  ["src/components/PainelFornoDeHoje.tsx", "barra-busca-fixa", "Anuncio de fornada (matriz): busca+microfone fixos no rodape"],
+  ["src/components/TelaRegistroPerda.tsx", "barra-busca-fixa", "Registro de perda: trocar produto por busca+microfone fixos"],
 ];
 
 /**

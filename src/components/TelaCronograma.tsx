@@ -198,6 +198,10 @@ export function TelaCronograma({
   /** A busca estilo Google do lançamento da matriz — ver o comentário
    * equivalente em TelaPedidoFilial.tsx. */
   const [buscaMatriz, setBuscaMatriz] = useState("");
+  /** Para onde a busca por texto e a conferência de voz são entregues,
+   * com a barra de busca+microfone fixa no rodapé — mesma ideia de
+   * TelaPedidoFilial.tsx. */
+  const [painelExtraNodeMatriz, setPainelExtraNodeMatriz] = useState<HTMLDivElement | null>(null);
 
   /**
    * REVISÃO DA LISTA DE CADA FILIAL (ago/2026, pedido do dono do negócio:
@@ -1138,86 +1142,97 @@ export function TelaCronograma({
         aberto={!!cardsAbertos[LOJA_MATRIZ.id]}
         onAlternar={() => alternarCard(LOJA_MATRIZ.id)}
       >
-        {/* BUSCAR OU FALAR, NA MESMA BARRA (set/2026, pedido do dono do
-            negócio: "o mesmo esquema utilizado pelo Google em sua barra
-            de buscas" — mesma barra da Lista de Produção da filial, ver
-            TelaPedidoFilial.tsx). Mesmo lugar da sanfona onde a matriz
-            lança o cronograma dela; as sanfonas continuam abaixo para
-            ajustar item a item. */}
-        <CampoDeBusca
-          className="busca-lista-producao"
-          valor={buscaMatriz}
-          onMudar={(v) => {
-            setBuscaMatriz(v);
-            setProdutoAtivo(null);
-          }}
-          placeholder="Buscar produto ou categoria..."
-          rotulo="Buscar produto para lançar na produção"
+        {/* BUSCAR OU FALAR, NUMA BARRA FIXA NO RODAPÉ (set/2026, pedido
+            do dono do negócio: "o mesmo esquema utilizado pelo Google em
+            sua barra de buscas" e, no pedido seguinte, "a localização
+            deve ser na parte inferior da tela, ao alcance do polegar, em
+            todas as abas" — mesma barra de TelaPedidoFilial.tsx). Mesmo
+            lugar da sanfona onde a matriz lança o cronograma dela; as
+            sanfonas continuam abaixo para ajustar item a item. O
+            `hidden` do card cuida de esconder a barra fixa junto quando
+            este card está fechado (ver CardCronograma, mais abaixo). */}
+        <div
+          ref={setPainelExtraNodeMatriz}
+          className={`painel-extra-fixo ${totalItens > 0 ? "acima-da-acao-fixa" : ""}`}
         >
-          <AssistenteDeVoz
-            compacto
-            produtos={produtos}
-            modo="pedir"
-            acao="adicionar"
-            rotuloFalar="Monte a lista falando"
-            autoIncluirQuandoCompleto
-            onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
-          />
-        </CampoDeBusca>
-
-        {buscaMatriz.trim().length > 0 &&
-          (resultadosBuscaMatriz.length === 0 ? (
-            <p className="nota-rodape">Nenhum produto encontrado para "{buscaMatriz.trim()}".</p>
-          ) : (
-            resultadosBuscaMatriz.map((produto) => {
-              const itemSalvo = (itensPorGrupo[produto.categoria] ?? []).find(
-                (i) => i.codigoPdv === produto.codigoPdv
-              );
-              const editando = produtoAtivo === produto.codigoPdv;
-              return (
-                <div key={produto.codigoPdv} className="linha-fornada">
-                  <div className="info-fornada">
-                    <strong>{produto.nome}</strong>
-                    {itemSalvo && (
-                      <span className="valor-confirmado">{itemSalvo.quantidadeUnidades} un ✓</span>
+          {buscaMatriz.trim().length > 0 &&
+            (resultadosBuscaMatriz.length === 0 ? (
+              <p className="nota-rodape">Nenhum produto encontrado para "{buscaMatriz.trim()}".</p>
+            ) : (
+              resultadosBuscaMatriz.map((produto) => {
+                const itemSalvo = (itensPorGrupo[produto.categoria] ?? []).find(
+                  (i) => i.codigoPdv === produto.codigoPdv
+                );
+                const editando = produtoAtivo === produto.codigoPdv;
+                return (
+                  <div key={produto.codigoPdv} className="linha-fornada">
+                    <div className="info-fornada">
+                      <strong>{produto.nome}</strong>
+                      {itemSalvo && (
+                        <span className="valor-confirmado">{itemSalvo.quantidadeUnidades} un ✓</span>
+                      )}
+                    </div>
+                    {editando ? (
+                      <div className="editor-quantidade">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          pattern="[0-9]*[.,]?[0-9]*"
+                          autoFocus
+                          placeholder="Quantidade em unidades"
+                          value={valorEditando}
+                          onChange={(e) => setValorEditando(sanitizarEntradaNumerica(e.target.value))}
+                        />
+                        <span className="unidade-fixa">un</span>
+                        <button
+                          type="button"
+                          className="primario"
+                          disabled={!ehNumeroValidoPositivo(valorEditando)}
+                          onClick={() => confirmarQuantidade(produto.categoria, produto.codigoPdv)}
+                        >
+                          Confirmar
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="acoes-fornada">
+                        <button
+                          type="button"
+                          className="botao-fornada pedir"
+                          onClick={() => abrirEdicao(produto.codigoPdv, produto.categoria)}
+                        >
+                          {itemSalvo ? "Editar" : "Incluir"}
+                        </button>
+                      </div>
                     )}
                   </div>
-                  {editando ? (
-                    <div className="editor-quantidade">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        pattern="[0-9]*[.,]?[0-9]*"
-                        autoFocus
-                        placeholder="Quantidade em unidades"
-                        value={valorEditando}
-                        onChange={(e) => setValorEditando(sanitizarEntradaNumerica(e.target.value))}
-                      />
-                      <span className="unidade-fixa">un</span>
-                      <button
-                        type="button"
-                        className="primario"
-                        disabled={!ehNumeroValidoPositivo(valorEditando)}
-                        onClick={() => confirmarQuantidade(produto.categoria, produto.codigoPdv)}
-                      >
-                        Confirmar
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="acoes-fornada">
-                      <button
-                        type="button"
-                        className="botao-fornada pedir"
-                        onClick={() => abrirEdicao(produto.codigoPdv, produto.categoria)}
-                      >
-                        {itemSalvo ? "Editar" : "Incluir"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          ))}
+                );
+              })
+            ))}
+        </div>
+
+        <div className="barra-busca-fixa">
+          <CampoDeBusca
+            className="busca-lista-producao"
+            valor={buscaMatriz}
+            onMudar={(v) => {
+              setBuscaMatriz(v);
+              setProdutoAtivo(null);
+            }}
+            placeholder="Buscar produto ou categoria..."
+            rotulo="Buscar produto para lançar na produção"
+          >
+            <AssistenteDeVoz
+              compacto
+              portalConteudoExtra={painelExtraNodeMatriz}
+              produtos={produtos}
+              modo="pedir"
+              acao="adicionar"
+              rotuloFalar="Monte a lista falando"
+              autoIncluirQuandoCompleto
+              onConfirmar={async (ditados) => adicionarPorVoz(ditados)}
+            />
+          </CampoDeBusca>
+        </div>
 
         {/* O CARTÃO DO QUE JÁ FOI LANÇADO, SEMPRE VISÍVEL E EDITÁVEL
             (set/2026, pedido do dono do negócio: "um card deve mostrar

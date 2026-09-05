@@ -153,8 +153,13 @@ export function PainelFornadasFilial({
 }: PainelFornadasFilialProps) {
   const hoje = dataDeHojeIso();
   const [busca, setBusca] = useState("");
-  /** O microfone está aberto? Enquanto estiver, a busca some da tela. */
-  const [ouvindoVoz, setOuvindoVoz] = useState(false);
+  /** Para onde a busca por texto e a conferência de voz são entregues,
+   * com a barra de busca+microfone fixa no rodapé (set/2026, pedido do
+   * dono do negócio) — mesma ideia de TelaPedidoFilial.tsx. Substituiu o
+   * antigo `ouvindoVoz`, que só existia para esconder a busca enquanto o
+   * microfone (solto, em cima da tela) estava aberto — com o microfone
+   * pequeno e dentro da própria barra, não há mais o que esconder. */
+  const [painelExtraNode, setPainelExtraNode] = useState<HTMLDivElement | null>(null);
   const [codigoPedindo, setCodigoPedindo] = useState<number | null>(null);
   const [salvandoNovo, setSalvandoNovo] = useState(false);
   const [quantidade, setQuantidade] = useState("");
@@ -955,40 +960,70 @@ export function PainelFornadasFilial({
             matriz logo acima, sem sino e sem contagem. Agora a lista é
             uma linha das sanfonas, como qualquer outra coisa que espera
             resposta. */}
-        <AssistenteDeVoz
-          produtos={catalogoDeVoz}
-          modo="pedir"
-          acao="adicionar"
-          onOuvindoMudou={setOuvindoVoz}
-          onConfirmar={async (ditados) => {
-            const deProdutos: { codigoPdv: number; quantidadeUnidades: number }[] = [];
-            const deSuprimentos: { suprimentoId: string; quantidade: number }[] = [];
-            for (const ditado of ditados) {
-              if (!ditado.quantidade || ditado.quantidade <= 0) continue;
-              if (ehCodigoDeSuprimento(ditado.produto.codigoPdv)) {
-                const suprimento = suprimentosAtivos[indiceDoSuprimento(ditado.produto.codigoPdv)];
-                if (suprimento) {
-                  deSuprimentos.push({ suprimentoId: suprimento.id, quantidade: ditado.quantidade });
-                }
-              } else {
-                deProdutos.push({
-                  codigoPdv: ditado.produto.codigoPdv,
-                  quantidadeUnidades: ditado.quantidade,
-                });
-              }
-            }
-            acrescentar(deProdutos);
-            acrescentarSuprimentos(deSuprimentos);
-          }}
-          renderSobra={opcoesParaSobra}
-        />
+        {/* O PAINEL FLUTUANTE ACIMA DA BARRA FIXA (set/2026, pedido do
+            dono do negócio: "o novo botão de busca deve substituir todos
+            os botões de voz do app... na parte inferior da tela, ao
+            alcance do polegar, em todas as abas"). Recebe os resultados
+            da busca (produto e suprimento, aqui) e a conferência de voz
+            (entregue por portal pelo AssistenteDeVoz.tsx). A barra em si
+            — busca + microfone compacto — é fixa, logo abaixo (ver
+            `.barra-busca-fixa`). Substituiu o botão solto de sempre e o
+            campo que sumia enquanto ele ouvia: não há mais dois lugares
+            disputando espaço, é uma barra só. */}
+        <div
+          ref={setPainelExtraNode}
+          className={`painel-extra-fixo ${
+            codigoPedindo !== null || itemSuprimentoAtivo !== null || totalDeItens > 0
+              ? "acima-da-acao-fixa"
+              : ""
+          }`}
+        >
+          {busca.trim().length > 0 &&
+            (nadaEncontrado ? (
+              cadastroRelampago(busca.trim())
+            ) : (
+              <>
+                {resultados.map((produto) => (
+                  <div key={produto.codigoPdv} className="linha-fornada">
+                    <div className="info-fornada">
+                      <strong>{produto.nome}</strong>
+                    </div>
+                    {codigoPedindo === produto.codigoPdv ? (
+                      <div className="editor-quantidade">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          pattern="[0-9]*[.,]?[0-9]*"
+                          autoFocus
+                          placeholder="Quantas unidades?"
+                          value={quantidade}
+                          onChange={(e) => setQuantidade(sanitizarEntradaNumerica(e.target.value))}
+                        />
+                        <span className="unidade-fixa">un</span>
+                      </div>
+                    ) : (
+                      <div className="acoes-fornada">
+                        <button
+                          type="button"
+                          className="botao-fornada pedir"
+                          onClick={() => {
+                            setCodigoPedindo(produto.codigoPdv);
+                            setItemSuprimentoAtivo(null);
+                            setQuantidade("");
+                          }}
+                        >
+                          Incluir
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {resultadosSuprimentos.map((suprimento) => linhaSuprimentoDaBusca(suprimento))}
+              </>
+            ))}
+        </div>
 
-        {/* A BUSCA SOME ENQUANTO O MICROFONE ESTÁ ABERTO (set/2026,
-            pedido do dono do negócio). Quem está falando não vai digitar
-            ao mesmo tempo, e o campo logo abaixo do botão disputa espaço
-            e atenção justamente no momento em que a pessoa precisa se
-            concentrar na frase. */}
-        {!ouvindoVoz && (
+        <div className="barra-busca-fixa">
           <CampoDeBusca
             className="busca-forno"
             valor={busca}
@@ -1000,52 +1035,37 @@ export function PainelFornadasFilial({
             }}
             placeholder="Buscar produto ou suprimento para pedir..."
             rotulo="Buscar produto ou suprimento pelo nome"
-          />
-        )}
-
-        {busca.trim().length > 0 &&
-          (nadaEncontrado ? (
-            cadastroRelampago(busca.trim())
-          ) : (
-            <>
-              {resultados.map((produto) => (
-                <div key={produto.codigoPdv} className="linha-fornada">
-                  <div className="info-fornada">
-                    <strong>{produto.nome}</strong>
-                  </div>
-                  {codigoPedindo === produto.codigoPdv ? (
-                    <div className="editor-quantidade">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        pattern="[0-9]*[.,]?[0-9]*"
-                        autoFocus
-                        placeholder="Quantas unidades?"
-                        value={quantidade}
-                        onChange={(e) => setQuantidade(sanitizarEntradaNumerica(e.target.value))}
-                      />
-                      <span className="unidade-fixa">un</span>
-                    </div>
-                  ) : (
-                    <div className="acoes-fornada">
-                      <button
-                        type="button"
-                        className="botao-fornada pedir"
-                        onClick={() => {
-                          setCodigoPedindo(produto.codigoPdv);
-                          setItemSuprimentoAtivo(null);
-                          setQuantidade("");
-                        }}
-                      >
-                        Incluir
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-              {resultadosSuprimentos.map((suprimento) => linhaSuprimentoDaBusca(suprimento))}
-            </>
-          ))}
+          >
+            <AssistenteDeVoz
+              compacto
+              portalConteudoExtra={painelExtraNode}
+              produtos={catalogoDeVoz}
+              modo="pedir"
+              acao="adicionar"
+              onConfirmar={async (ditados) => {
+                const deProdutos: { codigoPdv: number; quantidadeUnidades: number }[] = [];
+                const deSuprimentos: { suprimentoId: string; quantidade: number }[] = [];
+                for (const ditado of ditados) {
+                  if (!ditado.quantidade || ditado.quantidade <= 0) continue;
+                  if (ehCodigoDeSuprimento(ditado.produto.codigoPdv)) {
+                    const suprimento = suprimentosAtivos[indiceDoSuprimento(ditado.produto.codigoPdv)];
+                    if (suprimento) {
+                      deSuprimentos.push({ suprimentoId: suprimento.id, quantidade: ditado.quantidade });
+                    }
+                  } else {
+                    deProdutos.push({
+                      codigoPdv: ditado.produto.codigoPdv,
+                      quantidadeUnidades: ditado.quantidade,
+                    });
+                  }
+                }
+                acrescentar(deProdutos);
+                acrescentarSuprimentos(deSuprimentos);
+              }}
+              renderSobra={opcoesParaSobra}
+            />
+          </CampoDeBusca>
+        </div>
 
         {totalDeItens > 0 && (
           <div className="pedido-em-montagem">

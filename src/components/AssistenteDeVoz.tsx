@@ -35,6 +35,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Produto } from "../types/produto";
 import { afinarComIA, ErroDeVoz, ouvirUmaFrase, vozDisponivel } from "../lib/vozParaBusca";
 import { interpretarFrase, type ItemFalado } from "../lib/interpretarPedidoFalado";
@@ -137,6 +138,26 @@ interface AssistenteDeVozProps {
    * assistente, só que pequeno.
    */
   compacto?: boolean;
+  /**
+   * PARA ONDE VAI A "CASCA EXTRA" QUANDO O MICROFONE MORA NUMA BARRA
+   * FIXA NO RODAPÉ (set/2026, pedido do dono do negócio: "o novo botão
+   * de busca deve substituir todos os botões de voz do app... na parte
+   * inferior da tela, ao alcance do polegar, em todas as abas").
+   *
+   * Só o ÍCONE precisa ficar fixo, colado na barra de busca — a
+   * conferência (o que foi ouvido, as quantidades, "não entrou na
+   * lista") pode crescer bastante e cobriria a tela inteira se ficasse
+   * presa junto do ícone lá embaixo. Este elemento é o "container" para
+   * onde a conferência é entregue por um portal do React: continua
+   * sendo o MESMO estado e a MESMA lógica deste componente, só que
+   * desenhada em outro lugar da tela (um painel flutuante, rolável, que
+   * a própria tela posiciona por cima da barra fixa).
+   *
+   * Sem este prop, `compacto` volta ao que já fazia antes: ícone e
+   * conferência lado a lado, no mesmo lugar — o caso de uso original,
+   * dentro da barra de busca no topo da página.
+   */
+  portalConteudoExtra?: HTMLElement | null;
 }
 
 export function AssistenteDeVoz({
@@ -149,6 +170,7 @@ export function AssistenteDeVoz({
   rotuloFalar,
   autoIncluirQuandoCompleto = false,
   compacto = false,
+  portalConteudoExtra = null,
 }: AssistenteDeVozProps) {
   const [ouvindo, setOuvindo] = useState(false);
   useEffect(() => {
@@ -593,7 +615,7 @@ export function AssistenteDeVoz({
     return (
       <>
         {botao}
-        {conteudoExtra}
+        {portalConteudoExtra ? createPortal(conteudoExtra, portalConteudoExtra) : conteudoExtra}
       </>
     );
   }
