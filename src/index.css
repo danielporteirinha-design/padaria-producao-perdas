@@ -17,6 +17,16 @@
   --cor-sucesso: #3f7a4f;
   --cor-sucesso-fundo: #e3efe4;
   --raio: 10px;
+
+  /* Alturas da barra de busca+microfone fixa e da barra de acao
+     secundaria (Enviar/Confirmar/Incluir), usadas para calcular onde
+     cada camada fixa do rodape comeca — ver `.barra-busca-fixa`,
+     `.painel-extra-fixo` e `.acao-fixa-secundaria` mais abaixo. Extrair
+     em variavel evita ter que recalcular o mesmo numero em 4 lugares
+     toda vez que um dos dois crescer (set/2026, aumento do alvo de
+     toque a pedido do dono do negocio). */
+  --altura-barra-busca-fixa: 82px; /* padding 8px+8px + alvo de 64px + borda 1px+1px */
+  --altura-acao-fixa-secundaria: 56px;
 }
 
 * { box-sizing: border-box; }
@@ -125,12 +135,12 @@ button, input, select, textarea { font: inherit; }
      linha da lista em telas com o assistente de voz. Sobra em branco
      nas telas sem microfone (Perdas, Análises, Produtos) é um preço bem
      menor que esconder conteúdo atrás do botão. */
-  padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--altura-barra-busca-fixa) + 44px + env(safe-area-inset-bottom, 0px));
 }
 @media (min-width: 560px) {
   /* No computador o padding maior volta: a linha larga demais cansa de
      ler, e ali sobra espaço. */
-  .conteudo-app { padding: 20px; padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
+  .conteudo-app { padding: 20px; padding-bottom: calc(var(--altura-barra-busca-fixa) + 44px + env(safe-area-inset-bottom, 0px)); }
 }
 
 .tela { display: flex; flex-direction: column; gap: 16px; }
@@ -817,70 +827,13 @@ button.perigo:hover { background: #822525; }
 }
 
 /* ---------------------------------------------------------------
-   Faixa de versão nova (AvisoDeAtualizacao.tsx, ago/2026)
-
-   No TOPO, ao contrário do aviso de operação: aquele responde ao que a
-   pessoa acabou de fazer e mora perto do polegar; este é um anúncio
-   sobre o APP. No mesmo canto as duas se atropelariam, e a que sumiria
-   por baixo seria justamente a confirmação da ação em curso.
-
-   Não some sozinha: é o que garante que ninguém passe o expediente numa
-   versão antiga achando que está na nova.
-   --------------------------------------------------------------- */
-.faixa-atualizacao {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 70;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  padding: 10px 14px;
-  background: #2f6b41;
-  color: #ffffff;
-  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.25);
-  /* Respeita a barra de status do celular quando o app está instalado —
-     sem isto, a faixa nasce por baixo do relógio e da bateria. */
-  padding-top: calc(10px + env(safe-area-inset-top, 0px));
-}
-.faixa-atualizacao > svg { flex-shrink: 0; }
-/* Abaixo de ~55% da largura o botão desce para uma linha própria em vez
-   de espremer o texto em quatro linhas de duas palavras. */
-.texto-atualizacao {
-  flex: 1 1 auto;
-  min-width: 55%;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  font-size: 14px;
-  line-height: 1.3;
-}
-.texto-atualizacao span { opacity: 0.9; }
-/* Linha própria e largura cheia, sempre. Tentar encaixá-lo ao lado do
-   texto cabe em 414px e não cabe em 360, e um botão que muda de lugar
-   conforme o aparelho é justamente o que faz alguém não achar. Aqui ele
-   é a coisa mais óbvia da tela, que é o ponto: a pessoa precisa
-   reiniciar.
-
-   A cor também não é a do app: o `primario` é da cor do acento, que
-   sobre o verde da faixa some. */
-.faixa-atualizacao .primario {
-  flex: 0 0 100%;
-  background: #ffffff;
-  color: #22502f;
-  border-color: #ffffff;
-  padding: 10px 14px;
-  font-size: 15px;
-}
-.faixa-atualizacao .primario:disabled { opacity: 0.7; }
-
-/* ---------------------------------------------------------------
    "O que mudou" — avisa as melhorias depois que a versão nova entra
-   (NovidadesDoApp.tsx, set/2026). Mesma posição fixa no topo do aviso
-   de atualização, mas azul: aqui não é preciso decidir nada, só ler e
-   fechar — cor de aviso informativo, não de ação pendente.
+   (NovidadesDoApp.tsx, set/2026). Única faixa no topo relacionada a
+   atualização (set/2026: a faixa "Nova versão disponível / Atualizar
+   agora" foi removida — a atualização em si continua acontecendo
+   sozinha, ver AvisoDeAtualizacao.tsx e armarAplicacaoSozinha em
+   src/lib/atualizacao.ts — só não há mais aviso permanente sobre algo
+   que não pede mais nenhuma ação de ninguém).
    --------------------------------------------------------------- */
 .faixa-novidades {
   position: fixed;
@@ -1746,13 +1699,13 @@ button.perigo:hover { background: #822525; }
 .botao-assistente-compacto {
   position: static;
   flex-shrink: 0;
-  width: 48px;
-  min-height: 48px;
-  height: 48px;
+  width: 64px;
+  min-height: 64px;
+  height: 64px;
   padding: 0;
   border-radius: 50%;
   gap: 0;
-  box-shadow: 0 2px 10px rgba(168, 100, 42, 0.45), 0 0 0 3px rgba(168, 100, 42, 0.16);
+  box-shadow: 0 3px 12px rgba(168, 100, 42, 0.5), 0 0 0 4px rgba(168, 100, 42, 0.2);
 }
 .botao-assistente-compacto .rotulo-assistente { display: none; }
 
@@ -1760,13 +1713,13 @@ button.perigo:hover { background: #822525; }
    contrário o círculo vermelho/verde ficaria com uma sombra laranja por
    baixo, uma pista visual errada. */
 .botao-assistente-compacto.ouvindo {
-  box-shadow: 0 2px 10px rgba(155, 44, 44, 0.45), 0 0 0 3px rgba(155, 44, 44, 0.18);
+  box-shadow: 0 3px 12px rgba(155, 44, 44, 0.5), 0 0 0 4px rgba(155, 44, 44, 0.22);
 }
 .botao-assistente-compacto.sinal-certo {
-  box-shadow: 0 2px 10px rgba(47, 122, 74, 0.45), 0 0 0 3px rgba(47, 122, 74, 0.18);
+  box-shadow: 0 3px 12px rgba(47, 122, 74, 0.5), 0 0 0 4px rgba(47, 122, 74, 0.22);
 }
 .botao-assistente-compacto.sinal-errado {
-  box-shadow: 0 2px 10px rgba(155, 44, 44, 0.45), 0 0 0 3px rgba(155, 44, 44, 0.18);
+  box-shadow: 0 3px 12px rgba(155, 44, 44, 0.5), 0 0 0 4px rgba(155, 44, 44, 0.22);
 }
 
 /* O CARTÃO DE CONFERÊNCIA, O ERRO E O "NÃO ENTROU" SAEM DA LINHA DA
@@ -1787,10 +1740,10 @@ button.perigo:hover { background: #822525; }
    (set/2026, pedido do dono do negocio: os botoes de confirmar/enviar
    "devem ficar na mesma localizacao proxima ao polegar", sem precisar
    rolar a tela ate o fim). Empilhada ACIMA de `.barra-busca-fixa` (que
-   fica em `bottom: 12px`, com cerca de 60px de altura - o antigo botao
-   solto de voz tinha 72px; a barra de busca+microfone que o substituiu
-   e mais baixa) - nunca dentro dela, para nao arriscar o comportamento
-   das outras telas que reaproveitam aquela barra. Reaproveitada por
+   fica em `bottom: 12px`, com `--altura-barra-busca-fixa` de altura -
+   ver a variavel no :root, que cresceu junto com o alvo de toque do
+   microfone) - nunca dentro dela, para nao arriscar o comportamento das
+   outras telas que reaproveitam aquela barra. Reaproveitada por
    Reposicao, Lista de Producao (filial) e Lista de Producao (matriz) -
    telas diferentes, mesmo gesto de fechar uma tarefa com o polegar sem
    precisar rolar. */
@@ -1798,7 +1751,7 @@ button.perigo:hover { background: #822525; }
   position: fixed;
   left: 12px;
   right: 12px;
-  bottom: calc(12px + 60px + 10px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(12px + var(--altura-barra-busca-fixa) + 10px + env(safe-area-inset-bottom, 0px));
   z-index: 40;
   display: flex;
   align-items: center;
@@ -1806,7 +1759,7 @@ button.perigo:hover { background: #822525; }
   gap: 10px;
 }
 .acao-fixa-secundaria button {
-  min-height: 56px;
+  min-height: var(--altura-acao-fixa-secundaria);
   padding: 12px 20px;
   font-size: 16px;
   font-weight: 700;
@@ -1851,16 +1804,20 @@ button.perigo:hover { background: #822525; }
   background: var(--cor-superficie);
   border: 1px solid var(--cor-borda);
   border-radius: var(--raio);
-  padding: 6px 6px 6px 14px;
+  padding: 8px 8px 8px 16px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
 }
-.barra-busca-fixa .campo-com-voz input { min-height: 48px; }
+/* 64px — mesmo alvo do microfone ao lado (set/2026, pedido do dono do
+   negocio: aumentar a barra e o microfone "de forma que fique
+   visivelmente destacado"). Input e botao do mesmo tamanho mantem a
+   linha alinhada em vez de um alto e outro baixo. */
+.barra-busca-fixa .campo-com-voz input { min-height: 64px; font-size: 16.5px; }
 
 .painel-extra-fixo {
   position: fixed;
   left: 12px;
   right: 12px;
-  bottom: calc(12px + 60px + 8px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(12px + var(--altura-barra-busca-fixa) + 8px + env(safe-area-inset-bottom, 0px));
   z-index: 40;
   max-height: min(50vh, 420px);
   overflow-y: auto;
@@ -1873,7 +1830,7 @@ button.perigo:hover { background: #822525; }
    Incluir/cancelar) empilhada acima da barra de busca, o painel de
    extras precisa subir mais um andar para não ficar por baixo dela. */
 .painel-extra-fixo.acima-da-acao-fixa {
-  bottom: calc(12px + 60px + 8px + 56px + 10px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(12px + var(--altura-barra-busca-fixa) + 8px + var(--altura-acao-fixa-secundaria) + 10px + env(safe-area-inset-bottom, 0px));
 }
 
 /* O BOTÃO COMO SINALIZADOR (set/2026). Dois segundos de resposta no

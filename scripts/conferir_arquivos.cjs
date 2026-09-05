@@ -260,7 +260,8 @@ const CONFERENCIAS = [
 
   // --- Atualizacao automatica + aviso de novidades (set/2026)
   ["src/lib/atualizacao.ts", "armarAplicacaoSozinha", "Atualiza sozinho quando a aba fica em segundo plano"],
-  ["src/components/AvisoDeAtualizacao.tsx", "ou toque para já", "Faixa explica que nao precisa mais tocar para atualizar"],
+  ["src/components/AvisoDeAtualizacao.tsx", "SEM faixa vis", "Faixa de atualizacao removida (fica so registrando o service worker)"],
+  ["src/index.css", "Nova versão disponível / Atualizar", "CSS da faixa-atualizacao removido, so o comentario de referencia ficou"],
   ["src/data/novidades.ts", "export const NOVIDADES", "Lista do que mudou, entrega por entrega"],
   ["src/components/NovidadesDoApp.tsx", "novidades-ultima-vista", "Aviso de novidades guarda o que o aparelho ja viu"],
   ["src/main.tsx", "NovidadesDoApp", "Aviso de novidades montado fora do App"],
@@ -270,7 +271,7 @@ const CONFERENCIAS = [
 
   // --- Microfone fixo no rodape e retorno automatico a Reposicao (set/2026)
   ["src/index.css", ".botao-assistente {\n  position: fixed;", "Botao de voz fixo, ao alcance do polegar"],
-  ["src/index.css", "padding-bottom: calc(104px", "Tela reserva espaco para o botao flutuante do microfone"],
+  ["src/index.css", "padding-bottom: calc(var(--altura-barra-busca-fixa)", "Tela reserva espaco para a barra de busca+microfone"],
   ["src/App.tsx", 'irParaAba("fornada");\n  }\n\n  async function handleAnularPerda', "Confirmar Lista de Producao (matriz) volta para a Reposicao"],
   ["src/App.tsx", "await avisarMatrizDoPedido(pedido);", "Enviar pedido (filial) volta para a Reposicao antes de avisar"],
   ["src/App.tsx", "a navegação não espera a rede", "Enviar suprimentos (filial) volta para a Reposicao"],
@@ -326,6 +327,8 @@ const CONFERENCIAS = [
   ["src/components/PainelFornadasFilial.tsx", "barra-busca-fixa", "Reposicao/Suprimentos: busca+microfone unificados, fixos no rodape"],
   ["src/components/PainelFornoDeHoje.tsx", "barra-busca-fixa", "Anuncio de fornada (matriz): busca+microfone fixos no rodape"],
   ["src/components/TelaRegistroPerda.tsx", "barra-busca-fixa", "Registro de perda: trocar produto por busca+microfone fixos"],
+  ["src/index.css", "--altura-barra-busca-fixa: 82px", "Barra de busca e microfone maiores, alvo de toque destacado"],
+  ["src/index.css", "width: 64px", "Microfone compacto com 64px (era 48px)"],
 ];
 
 /**
