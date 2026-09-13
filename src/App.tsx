@@ -49,6 +49,7 @@ import {
 } from "./lib/avisarFiliais";
 import { ouvirAvisosEmPrimeiroPlano, registrarAparelhoSePermitido } from "./lib/notificacoes";
 import { AtivarAvisos } from "./components/AtivarAvisos";
+import { DiagnosticoAvisos } from "./components/DiagnosticoAvisos";
 import { PainelFornoDeHoje } from "./components/PainelFornoDeHoje";
 import { PainelFornadasFilial } from "./components/PainelFornadasFilial";
 import { ExportarFita } from "./components/ExportarFita";
@@ -1047,6 +1048,7 @@ export default function App() {
       <BannerInstalar />
 
       {loja.papel === "matriz" && <AtivarAvisos loja={loja} operador={operador} />}
+      {loja.papel === "matriz" && <DiagnosticoAvisos loja={loja} />}
 
       {/* UMA ABA SÓ NÃO É UMA BARRA DE ABAS (set/2026, decisão do dono do
           negócio). Enquanto só a Reposição está liberada, o rótulo não

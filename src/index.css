@@ -1317,6 +1317,64 @@ button.perigo:hover { background: #822525; }
 .texto-avisos span { font-size: 14px; color: var(--cor-texto-suave); }
 .acoes-avisos { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
 
+/* Painel de diagnóstico de avisos (DiagnosticoAvisos.tsx, set/2026):
+   ferramenta técnica da matriz, escondida por padrão — diferente do
+   cartao-avisos, que só aparece quando exige ação, este fica sempre
+   disponível mas recolhido, porque é usado raramente. */
+.cartao-diagnostico {
+  margin-bottom: 16px;
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  overflow: hidden;
+}
+.cartao-diagnostico-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 14px;
+  background: none;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cor-texto-suave);
+  cursor: pointer;
+}
+.cartao-diagnostico-corpo {
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cartao-diagnostico-explicacao {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--cor-texto-suave);
+}
+.lista-diagnostico {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lista-diagnostico li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  font-size: 13.5px;
+}
+.lista-diagnostico .loja-do-aparelho { font-weight: 600; }
+.lista-diagnostico li.status-confirmado .situacao-do-aparelho { color: var(--cor-sucesso); }
+.lista-diagnostico li.status-nao-confirmado .situacao-do-aparelho { color: var(--cor-alerta); }
+.lista-diagnostico li.status-aguardando .situacao-do-aparelho { color: var(--cor-texto-suave); }
+
 /* ---------------------------------------------------------------
    Painel de análises (TelaAnalises.tsx + GraficoBarras.tsx).
 

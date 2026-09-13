@@ -180,6 +180,19 @@ service cloud.firestore {
       allow delete: if lojaConhecida() && resource.data.lojaId == lojaDoUsuario();
     }
 
+    // Confirmações do diagnóstico de avisos (set/2026) — ver
+    // api/testar-avisos.ts e api/confirmar-recebimento.ts. Quem ESCREVE
+    // é sempre o servidor, com chave de serviço, que ignora estas
+    // regras — o service worker do aparelho não tem login para provar
+    // nada aqui, e é exatamente o caso "app fechado" que isto precisa
+    // conseguir registrar. Por isso não existe allow create/update:
+    // nenhum app deveria conseguir fabricar uma confirmação direto no
+    // banco.
+    match /confirmacoes_teste_aviso/{id} {
+      allow read: if ehMatriz();
+      allow write: if false;
+    }
+
     // Fornadas prontas (ago/2026). Só a matriz marca — é ela que produz.
     // As filiais LEEM para saber que o item saiu do forno e pedir
     // reposição enquanto ainda dá tempo de entregar hoje.

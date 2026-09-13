@@ -382,6 +382,19 @@ const CONFERENCIAS = [
   // --- Campainha toca no maximo 3 vezes e para sozinha (set/2026,
   // pedido do dono do negocio)
   ["src/lib/somDeAviso.ts", "MAXIMO_TOQUES", "Campainha toca no maximo 3 vezes, sem depender de clique para parar"],
+
+  // --- Diagnostico de avisos: confirmacao de recebimento por aparelho
+  // (set/2026, pedido do dono do negocio: "verificar se o fluxo completo
+  // de notificacao esta funcionando em todos os dispositivos registrados")
+  ["api/testar-avisos.ts", "diagnostico-avisos", "Servidor: dispara push de teste so com data (sem bloco notification)"],
+  ["api/confirmar-recebimento.ts", "confirmacoes_teste_aviso", "Servidor: grava a confirmacao de cada aparelho"],
+  ["src/lib/diagnosticoAvisos.ts", "dispararTesteDeAvisos", "Cliente: dispara o teste e acompanha as confirmacoes"],
+  ["src/lib/notificacoes.ts", "confirmarRecebimentoDeTeste", "App aberto: confirma o teste sem tocar campainha nem mostrar aviso"],
+  ["public/firebase-messaging-sw.js", "confirmar-recebimento", "App fechado: service worker confirma o teste"],
+  ["src/components/DiagnosticoAvisos.tsx", "Rodar teste agora", "Matriz: painel de diagnostico por aparelho"],
+  ["src/App.tsx", "DiagnosticoAvisos", "Painel de diagnostico ligado na tela da matriz"],
+  ["firestore.rules", "confirmacoes_teste_aviso", "Regras: leitura das confirmacoes so para a matriz (COLAR NO CONSOLE!)"],
+  ["src/index.css", "cartao-diagnostico", "Estilo do painel de diagnostico"],
 ];
 
 /**

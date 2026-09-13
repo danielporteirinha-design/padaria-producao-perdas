@@ -160,6 +160,25 @@ export async function registrarAparelhoSePermitido(
 }
 
 /**
+ * Confirma para o servidor que ESTE aparelho recebeu o teste de
+ * diagnóstico — chamado daqui (app aberto) e também do service worker
+ * (app fechado ou em segundo plano, ver
+ * public/firebase-messaging-sw.js). Ver api/testar-avisos.ts para o
+ * desenho completo.
+ */
+async function confirmarRecebimentoDeTeste(testeId: string, token: string): Promise<void> {
+  try {
+    await fetch("/api/confirmar-recebimento", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ testeId, token }),
+    });
+  } catch (erro) {
+    console.warn("Não foi possível confirmar o recebimento do teste:", erro);
+  }
+}
+
+/**
  * Avisos que chegam com o app ABERTO. O service worker não é chamado
  * nesse caso, então sem isto o aviso simplesmente não apareceria para
  * quem está justamente usando o app.
@@ -171,6 +190,16 @@ export function ouvirAvisosEmPrimeiroPlano(
     const messaging = getMessaging(app);
     return onMessage(messaging, (payload) => {
       const dados = payload.data ?? {};
+
+      // Diagnóstico de avisos (set/2026): não é uma fornada — só
+      // confirma para o servidor, sem faixa dentro do app nem campainha.
+      if (dados.tipo === "diagnostico-avisos") {
+        if (dados.testeId && dados.token) {
+          void confirmarRecebimentoDeTeste(dados.testeId, dados.token);
+        }
+        return;
+      }
+
       const titulo = dados.titulo ?? "Padaria Pão de Mel";
       const corpo = dados.corpo ?? "";
       aoReceber(titulo, corpo);

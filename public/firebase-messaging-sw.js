@@ -43,6 +43,28 @@ const messaging = firebase.messaging();
  */
 messaging.onBackgroundMessage((payload) => {
   const dados = payload.data || {};
+
+  /**
+   * DIAGNÓSTICO DE AVISOS — CONFIRMAÇÃO DE RECEBIMENTO (set/2026).
+   *
+   * Este push é SÓ DE DADOS, de propósito — ver o comentário grande em
+   * api/testar-avisos.ts sobre por que é exatamente essa diferença que
+   * faz este código rodar mesmo com o app fechado (com `notification`
+   * presente, como todo aviso de fornada, `onBackgroundMessage` NUNCA é
+   * chamado). Não mostra nada na tela: o objetivo é confirmar para o
+   * SERVIDOR que ESTE aparelho recebeu o push, não avisar o operador.
+   */
+  if (dados.tipo === "diagnostico-avisos") {
+    return fetch("/api/confirmar-recebimento", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ testeId: dados.testeId, token: dados.token }),
+    }).catch(() => {
+      // Sem confirmação, o painel mostra "não confirmou" — que é
+      // exatamente o resultado real quando a rede falha aqui.
+    });
+  }
+
   self.registration.showNotification(dados.titulo || "Padaria Pão de Mel", {
     body: dados.corpo || "",
     icon: "/pwa-192x192.png",
